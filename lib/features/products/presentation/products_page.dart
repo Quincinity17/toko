@@ -442,8 +442,9 @@ class _Empty extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final searching = filter.text.trim().isNotEmpty;
     if (!searching) {
-      return SizedBox(
-        height: 320,
+      return Container(
+        constraints: const BoxConstraints(minHeight: 320),
+        alignment: Alignment.center,
         child: EmptyState(
           icon: CupertinoIcons.cube_box,
           title: 'Tidak ada barang',
@@ -457,8 +458,9 @@ class _Empty extends ConsumerWidget {
         ref.watch(productSuggestionsProvider(filter.text)).value ??
         const <Product>[];
     if (suggestions.isEmpty) {
-      return SizedBox(
-        height: 320,
+      return Container(
+        constraints: const BoxConstraints(minHeight: 320),
+        alignment: Alignment.center,
         child: EmptyState(
           icon: CupertinoIcons.search,
           title: 'Barang tidak ditemukan',

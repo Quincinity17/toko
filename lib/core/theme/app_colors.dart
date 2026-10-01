@@ -24,6 +24,7 @@ class AppColors extends ThemeExtension<AppColors> {
     required this.warning,
     required this.hover,
     required this.shadow,
+    required this.chart2,
   });
 
   /// Latar belakang utama (systemGroupedBackground).
@@ -55,6 +56,11 @@ class AppColors extends ThemeExtension<AppColors> {
   final Color hover;
   final Color shadow;
 
+  /// Seri kedua grafik (seri pertama = [accent]). Divalidasi bersama aksen
+  /// untuk buta warna dan kontras di mode terang (#007AFF) dan gelap (#0A84FF).
+  /// Bukan warna status, jadi tidak dipakai untuk peringatan.
+  final Color chart2;
+
   static const light = AppColors(
     background: Color(0xFFF2F2F7),
     card: Color(0xFFFFFFFF),
@@ -73,6 +79,7 @@ class AppColors extends ThemeExtension<AppColors> {
     warning: Color(0xFFFF9500),
     hover: Color(0x0A000000),
     shadow: Color(0x0F000000),
+    chart2: Color(0xFFD55181),
   );
 
   static const dark = AppColors(
@@ -93,6 +100,7 @@ class AppColors extends ThemeExtension<AppColors> {
     warning: Color(0xFFFF9F0A),
     hover: Color(0x14FFFFFF),
     shadow: Color(0x00000000),
+    chart2: Color(0xFFD55181),
   );
 
   @override
@@ -114,6 +122,7 @@ class AppColors extends ThemeExtension<AppColors> {
     Color? warning,
     Color? hover,
     Color? shadow,
+    Color? chart2,
   }) {
     return AppColors(
       background: background ?? this.background,
@@ -133,6 +142,7 @@ class AppColors extends ThemeExtension<AppColors> {
       warning: warning ?? this.warning,
       hover: hover ?? this.hover,
       shadow: shadow ?? this.shadow,
+      chart2: chart2 ?? this.chart2,
     );
   }
 
@@ -158,6 +168,7 @@ class AppColors extends ThemeExtension<AppColors> {
       warning: l(warning, other.warning),
       hover: l(hover, other.hover),
       shadow: l(shadow, other.shadow),
+      chart2: l(chart2, other.chart2),
     );
   }
 }

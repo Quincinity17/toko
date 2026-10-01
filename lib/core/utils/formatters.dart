@@ -29,4 +29,23 @@ class Fmt {
   /// `30/09/2026 14:05`
   static String dateTime(DateTime d) =>
       DateFormat('dd/MM/y HH:mm', 'id_ID').format(d);
+
+  /// Rupiah ringkas untuk sumbu grafik: `950` → `950`, `12500` → `12,5 rb`,
+  /// `1250000` → `1,25 jt`, `2000000000` → `2 M`.
+  static String compact(num value) {
+    final v = value.abs();
+    final sign = value < 0 ? '−' : '';
+    String fmt(double x) => NumberFormat('#,##0.##', 'id_ID').format(x);
+    if (v < 1000) return '$sign${fmt(v.toDouble())}';
+    if (v < 1000000) return '$sign${fmt(v / 1000)} rb';
+    if (v < 1000000000) return '$sign${fmt(v / 1000000)} jt';
+    return '$sign${fmt(v / 1000000000)} M';
+  }
+
+  /// `0.1234` → `12,3%`.
+  static String percent(double ratio, {int decimals = 1}) =>
+      '${NumberFormat('#,##0.${'0' * decimals}', 'id_ID').format(ratio * 100)}%';
+
+  /// `Kam 15` untuk label sumbu harian.
+  static String dayShort(DateTime d) => DateFormat('EEE d', 'id_ID').format(d);
 }

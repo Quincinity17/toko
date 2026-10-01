@@ -140,7 +140,7 @@ void main() {
 
     // Admin masuk ke dashboard dengan menu lengkap.
     await login(tester, 'admin', 'admin123');
-    expect(find.text('Omzet Hari Ini'), findsOneWidget);
+    expect(find.text('Omzet hari ini'), findsOneWidget);
     expect(find.text('Produk'), findsOneWidget);
     expect(find.text('Pengaturan'), findsOneWidget);
 
@@ -405,6 +405,46 @@ void main() {
     await settle(tester);
     expect(find.text('21 barang'), findsOneWidget);
     expect(find.text('Kopi Kenangan'), findsOneWidget);
+
+    await unmount(tester);
+  });
+
+  testWidgets('Dashboard admin menampilkan transaksi dari kasir', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+
+    // Kasir menjual 2 Indomie (Rp 7.000, laba 2 × 700).
+    await login(tester, 'kasir', 'kasir123');
+    await fill(tester, 'Kode / Barcode', 'BRG001');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await settle(tester);
+    await fill(tester, 'Kode / Barcode', 'BRG001');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await settle(tester);
+    await tester.sendKeyEvent(LogicalKeyboardKey.f2);
+    await settle(tester);
+    await tester.testTextInput.receiveAction(TextInputAction.done); // uang pas
+    await settle(tester);
+    await tester.tap(find.textContaining('Transaksi Baru  (Enter)'));
+    await settle(tester);
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AppSidebar),
+        matching: find.text('Kasir Satu'),
+      ),
+    );
+    await settle(tester);
+    await tester.tap(find.text('Keluar'));
+    await settle(tester);
+
+    // Admin langsung melihatnya di dashboard.
+    await login(tester, 'admin', 'admin123');
+    expect(find.text('Rp 7.000'), findsWidgets);
+    expect(find.text('Rp 1.400'), findsOneWidget); // laba kotor
+    expect(find.text('Margin 20,0%'), findsOneWidget);
+    expect(find.text('Indomie Goreng 85g'), findsOneWidget); // terlaris
+    expect(find.text('Belum ada penjualan'), findsNothing);
 
     await unmount(tester);
   });
