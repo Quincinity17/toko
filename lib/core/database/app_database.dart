@@ -9,6 +9,7 @@ import '../../features/vouchers/domain/voucher.dart';
 import 'daos/payment_methods_dao.dart';
 import 'daos/outbox_dao.dart';
 import 'daos/products_dao.dart';
+import 'daos/reports_dao.dart';
 import 'daos/sales_dao.dart';
 import 'daos/settings_dao.dart';
 import 'daos/users_dao.dart';
@@ -57,6 +58,7 @@ part 'app_database.g.dart';
     PaymentMethodsDao,
     SettingsDao,
     OutboxDao,
+    ReportsDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
