@@ -8,6 +8,7 @@ import '../../features/dashboard/presentation/dashboard_page.dart';
 import '../../features/products/presentation/products_page.dart';
 import '../../features/reports/presentation/reports_page.dart';
 import '../../features/sales/presentation/pos_page.dart';
+import '../../features/settings/presentation/accounts/accounts_page.dart';
 import '../../features/settings/presentation/settings_page.dart';
 import '../theme/app_theme.dart';
 import 'app_shell.dart';
@@ -45,16 +46,21 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           _page(AppRoutes.kasir, const PosPage()),
           _page(AppRoutes.produk, const ProductsPage()),
           _page(AppRoutes.laporan, const ReportsPage()),
-          _page(AppRoutes.pengaturan, const SettingsPage()),
+          _page(
+            AppRoutes.pengaturan,
+            const SettingsPage(),
+            routes: [_page('akun', const AccountsPage())],
+          ),
         ],
       ),
     ],
   );
 });
 
-GoRoute _page(String path, Widget child) {
+GoRoute _page(String path, Widget child, {List<RouteBase> routes = const []}) {
   return GoRoute(
     path: path,
+    routes: routes,
     pageBuilder: (context, state) =>
         SpringFadePage(key: state.pageKey, child: child),
   );

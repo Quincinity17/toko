@@ -7,4 +7,5 @@ class AppRoutes {
   static const produk = '/produk';
   static const laporan = '/laporan';
   static const pengaturan = '/pengaturan';
+  static const kelolaAkun = '/pengaturan/akun';
 }

@@ -1,7 +1,9 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 import 'app_card.dart';
+import 'pressable_scale.dart';
 
 /// Kerangka halaman bergaya iPadOS: judul besar di atas konten yang ikut
 /// tergulir, lalu toolbar kaca dengan judul kecil muncul saat digulir ke bawah.
@@ -16,6 +18,8 @@ class LargeTitlePage extends StatefulWidget {
     this.bottom,
     this.slivers,
     this.child,
+    this.backLabel,
+    this.onBack,
   }) : assert(slivers != null || child != null);
 
   final String title;
@@ -29,6 +33,11 @@ class LargeTitlePage extends StatefulWidget {
   final Widget? bottom;
   final List<Widget>? slivers;
   final Widget? child;
+
+  /// Jika diisi, muncul tautan kembali "‹ [backLabel]" di atas judul,
+  /// untuk sub-halaman seperti Pengaturan › Kelola Akun.
+  final String? backLabel;
+  final VoidCallback? onBack;
 
   @override
   State<LargeTitlePage> createState() => _LargeTitlePageState();
@@ -133,6 +142,14 @@ class _LargeTitlePageState extends State<LargeTitlePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (widget.onBack != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                  child: _BackLink(
+                    label: widget.backLabel ?? 'Kembali',
+                    onPressed: widget.onBack!,
+                  ),
+                ),
               Text(
                 widget.title,
                 style: AppTypography.largeTitle.copyWith(color: c.label),
@@ -165,14 +182,21 @@ class _LargeTitlePageState extends State<LargeTitlePage> {
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.pageGutter,
           ),
-          child: Row(
+          child: Stack(
+            alignment: Alignment.center,
             children: [
-              const Spacer(),
+              if (widget.onBack != null)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: _BackLink(
+                    label: widget.backLabel ?? 'Kembali',
+                    onPressed: widget.onBack!,
+                  ),
+                ),
               Text(
                 widget.title,
                 style: AppTypography.headline.copyWith(color: c.label),
               ),
-              const Spacer(),
             ],
           ),
         ),
@@ -183,4 +207,31 @@ class _LargeTitlePageState extends State<LargeTitlePage> {
   List<Widget> _spaced(List<Widget> items) => [
     for (final a in items) ...[const SizedBox(width: AppSpacing.xs), a],
   ];
+}
+
+class _BackLink extends StatelessWidget {
+  const _BackLink({required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return PressableScale(
+      onPressed: onPressed,
+      pressedScale: 0.96,
+      showHover: false,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxs),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(CupertinoIcons.chevron_back, size: 20, color: c.accent),
+            Text(label, style: AppTypography.body.copyWith(color: c.accent)),
+          ],
+        ),
+      ),
+    );
+  }
 }

@@ -1,6 +1,9 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../../core/router/routes.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/theme_mode_provider.dart';
@@ -9,6 +12,7 @@ import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_dialogs.dart';
 import '../../../core/widgets/inset_grouped_list.dart';
 import '../../../core/widgets/large_title_page.dart';
+import '../../auth/presentation/password_sheet.dart';
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -29,6 +33,32 @@ class SettingsPage extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  InsetGroupedSection(
+                    header: 'Akun',
+                    dividerIndent: 58,
+                    children: [
+                      InsetGroupedTile(
+                        leading: TileIcon(
+                          icon: CupertinoIcons.person_2_fill,
+                          color: c.accent,
+                        ),
+                        title: 'Kelola Akun',
+                        subtitle:
+                            'Tambah, ubah, atau nonaktifkan akun admin '
+                            'dan kasir',
+                        onPressed: () => context.go(AppRoutes.kelolaAkun),
+                      ),
+                      InsetGroupedTile(
+                        leading: TileIcon(
+                          icon: CupertinoIcons.lock_fill,
+                          color: c.labelSecondary,
+                        ),
+                        title: 'Ganti Password Saya',
+                        onPressed: () => showChangeOwnPasswordSheet(context),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
                   InsetGroupedSection(
                     header: 'Tampilan',
                     dividerIndent: 58,

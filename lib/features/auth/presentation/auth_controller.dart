@@ -15,6 +15,14 @@ class AuthController extends Notifier<AppUser?> {
   }
 
   void logout() => state = null;
+
+  /// Menyegarkan data user yang login setelah akunnya diubah (misalnya nama).
+  void refreshIfCurrent(AppUser updated) {
+    final current = state;
+    if (current != null && current.id == updated.id) {
+      state = updated.copyWith(lastLoginAt: current.lastLoginAt);
+    }
+  }
 }
 
 final authControllerProvider = NotifierProvider<AuthController, AppUser?>(

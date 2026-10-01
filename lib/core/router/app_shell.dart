@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/auth/domain/app_user.dart';
 import '../../features/auth/presentation/auth_controller.dart';
+import '../../features/auth/presentation/password_sheet.dart';
 import '../../features/auth/presentation/widgets/user_avatar.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_dialogs.dart';
@@ -166,7 +167,7 @@ class _StoreHeader extends StatelessWidget {
   }
 }
 
-/// User yang login. Diklik untuk keluar.
+/// User yang login. Diklik untuk ganti password atau keluar.
 class _UserFooter extends ConsumerWidget {
   const _UserFooter({required this.user, required this.collapsed});
 
@@ -179,10 +180,17 @@ class _UserFooter extends ConsumerWidget {
       title: user.fullName,
       message: 'Masuk sebagai ${user.role.label}',
       options: const [
+        ActionSheetOption(label: 'Ganti Password', value: 'password'),
         ActionSheetOption(label: 'Keluar', value: 'logout', destructive: true),
       ],
     );
-    if (action == 'logout') ref.read(authControllerProvider.notifier).logout();
+    if (!context.mounted) return;
+    switch (action) {
+      case 'password':
+        await showChangeOwnPasswordSheet(context);
+      case 'logout':
+        ref.read(authControllerProvider.notifier).logout();
+    }
   }
 
   @override

@@ -139,3 +139,42 @@ class _SkeletonBoxState extends State<SkeletonBox>
     );
   }
 }
+
+/// Kotak pesan error lembut di dalam form/sheet.
+class ErrorBanner extends StatelessWidget {
+  const ErrorBanner({super.key, required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: AppSpacing.sm - 2,
+      ),
+      decoration: BoxDecoration(
+        color: c.danger.withValues(alpha: 0.1),
+        borderRadius: AppRadius.mdAll,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            CupertinoIcons.exclamationmark_circle_fill,
+            size: 18,
+            color: c.danger,
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          Expanded(
+            child: Text(
+              message,
+              style: AppTypography.subheadline.copyWith(color: c.danger),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

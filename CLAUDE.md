@@ -46,8 +46,21 @@ dari artifact `toko-windows` lalu dites di PC Windows.
   Pesan gagal sama untuk user tidak ada / password salah.
 - Password: bcrypt cost 10 di `Isolate.run` (`PasswordHasher`). Tes memakai cost 4.
 - Akun seed: `admin / admin123`, `kasir / kasir123` (ditampilkan di layar login
-  hanya saat `kDebugMode`). Perlu fitur ganti password sebelum dipakai sungguhan.
-- Keluar: klik user di bawah sidebar → action sheet → Keluar.
+  hanya saat `kDebugMode`). Harus diganti sebelum dipakai di toko.
+- Menu user di bawah sidebar: Ganti Password, Keluar.
+
+### Kelola akun (Pengaturan › Kelola Akun, `/pengaturan/akun`, khusus admin)
+
+- `UserRepository` (`features/auth/data/user_repository.dart`): tambah, ubah
+  (nama/peran/aktif; username tetap), reset password, ganti password sendiri,
+  hapus. Melempar `AccountFailure` dengan pesan siap tampil.
+- Aturan pengaman (di repository, bukan UI): hanya admin yang mengelola akun;
+  admin tidak bisa menonaktifkan/menurunkan/menghapus diri sendiri; minimal
+  satu admin aktif.
+- Validasi isian di `AccountRules` (dipakai form dan repository): username
+  3–32 karakter `[a-z0-9._]`, disimpan huruf kecil; password minimal 6.
+- Akun nonaktif tidak bisa login dan tidak tampil di layar login.
+- TODO Langkah 5: tolak hapus user yang sudah punya transaksi (sarankan nonaktifkan).
 
 ## Design system (gaya Apple / iOS)
 
@@ -72,10 +85,12 @@ dari artifact `toko-windows` lalu dites di PC Windows.
 | `AppButton` / `AppIconButton` | Tombol filled/tinted/gray/plain, ukuran small/medium/large, loading |
 | `AppCard`, `GlassPanel` | Kartu membulat; panel kaca buram (BackdropFilter) |
 | `InsetGroupedSection` / `InsetGroupedTile` / `TileIcon` | List bergaya Pengaturan iOS |
-| `LargeTitlePage` | Halaman dengan large title + toolbar kaca saat digulir |
+| `LargeTitlePage` | Halaman dengan large title + toolbar kaca saat digulir; `backLabel`/`onBack` untuk sub-halaman |
 | `AppSidebar` | Sidebar kaca yang bisa diciutkan |
 | `AppDialogs` | `alert`, `confirm`, `actionSheet`, `sheet` (bottom sheet dengan handle) |
-| `EmptyState`, `LoadingState`, `SkeletonBox` | State kosong/loading |
+| `EmptyState`, `LoadingState`, `SkeletonBox`, `ErrorBanner` | State kosong/loading/error |
+| `AppTextField` | Input dengan label, helper/error, mode password |
+| `Shake` | Animasi getar untuk input salah |
 
 Format angka/tanggal: `Fmt` di `core/utils/formatters.dart` (`Fmt.rupiah(10000)` → `Rp 10.000`).
 
@@ -106,6 +121,7 @@ nama/harga/satuan), stock_movements, settings.
 - [x] Langkah 0 — Setup project, fvm, CI build Windows
 - [x] Langkah 1 — Design system + app shell (sidebar, halaman kosong) — menunggu review tampilan
 - [x] Langkah 2a — Database (drift) + tabel users, seed admin/kasir, login + role
+- [x] Kelola akun + ganti password (permintaan tambahan)
 - [ ] Langkah 2b — Seed 20 barang contoh (bersama tabel produk di Langkah 3)
 - [ ] Langkah 3 — Master barang
 - [ ] Langkah 4 — Import iPOS (butuh `sample_data/ipos_export.xlsx`)

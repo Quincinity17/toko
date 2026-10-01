@@ -25,7 +25,7 @@ class AuthRepository {
   /// Akun yang ditampilkan di layar login.
   Future<List<AppUser>> activeUsers() async {
     final rows = await _db.usersDao.activeUsers();
-    return rows.map(_toDomain).toList();
+    return rows.map(userFromRow).toList();
   }
 
   /// Memeriksa username dan password. Pesan gagal sengaja sama untuk username
@@ -45,27 +45,19 @@ class AuthRepository {
 
     final now = _clock();
     await _db.usersDao.touchLastLogin(row.id, now);
-    return _toDomain(row).copyWithLastLogin(now);
+    return userFromRow(row).copyWith(lastLoginAt: now);
   }
-
-  AppUser _toDomain(UserRow row) => AppUser(
-    id: row.id,
-    username: row.username,
-    fullName: row.fullName,
-    role: row.role,
-    lastLoginAt: row.lastLoginAt,
-  );
 }
 
-extension on AppUser {
-  AppUser copyWithLastLogin(DateTime at) => AppUser(
-    id: id,
-    username: username,
-    fullName: fullName,
-    role: role,
-    lastLoginAt: at,
-  );
-}
+/// Mengubah baris tabel menjadi model domain (tanpa password hash).
+AppUser userFromRow(UserRow row) => AppUser(
+  id: row.id,
+  username: row.username,
+  fullName: row.fullName,
+  role: row.role,
+  isActive: row.isActive,
+  lastLoginAt: row.lastLoginAt,
+);
 
 final authRepositoryProvider = Provider<AuthRepository>(
   (ref) => AuthRepository(

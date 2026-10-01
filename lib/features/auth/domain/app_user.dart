@@ -11,6 +11,7 @@ class AppUser {
     required this.username,
     required this.fullName,
     required this.role,
+    this.isActive = true,
     this.lastLoginAt,
   });
 
@@ -18,6 +19,7 @@ class AppUser {
   final String username;
   final String fullName;
   final UserRole role;
+  final bool isActive;
   final DateTime? lastLoginAt;
 
   bool get isAdmin => role == UserRole.admin;
@@ -30,9 +32,34 @@ class AppUser {
     return result.isEmpty ? '?' : result;
   }
 
+  AppUser copyWith({
+    String? fullName,
+    UserRole? role,
+    bool? isActive,
+    DateTime? lastLoginAt,
+  }) {
+    return AppUser(
+      id: id,
+      username: username,
+      fullName: fullName ?? this.fullName,
+      role: role ?? this.role,
+      isActive: isActive ?? this.isActive,
+      lastLoginAt: lastLoginAt ?? this.lastLoginAt,
+    );
+  }
+
+  // Dibandingkan per nilai supaya perubahan nama/peran ikut memicu rebuild.
   @override
-  bool operator ==(Object other) => other is AppUser && other.id == id;
+  bool operator ==(Object other) =>
+      other is AppUser &&
+      other.id == id &&
+      other.username == username &&
+      other.fullName == fullName &&
+      other.role == role &&
+      other.isActive == isActive &&
+      other.lastLoginAt == lastLoginAt;
 
   @override
-  int get hashCode => id.hashCode;
+  int get hashCode =>
+      Object.hash(id, username, fullName, role, isActive, lastLoginAt);
 }
