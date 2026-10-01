@@ -3567,7 +3567,7 @@ class SaleRow extends DataClass implements Insertable<SaleRow> {
   /// terisi lewat clientDefault dan backfill migrasi v4.
   final String? uuid;
 
-  /// Sejak v4: INV-<kode terminal>-YYYYMMDD-0001, urut per terminal per hari.
+  /// Sejak v4: `INV-{kode terminal}-YYYYMMDD-0001`, urut per terminal per hari.
   /// Faktur lama: INV-YYYYMMDD-0001.
   final String invoiceNo;
 

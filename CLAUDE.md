@@ -123,6 +123,21 @@ tab **Transaksi Baru** dan **Hari Ini**.
   `TerminalRepository.ensureInitialized()` di `main()`. Pengaturan › Terminal &
   Sinkronisasi: kode (admin), ID, peran, jumlah antrian.
 
+## Master barang (`/produk`, admin)
+
+- Daftar: cari per kata (+ saran nama mirip bila kosong), filter status
+  (Aktif/Nonaktif/Semua), kategori, stok menipis (stok ≤ stok minimum), urutan
+  (nama, kode, stok terkecil, harga tertinggi, terakhir diubah), 50 per halaman.
+- Form (sheet): nama, kode, barcode, kategori & satuan (`showOptionPicker`, bisa
+  buat baru; satuan disimpan huruf besar), harga beli/jual (+ info untung atau
+  peringatan rugi), stok, stok minimum, aktif.
+- Aturan di `ProductRepository.save` (`ProductRules`): kode & barcode unik (kode
+  tanpa peduli huruf besar), barcode tanpa spasi, harga ≥ 0. Kategori/satuan
+  dibuat otomatis berdasarkan nama. Selisih stok → `stock_movements` jenis
+  `adjust` ("Stok awal" / "Penyesuaian manual").
+- Hapus: belum pernah terjual → hapus permanen (+ riwayat stoknya); sudah
+  terjual → dinonaktifkan (hilang dari kasir, faktur lama utuh).
+
 ## Voucher & metode pembayaran (admin, Pengaturan › Penjualan)
 
 - `/pengaturan/voucher`: daftar dikelompokkan Bisa dipakai / Terjadwal / Tidak
@@ -164,6 +179,7 @@ tab **Transaksi Baru** dan **Hari Ini**.
 | `StatCard` | Kartu angka ringkasan (dashboard, kasir) |
 | `AppTextField` | Input dengan label, helper/error, mode password |
 | `Shake` | Animasi getar untuk input salah |
+| `showOptionPicker` | Popup pilih satu opsi dengan pencarian, opsi "buat baru" dan "tanpa …" |
 
 Format angka/tanggal: `Fmt` di `core/utils/formatters.dart` (`Fmt.rupiah(10000)` → `Rp 10.000`).
 Input angka: `parseIdNumber` (`1.500` → 1500, `0,5` → 0.5) dan `RupiahInputFormatter`
@@ -243,7 +259,7 @@ Rencana berikutnya: settings.
 - [x] Saran nama barang mirip (FuzzyMatch) + pencarian per kata
 - [x] Sinkron Tahap A — fondasi lokal (terminal, uuid, outbox, nomor faktur per terminal); kuota voucher dihapus
 
-- [ ] Langkah 3 — Master barang
+- [x] Langkah 3 — Master barang (daftar, filter, form, hapus/nonaktif)
 - [ ] Langkah 4 — Import iPOS (butuh `sample_data/ipos_export.xlsx`)
 - [ ] Langkah 6 — Struk 58 mm (PDF preview)
 - [ ] Langkah 7 — Dashboard + laporan

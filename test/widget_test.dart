@@ -1,5 +1,5 @@
 import 'package:bcrypt/bcrypt.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -290,6 +290,54 @@ void main() {
     expect(find.text('Cari Barang'), findsNothing);
     expect(find.text('Chitato Sapi Panggang 68g'), findsOneWidget);
     expect(find.text('Belum ada barang'), findsNothing);
+
+    await unmount(tester);
+  });
+
+  testWidgets('Admin mengelola barang di halaman Produk', (tester) async {
+    await pumpApp(tester);
+    await login(tester, 'admin', 'admin123');
+    await tester.tap(find.text('Produk'));
+    await settle(tester);
+
+    expect(find.text('20 barang'), findsOneWidget);
+    expect(find.text('Indomie Goreng 85g'), findsOneWidget);
+
+    // Cari (urutan kata bebas).
+    await tester.enterText(find.byType(CupertinoSearchTextField), 'goreng');
+    await settle(tester);
+    expect(find.text('Indomie Goreng 85g'), findsOneWidget);
+    expect(find.text('Minyak Goreng Bimoli 2L'), findsOneWidget);
+    expect(find.text('Aqua Botol 600ml'), findsNothing);
+
+    // Salah ketik → saran.
+    await tester.enterText(find.byType(CupertinoSearchTextField), 'indomei');
+    await settle(tester);
+    expect(find.text('MUNGKIN MAKSUD ANDA'), findsOneWidget);
+    await tester.enterText(find.byType(CupertinoSearchTextField), '');
+    await settle(tester);
+
+    // Tambah barang baru.
+    await tester.tap(find.widgetWithText(AppButton, 'Tambah'));
+    await settle(tester);
+    await fill(tester, 'Nama barang', 'Kecap Bango 220ml');
+    await fill(tester, 'Kode', 'BRG100');
+    await fill(tester, 'Harga beli (Rp)', '9000');
+    await fill(tester, 'Harga jual (Rp)', '11000');
+    await fill(tester, 'Stok', '2');
+    await fill(tester, 'Stok minimum (opsional)', '5');
+    await settle(tester);
+    expect(find.textContaining('Untung Rp 2.000'), findsOneWidget);
+    await tester.tap(find.widgetWithText(AppButton, 'Simpan Barang'));
+    await settle(tester);
+    expect(find.text('Barang Baru'), findsNothing);
+    expect(find.text('21 barang'), findsOneWidget);
+
+    // Filter stok menipis memuat barang baru (2 ≤ 5).
+    await tester.tap(find.text('Stok menipis'));
+    await settle(tester);
+    expect(find.text('Kecap Bango 220ml'), findsOneWidget);
+    expect(find.text('4 barang'), findsOneWidget);
 
     await unmount(tester);
   });
