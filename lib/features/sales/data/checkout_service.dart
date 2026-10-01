@@ -2,8 +2,12 @@ import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../../core/database/tables/sync.dart';
+import '../../../core/database/uuid.dart';
 import '../../auth/domain/app_user.dart';
 import '../../payments/domain/payment_method.dart';
+import '../../sync/data/terminal_repository.dart';
+import '../../sync/domain/terminal.dart';
 import '../../vouchers/data/voucher_repository.dart';
 import '../domain/cart.dart';
 import '../domain/invoice_number.dart';
@@ -40,9 +44,9 @@ class CheckoutResult {
   final int discount;
 }
 
-/// Menyimpan transaksi penjualan: faktur, baris barang, pemakaian voucher,
-/// pengurangan stok, dan riwayat stok, semuanya dalam satu database
-/// transaction. Jika satu langkah gagal, tidak ada yang tersimpan.
+/// Menyimpan transaksi penjualan: faktur, baris barang, pengurangan stok,
+/// riwayat stok, dan antrian kirim ke server (outbox), semuanya dalam satu
+/// database transaction. Jika satu langkah gagal, tidak ada yang tersimpan.
 class CheckoutService {
   CheckoutService(this._db, {DateTime Function()? clock})
     : _clock = clock ?? DateTime.now;
@@ -73,7 +77,7 @@ class CheckoutService {
       }
 
       // Voucher diperiksa ulang dari database: bisa saja sudah dinonaktifkan
-      // atau kuotanya habis sejak dipasang di keranjang.
+      // atau kedaluwarsa sejak dipasang di keranjang.
       final subtotal = cart.subtotal;
       var discount = 0;
       String? voucherCode;
@@ -86,9 +90,6 @@ class CheckoutService {
         final voucher = voucherFromRow(row);
         final problem = voucher.problemFor(subtotal: subtotal, now: now);
         if (problem != null) throw CheckoutFailure(problem);
-        if (!await _db.vouchersDao.tryConsume(voucher.id)) {
-          throw CheckoutFailure('Kuota voucher ${voucher.code} sudah habis.');
-        }
         discount = voucher.discountFor(subtotal);
         voucherCode = voucher.code;
         voucherId = voucher.id;
@@ -102,16 +103,25 @@ class CheckoutService {
       }
       final ref = paymentRef?.trim();
 
+      final terminalCode =
+          await _db.settingsDao.get(TerminalRepository.kCode) ??
+          Terminal.defaultCode;
       final invoiceNo = InvoiceNumber.next(
         now,
-        await _db.salesDao.lastInvoiceWithPrefix(InvoiceNumber.prefixFor(now)),
+        terminalCode,
+        await _db.salesDao.lastInvoiceWithPrefix(
+          InvoiceNumber.prefixFor(now, terminalCode),
+        ),
       );
+      final saleUuid = newUuid();
 
       final saleId = await _db
           .into(_db.sales)
           .insert(
             SalesCompanion.insert(
+              uuid: Value(saleUuid),
               invoiceNo: invoiceNo,
+              terminalCode: Value(terminalCode),
               saleDate: now,
               userId: cashier.id,
               itemCount: cart.lines.length,
@@ -151,6 +161,10 @@ class CheckoutService {
           invoiceNo: invoiceNo,
         );
       }
+
+      // Masuk antrian kirim ke server di transaksi yang sama: jika faktur
+      // tersimpan, antriannya pasti ada.
+      await _db.outboxDao.enqueue(OutboxEntity.sale, saleUuid);
 
       return CheckoutResult(
         saleId: saleId,

@@ -12,8 +12,6 @@ Voucher voucher(
   int minPurchase = 0,
   DateTime? start,
   DateTime? end,
-  int? quota,
-  int used = 0,
 }) => Voucher(
   id: 1,
   code: 'TES',
@@ -23,8 +21,6 @@ Voucher voucher(
   minPurchase: minPurchase,
   startDate: start,
   endDate: end,
-  quota: quota,
-  usedCount: used,
 );
 
 Product product(int id, int price, {double stock = 100}) => Product(
@@ -102,7 +98,7 @@ void main() {
   group('Voucher', () {
     final now = DateTime(2026, 10, 15, 13);
 
-    test('status mengikuti tanggal, kuota, dan aktif', () {
+    test('status mengikuti tanggal dan aktif', () {
       expect(
         voucher(VoucherType.amount, 1000).statusAt(now),
         VoucherStatus.active,
@@ -132,10 +128,6 @@ void main() {
         ).statusAt(now),
         VoucherStatus.expired,
       );
-      expect(
-        voucher(VoucherType.amount, 1000, quota: 2, used: 2).statusAt(now),
-        VoucherStatus.exhausted,
-      );
     });
 
     test('aturan isian form', () {
@@ -143,7 +135,6 @@ void main() {
       expect(VoucherRules.code('hemat10'), isNull);
       expect(VoucherRules.value(VoucherType.percent, 120), isNotNull);
       expect(VoucherRules.value(VoucherType.amount, 0), isNotNull);
-      expect(VoucherRules.quota(3, 5), isNotNull);
       expect(
         VoucherRules.period(DateTime(2026, 10, 2), DateTime(2026, 10, 1)),
         isNotNull,
@@ -154,16 +145,30 @@ void main() {
   group('InvoiceNumber', () {
     final day = DateTime(2026, 9, 30, 14, 5);
 
-    test('nomor pertama hari itu', () {
-      expect(InvoiceNumber.next(day, null), 'INV-20260930-0001');
+    test('nomor pertama hari itu memuat kode terminal', () {
+      expect(InvoiceNumber.next(day, 'K01', null), 'INV-K01-20260930-0001');
     });
 
-    test('lanjut dari nomor terakhir', () {
-      expect(InvoiceNumber.next(day, 'INV-20260930-0041'), 'INV-20260930-0042');
+    test('lanjut dari nomor terakhir terminal yang sama', () {
+      expect(
+        InvoiceNumber.next(day, 'K01', 'INV-K01-20260930-0041'),
+        'INV-K01-20260930-0042',
+      );
     });
 
-    test('nomor hari lain diabaikan', () {
-      expect(InvoiceNumber.next(day, 'INV-20260929-0099'), 'INV-20260930-0001');
+    test('nomor hari lain, terminal lain, atau format lama diabaikan', () {
+      expect(
+        InvoiceNumber.next(day, 'K01', 'INV-K01-20260929-0099'),
+        'INV-K01-20260930-0001',
+      );
+      expect(
+        InvoiceNumber.next(day, 'K01', 'INV-K02-20260930-0099'),
+        'INV-K01-20260930-0001',
+      );
+      expect(
+        InvoiceNumber.next(day, 'K01', 'INV-20260930-0099'),
+        'INV-K01-20260930-0001',
+      );
     });
   });
 

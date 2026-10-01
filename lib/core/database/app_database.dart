@@ -7,14 +7,18 @@ import '../../features/auth/domain/user_role.dart';
 import '../../features/payments/domain/payment_method.dart';
 import '../../features/vouchers/domain/voucher.dart';
 import 'daos/payment_methods_dao.dart';
+import 'daos/outbox_dao.dart';
 import 'daos/products_dao.dart';
 import 'daos/sales_dao.dart';
+import 'daos/settings_dao.dart';
 import 'daos/users_dao.dart';
 import 'daos/vouchers_dao.dart';
 import 'sample_products.dart';
+import 'uuid.dart';
 import 'tables/payment_methods.dart';
 import 'tables/products.dart';
 import 'tables/sales.dart';
+import 'tables/sync.dart';
 import 'tables/users.dart';
 import 'tables/vouchers.dart';
 
@@ -29,6 +33,8 @@ part 'app_database.g.dart';
 ///   (+ 20 barang contoh)
 /// - v3: vouchers, payment_methods (+ 4 metode bawaan); sales.voucher_id,
 ///   voucher_code, payment_method_id, payment_ref
+/// - v4: kolom `uuid` di semua tabel yang disinkron, sales.terminal_code,
+///   settings, sync_outbox; kuota voucher tidak dipakai lagi
 @DriftDatabase(
   tables: [
     Users,
@@ -40,14 +46,24 @@ part 'app_database.g.dart';
     Sales,
     SaleItems,
     StockMovements,
+    AppSettings,
+    SyncOutbox,
   ],
-  daos: [UsersDao, ProductsDao, SalesDao, VouchersDao, PaymentMethodsDao],
+  daos: [
+    UsersDao,
+    ProductsDao,
+    SalesDao,
+    VouchersDao,
+    PaymentMethodsDao,
+    SettingsDao,
+    OutboxDao,
+  ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openDefault());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -87,11 +103,76 @@ class AppDatabase extends _$AppDatabase {
           "(SELECT id FROM payment_methods WHERE name = 'Tunai')",
         );
       }
+      if (from < 4) {
+        // Langkah v4 dibuat idempoten (cek dulu sebelum menambah) karena
+        // tabel yang dibuat di cabang v1/v2 di atas sudah memakai definisi
+        // terbaru, sedangkan tabel lama belum.
+        await m.createTable(appSettings);
+        await m.createTable(syncOutbox);
+        await m.createIndex(idxSyncOutboxPending);
+        await _ensureColumn(m, sales, sales.terminalCode);
+        for (final (table, column) in _syncedTables) {
+          await _ensureColumn(m, table, column);
+          await _backfillUuid(table.actualTableName);
+          await customStatement(
+            'CREATE UNIQUE INDEX IF NOT EXISTS '
+            'idx_${table.actualTableName}_uuid '
+            'ON ${table.actualTableName} (uuid)',
+          );
+        }
+        // Faktur yang dibuat sebelum ada antrian ikut dikirim ke server nanti.
+        await customStatement(
+          "INSERT INTO sync_outbox (entity, entity_uuid) "
+          "SELECT 'sale', uuid FROM sales "
+          'WHERE uuid NOT IN (SELECT entity_uuid FROM sync_outbox) '
+          'ORDER BY id',
+        );
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
     },
   );
+
+  /// Tabel yang barisnya akan disinkron dengan server, beserta kolom uuid-nya.
+  List<(TableInfo, GeneratedColumn<String>)> get _syncedTables => [
+    (users, users.uuid),
+    (categories, categories.uuid),
+    (units, units.uuid),
+    (products, products.uuid),
+    (vouchers, vouchers.uuid),
+    (paymentMethods, paymentMethods.uuid),
+    (sales, sales.uuid),
+    (saleItems, saleItems.uuid),
+    (stockMovements, stockMovements.uuid),
+  ];
+
+  Future<void> _ensureColumn(
+    Migrator m,
+    TableInfo table,
+    GeneratedColumn column,
+  ) async {
+    final info = await customSelect(
+      'PRAGMA table_info(${table.actualTableName})',
+    ).get();
+    final exists = info.any((r) => r.read<String>('name') == column.name);
+    if (!exists) await m.addColumn(table, column);
+  }
+
+  /// Mengisi uuid untuk baris lama yang dibuat sebelum v4.
+  Future<void> _backfillUuid(String table) async {
+    final rows = await customSelect('SELECT id FROM $table WHERE uuid IS NULL')
+        .get();
+    for (final r in rows) {
+      await customUpdate(
+        'UPDATE $table SET uuid = ? WHERE id = ?',
+        variables: [
+          Variable.withString(newUuid()),
+          Variable.withInt(r.read<int>('id')),
+        ],
+      );
+    }
+  }
 
   Future<void> _insertDefaultPaymentMethods() async {
     const defaults = [

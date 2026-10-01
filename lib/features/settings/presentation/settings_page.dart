@@ -13,6 +13,7 @@ import '../../../core/widgets/app_dialogs.dart';
 import '../../../core/widgets/inset_grouped_list.dart';
 import '../../../core/widgets/large_title_page.dart';
 import '../../auth/presentation/password_sheet.dart';
+import '../../sync/presentation/terminal_section.dart';
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -83,6 +84,8 @@ class SettingsPage extends ConsumerWidget {
                       ),
                     ],
                   ),
+                  const SizedBox(height: AppSpacing.xl),
+                  const TerminalSection(),
                   const SizedBox(height: AppSpacing.xl),
                   InsetGroupedSection(
                     header: 'Tampilan',

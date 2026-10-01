@@ -7,6 +7,7 @@ import 'app.dart';
 import 'core/database/app_database.dart';
 import 'core/database/seed.dart';
 import 'core/security/password_hasher.dart';
+import 'features/sync/data/terminal_repository.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,6 +16,7 @@ Future<void> main() async {
 
   final db = AppDatabase();
   await DatabaseSeeder(db, const PasswordHasher()).seed();
+  await TerminalRepository(db).ensureInitialized();
 
   runApp(
     ProviderScope(

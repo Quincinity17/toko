@@ -15,7 +15,6 @@ enum VoucherStatus {
   active('Aktif'),
   scheduled('Belum berlaku'),
   expired('Kedaluwarsa'),
-  exhausted('Kuota habis'),
   inactive('Nonaktif');
 
   const VoucherStatus(this.label);
@@ -23,7 +22,8 @@ enum VoucherStatus {
   final String label;
 }
 
-/// Voucher potongan. Semua aturan pemakaian ada di sini supaya kasir,
+/// Voucher potongan, tanpa kuota (cukup aktif/nonaktif oleh admin).
+/// Semua aturan pemakaian ada di sini supaya kasir,
 /// halaman admin, dan proses checkout memakai logika yang sama.
 @immutable
 class Voucher {
@@ -37,8 +37,6 @@ class Voucher {
     this.minPurchase = 0,
     this.startDate,
     this.endDate,
-    this.quota,
-    this.usedCount = 0,
     this.isActive = true,
   });
 
@@ -53,11 +51,7 @@ class Voucher {
   final int minPurchase;
   final DateTime? startDate;
   final DateTime? endDate;
-  final int? quota;
-  final int usedCount;
   final bool isActive;
-
-  int? get remaining => quota == null ? null : quota! - usedCount;
 
   VoucherStatus statusAt(DateTime now) {
     if (!isActive) return VoucherStatus.inactive;
@@ -67,7 +61,6 @@ class Voucher {
     if (endDate != null && !now.isBefore(_startOfDay(endDate!).add(_day))) {
       return VoucherStatus.expired;
     }
-    if (quota != null && usedCount >= quota!) return VoucherStatus.exhausted;
     return VoucherStatus.active;
   }
 
@@ -81,8 +74,6 @@ class Voucher {
         return 'Voucher $code baru berlaku mulai ${Fmt.dateShort(startDate!)}.';
       case VoucherStatus.expired:
         return 'Voucher $code sudah kedaluwarsa (${Fmt.dateShort(endDate!)}).';
-      case VoucherStatus.exhausted:
-        return 'Kuota voucher $code sudah habis.';
       case VoucherStatus.active:
         break;
     }
@@ -133,8 +124,6 @@ class Voucher {
       other.minPurchase == minPurchase &&
       other.startDate == startDate &&
       other.endDate == endDate &&
-      other.quota == quota &&
-      other.usedCount == usedCount &&
       other.isActive == isActive;
 
   @override
@@ -148,8 +137,6 @@ class Voucher {
     minPurchase,
     startDate,
     endDate,
-    quota,
-    usedCount,
     isActive,
   );
 }
@@ -181,15 +168,6 @@ class VoucherRules {
   static String? period(DateTime? start, DateTime? end) {
     if (start != null && end != null && end.isBefore(start)) {
       return 'Tanggal berakhir tidak boleh sebelum tanggal mulai.';
-    }
-    return null;
-  }
-
-  static String? quota(int? quota, int usedCount) {
-    if (quota == null) return null;
-    if (quota < 1) return 'Kuota minimal 1, atau kosongkan untuk tanpa batas.';
-    if (quota < usedCount) {
-      return 'Kuota tidak boleh kurang dari yang sudah terpakai ($usedCount).';
     }
     return null;
   }

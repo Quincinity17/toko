@@ -24,8 +24,6 @@ Voucher voucherFromRow(VoucherRow r) => Voucher(
   minPurchase: r.minPurchase,
   startDate: r.startDate,
   endDate: r.endDate,
-  quota: r.quota,
-  usedCount: r.usedCount,
   isActive: r.isActive,
 );
 
@@ -40,7 +38,6 @@ class VoucherDraft {
     this.minPurchase = 0,
     this.startDate,
     this.endDate,
-    this.quota,
     this.isActive = true,
   });
 
@@ -52,7 +49,6 @@ class VoucherDraft {
   final int minPurchase;
   final DateTime? startDate;
   final DateTime? endDate;
-  final int? quota;
   final bool isActive;
 }
 
@@ -102,7 +98,6 @@ class VoucherRepository {
     _check(VoucherRules.code(code));
     _check(VoucherRules.value(draft.type, draft.value));
     _check(VoucherRules.period(draft.startDate, draft.endDate));
-    _check(VoucherRules.quota(draft.quota, existing?.usedCount ?? 0));
     if (draft.minPurchase < 0) {
       throw const VoucherFailure('Minimal belanja tidak boleh negatif.');
     }
@@ -111,7 +106,9 @@ class VoucherRepository {
     if (sameCode != null && sameCode.id != id) {
       throw VoucherFailure('Kode "$code" sudah dipakai voucher lain.');
     }
-    if (existing != null && existing.code != code && existing.usedCount > 0) {
+    if (existing != null &&
+        existing.code != code &&
+        await _db.vouchersDao.countSalesUsing(existing.id) > 0) {
       throw const VoucherFailure(
         'Kode voucher yang sudah pernah dipakai tidak bisa diubah.',
       );
@@ -128,7 +125,6 @@ class VoucherRepository {
       minPurchase: Value(draft.minPurchase),
       startDate: Value(_dateOnly(draft.startDate)),
       endDate: Value(_dateOnly(draft.endDate)),
-      quota: Value(draft.quota),
       isActive: Value(draft.isActive),
     );
 
@@ -141,7 +137,7 @@ class VoucherRepository {
     _requireAdmin(actor);
     final row = await _db.vouchersDao.findById(id);
     if (row == null) return;
-    if (row.usedCount > 0 || await _db.vouchersDao.countSalesUsing(id) > 0) {
+    if (await _db.vouchersDao.countSalesUsing(id) > 0) {
       throw const VoucherFailure(
         'Voucher ini sudah pernah dipakai sehingga tidak bisa dihapus. '
         'Nonaktifkan saja.',

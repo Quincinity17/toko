@@ -36,18 +36,6 @@ class VouchersDao extends DatabaseAccessor<AppDatabase>
   Future<int> deleteVoucher(int id) =>
       (delete(vouchers)..where((t) => t.id.equals(id))).go();
 
-  /// Menambah pemakaian hanya jika kuota masih ada. Mengembalikan `false`
-  /// jika kuota sudah habis (mis. dipakai kasir lain di detik yang sama).
-  Future<bool> tryConsume(int id) async {
-    final changed = await customUpdate(
-      'UPDATE vouchers SET used_count = used_count + 1 '
-      'WHERE id = ? AND (quota IS NULL OR used_count < quota)',
-      variables: [Variable.withInt(id)],
-      updates: {vouchers},
-    );
-    return changed == 1;
-  }
-
   Future<int> countSalesUsing(int id) async {
     final count = sales.id.count();
     final row =

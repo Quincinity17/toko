@@ -86,9 +86,7 @@ class _Groups extends StatelessWidget {
           usable.add(v);
         case VoucherStatus.scheduled:
           scheduled.add(v);
-        case VoucherStatus.expired ||
-            VoucherStatus.exhausted ||
-            VoucherStatus.inactive:
+        case VoucherStatus.expired || VoucherStatus.inactive:
           ended.add(v);
       }
     }
@@ -118,7 +116,7 @@ class _Groups extends StatelessWidget {
           section(
             'Tidak berlaku',
             ended,
-            'Nonaktif, kedaluwarsa, atau kuota habis. Ketuk untuk mengubah.',
+            'Nonaktif atau kedaluwarsa. Ketuk untuk mengubah.',
           ),
       ],
     );
@@ -145,9 +143,6 @@ class _VoucherTile extends StatelessWidget {
     final details = <String>[
       v.summary,
       if (v.endDate != null) 's.d. ${Fmt.dateShort(v.endDate!)}',
-      v.quota == null
-          ? 'dipakai ${v.usedCount}×'
-          : 'dipakai ${v.usedCount}/${v.quota}',
     ];
 
     return InsetGroupedTile(

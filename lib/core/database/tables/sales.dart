@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 
+import '../uuid.dart';
 import 'payment_methods.dart';
 import 'products.dart';
 import 'users.dart';
@@ -8,11 +9,21 @@ import 'vouchers.dart';
 /// Faktur penjualan. Semua nominal dalam Rupiah.
 @DataClassName('SaleRow')
 @TableIndex(name: 'idx_sales_date', columns: {#saleDate})
+@TableIndex(name: 'idx_sales_uuid', columns: {#uuid}, unique: true)
 class Sales extends Table {
   IntColumn get id => integer().autoIncrement()();
 
-  /// Format INV-YYYYMMDD-0001, urut per hari.
+  /// ID global untuk sinkronisasi (lihat `uuid.dart`). Nullable di skema
+  /// karena SQLite tidak bisa menambah kolom NOT NULL ke tabel lama; selalu
+  /// terisi lewat clientDefault dan backfill migrasi v4.
+  TextColumn get uuid => text().nullable().clientDefault(newUuid)();
+
+  /// Sejak v4: `INV-{kode terminal}-YYYYMMDD-0001`, urut per terminal per hari.
+  /// Faktur lama: INV-YYYYMMDD-0001.
   TextColumn get invoiceNo => text().unique()();
+
+  /// v4: kode terminal (komputer) yang membuat faktur, mis. `K01`.
+  TextColumn get terminalCode => text().nullable()();
   DateTimeColumn get saleDate => dateTime()();
   IntColumn get userId => integer().references(Users, #id)();
 
@@ -49,8 +60,14 @@ class Sales extends Table {
 /// Baris faktur. Kode, nama, satuan, dan harga disalin saat transaksi supaya
 /// faktur lama tidak berubah bila data barang diedit.
 @DataClassName('SaleItemRow')
+@TableIndex(name: 'idx_sale_items_uuid', columns: {#uuid}, unique: true)
 class SaleItems extends Table {
   IntColumn get id => integer().autoIncrement()();
+
+  /// ID global untuk sinkronisasi (lihat `uuid.dart`). Nullable di skema
+  /// karena SQLite tidak bisa menambah kolom NOT NULL ke tabel lama; selalu
+  /// terisi lewat clientDefault dan backfill migrasi v4.
+  TextColumn get uuid => text().nullable().clientDefault(newUuid)();
   IntColumn get saleId =>
       integer().references(Sales, #id, onDelete: KeyAction.cascade)();
   IntColumn get productId => integer().references(Products, #id)();
@@ -70,8 +87,14 @@ enum StockMovementType { sale, import, adjust }
 
 /// Riwayat keluar-masuk stok (penjualan, import, penyesuaian).
 @DataClassName('StockMovementRow')
+@TableIndex(name: 'idx_stock_movements_uuid', columns: {#uuid}, unique: true)
 class StockMovements extends Table {
   IntColumn get id => integer().autoIncrement()();
+
+  /// ID global untuk sinkronisasi (lihat `uuid.dart`). Nullable di skema
+  /// karena SQLite tidak bisa menambah kolom NOT NULL ke tabel lama; selalu
+  /// terisi lewat clientDefault dan backfill migrasi v4.
+  TextColumn get uuid => text().nullable().clientDefault(newUuid)();
   IntColumn get productId => integer().references(Products, #id)();
   TextColumn get type => textEnum<StockMovementType>()();
 

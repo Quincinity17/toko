@@ -51,30 +51,18 @@ class _VoucherFormState extends ConsumerState<_VoucherForm> {
   late final _minPurchase = TextEditingController(
     text: (_v?.minPurchase ?? 0) == 0 ? '' : Fmt.number(_v!.minPurchase),
   );
-  late final _quota = TextEditingController(
-    text: _v?.quota == null ? '' : '${_v!.quota}',
-  );
 
   late VoucherType _type = _v?.type ?? VoucherType.percent;
   late DateTime? _start = _v?.startDate;
   late DateTime? _end = _v?.endDate;
   late bool _active = _v?.isActive ?? true;
 
-  String? _codeError, _valueError, _periodError, _quotaError, _error;
+  String? _codeError, _valueError, _periodError, _error;
   bool _saving = false;
-
-  bool get _used => (_v?.usedCount ?? 0) > 0;
 
   @override
   void dispose() {
-    for (final c in [
-      _code,
-      _name,
-      _value,
-      _maxDiscount,
-      _minPurchase,
-      _quota,
-    ]) {
+    for (final c in [_code, _name, _value, _maxDiscount, _minPurchase]) {
       c.dispose();
     }
     super.dispose();
@@ -84,20 +72,13 @@ class _VoucherFormState extends ConsumerState<_VoucherForm> {
 
   Future<void> _save() async {
     final value = parseIdNumber(_value.text);
-    final quota = _quota.text.trim().isEmpty ? null : _int(_quota);
     setState(() {
       _codeError = VoucherRules.code(_code.text);
       _valueError = VoucherRules.value(_type, value);
       _periodError = VoucherRules.period(_start, _end);
-      _quotaError = VoucherRules.quota(quota, _v?.usedCount ?? 0);
       _error = null;
     });
-    if ([
-      _codeError,
-      _valueError,
-      _periodError,
-      _quotaError,
-    ].any((e) => e != null)) {
+    if ([_codeError, _valueError, _periodError].any((e) => e != null)) {
       return;
     }
 
@@ -119,7 +100,6 @@ class _VoucherFormState extends ConsumerState<_VoucherForm> {
               minPurchase: _int(_minPurchase) ?? 0,
               startDate: _start,
               endDate: _end,
-              quota: quota,
               isActive: _active,
             ),
           );
@@ -195,11 +175,8 @@ class _VoucherFormState extends ConsumerState<_VoucherForm> {
                   label: 'Kode voucher',
                   placeholder: 'HEMAT10',
                   autofocus: widget.existing == null,
-                  enabled: !_used,
                   errorText: _codeError,
-                  helper: _used
-                      ? 'Sudah pernah dipakai, kode tidak bisa diubah.'
-                      : 'Yang diketik kasir. Huruf/angka tanpa spasi.',
+                  helper: 'Yang diketik kasir. Huruf/angka tanpa spasi.',
                   prefixIcon: CupertinoIcons.tag_fill,
                   inputFormatters: [_UpperCase()],
                 ),
@@ -266,18 +243,6 @@ class _VoucherFormState extends ConsumerState<_VoucherForm> {
                   inputFormatters: [RupiahInputFormatter()],
                 ),
               ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: AppTextField(
-                  controller: _quota,
-                  label: 'Kuota pemakaian (opsional)',
-                  placeholder: 'Tanpa batas',
-                  errorText: _quotaError,
-                  helper: _used ? 'Sudah dipakai ${_v!.usedCount}×' : null,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                ),
-              ),
             ],
           ),
           const SizedBox(height: AppSpacing.lg),
@@ -302,7 +267,7 @@ class _VoucherFormState extends ConsumerState<_VoucherForm> {
                 title: 'Voucher aktif',
                 subtitle: _active
                     ? 'Bisa dipakai kasir'
-                    : 'Tidak bisa dipakai sampai diaktifkan lagi',
+                    : 'Tidak bisa dipakai kasir sampai diaktifkan lagi',
                 trailing: CupertinoSwitch(
                   value: _active,
                   activeTrackColor: c.success,

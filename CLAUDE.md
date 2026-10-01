@@ -79,8 +79,8 @@ tab **Transaksi Baru** dan **Hari Ini**.
 - Bayar → **popup** (bukan bottom sheet, permintaan user) berisi pilihan metode
   bayar aktif. Tunai: uang diterima + chip Uang Pas & pecahan + kembalian.
   Non-tunai: dibayar pas + no. referensi opsional. `CheckoutService` menyimpan
-  faktur, item, pemakaian voucher (`tryConsume` atomik terhadap kuota), stok,
-  dan riwayat stok dalam satu transaction → popup sukses.
+  faktur (uuid, kode terminal), item, stok, riwayat stok, dan antrian
+  `sync_outbox` dalam satu transaction → popup sukses.
 - Cari barang (F3 / kode tidak ketemu): pencarian per kata (urutan bebas; nama
   mengandung kata, atau kode/barcode diawali kata; `%`/`_` di-escape). Jika
   kosong → saran nama mirip (`FuzzyMatch` di `products/domain/fuzzy_match.dart`:
@@ -101,12 +101,35 @@ tab **Transaksi Baru** dan **Hari Ini**.
 - Belum ada (di luar tahap 1): pelanggan, sales, PPN, biaya lain, pending,
   buka laci, split payment (satu faktur dua metode), cetak struk (Langkah 6).
 
+## Arsitektur online/offline (disepakati, bertahap)
+
+- Satu **komputer server** di toko (selalu nyala) menyimpan data pusat; komputer
+  kasir lain (< 10, di lokasi lain via internet/VPN) memakai pola
+  **offline-first**: database lokal + sinkron. Semua komputer, termasuk aplikasi
+  di komputer server (lewat localhost), memakai alur yang sama.
+- Server berjalan sebagai **layanan terpisah** (Windows service, Dart), bukan di
+  dalam aplikasi kasir, supaya tetap jalan saat aplikasi ditutup.
+- Turun (server → kasir): data master (barang, kategori, satuan, voucher,
+  metode bayar, akun) per perubahan (nomor urut), dicek berkala + saat login +
+  tombol manual. Naik (kasir → server): faktur lewat `sync_outbox`, dikirim
+  segera jika tersambung, kirim ulang otomatis; server harus idempotent (uuid).
+- **Data master hanya diubah admin di komputer server** (satu penulis, tanpa
+  konflik). Stok di server dihitung dari `stock_movements`, bukan angka stok.
+- Voucher tanpa kuota (keputusan user) → tidak ada masalah kuota saat offline.
+- Tahap: **A** fondasi lokal (selesai: terminal, uuid, outbox, nomor faktur
+  `INV-<kode>-YYYYMMDD-0001`) → **B** layanan server + backup → **C** mesin
+  sinkron + pairing + kunci edit master di komputer non-server → **D** VPN.
+- Identitas terminal di `settings` (`terminal.id/code/mode`), dibuat oleh
+  `TerminalRepository.ensureInitialized()` di `main()`. Pengaturan › Terminal &
+  Sinkronisasi: kode (admin), ID, peran, jumlah antrian.
+
 ## Voucher & metode pembayaran (admin, Pengaturan › Penjualan)
 
 - `/pengaturan/voucher`: daftar dikelompokkan Bisa dipakai / Terjadwal / Tidak
   berlaku; form: kode, keterangan, persen|nominal, maks potongan, min belanja,
-  masa berlaku (tanggal, berlaku s.d. akhir hari), kuota, aktif. Kode yang sudah
-  dipakai tidak bisa diubah; voucher terpakai tidak bisa dihapus.
+  masa berlaku (tanggal, berlaku s.d. akhir hari), aktif. Kode yang sudah
+  dipakai tidak bisa diubah; voucher terpakai tidak bisa dihapus. Tanpa kuota
+  (dihapus di v4, permintaan user): cukup aktif/nonaktif + masa berlaku.
 - `/pengaturan/pembayaran`: tambah/ubah/aktif-nonaktif metode (jenis Tunai atau
   Non-tunai). Minimal satu aktif; yang sudah dipakai transaksi tidak bisa dihapus.
 - Aturan ditegakkan di `VoucherRepository` / `PaymentMethodRepository` (hanya admin).
@@ -182,11 +205,20 @@ Uang = INTEGER Rupiah; stok = REAL (mendukung kg/liter).
   voucher_code, payment_method_id, payment_ref. Faktur lama → Tunai.
   `sales.discount_percent` dan `sale_items.discount_percent` tidak diisi lagi
   (sisa potongan manual v2), tetap ada untuk faktur lama.
+- v4: kolom `uuid` (nullable di skema, selalu terisi via `clientDefault(newUuid)`
+  + backfill; indeks unik `idx_<tabel>_uuid`) di users, categories, units,
+  products, vouchers, payment_methods, sales, sale_items, stock_movements.
+  `sales.terminal_code`. Tabel `settings` (key/value) dan `sync_outbox`.
+  Faktur lama otomatis diantrikan. Kolom voucher `quota`/`used_count` dihapus
+  dari definisi (DB lama masih punya kolomnya, tidak dipakai).
+- Langkah `from < 4` idempoten (`_ensureColumn` cek `PRAGMA table_info`) karena
+  bisa dicapai dari v1/v2/v3 yang tabelnya berbeda-beda.
 - PENTING migrasi: `createTable` memakai definisi TERBARU, jadi cabang `from < 2`
   membuat semua tabel baru sekaligus dan cabang `else if (from < 3)` hanya
   menambah yang belum ada. Pola ini harus dijaga untuk v4 dst.
-- Tes migrasi (`checkout_service_test.dart`): v1 manual → v3, dan v2 dari
-  `test/fixtures/schema_v2.sql` (skema asli DB user) → v3.
+- Tes migrasi (`checkout_service_test.dart`): v1 manual, v2 dan v3 dari
+  `test/fixtures/schema_v{2,3}.sql` (skema asli DB user) → versi terbaru.
+  Saat menaikkan versi lagi: simpan skema DB sekarang sebagai fixture baru dulu.
 - Data contoh (`sample_products.dart`) dimasukkan di onCreate/onUpgrade, bukan di
   seeder start-up, supaya tidak muncul lagi jika user menghapusnya.
 
@@ -207,6 +239,10 @@ Rencana berikutnya: settings.
 - [x] Langkah 2b — 20 barang contoh (migrasi v2)
 - [x] Langkah 5 — Transaksi penjualan + daftar transaksi hari ini (dikerjakan lebih dulu atas permintaan user)
 - [x] Voucher + metode pembayaran, popup pembayaran, potongan manual dihapus (permintaan user)
+- [x] Kasir tanpa Dashboard; tab Hari Ini tanpa ringkasan (permintaan user)
+- [x] Saran nama barang mirip (FuzzyMatch) + pencarian per kata
+- [x] Sinkron Tahap A — fondasi lokal (terminal, uuid, outbox, nomor faktur per terminal); kuota voucher dihapus
+- [ ] Sinkron Tahap B/C/D — server, mesin sinkron & pairing, VPN
 - [ ] Langkah 3 — Master barang
 - [ ] Langkah 4 — Import iPOS (butuh `sample_data/ipos_export.xlsx`)
 - [ ] Langkah 6 — Struk 58 mm (PDF preview)

@@ -3,6 +3,7 @@ import 'package:drift/native.dart';
 import 'package:toko/core/database/app_database.dart';
 import 'package:toko/core/database/seed.dart';
 import 'package:toko/core/security/password_hasher.dart';
+import 'package:toko/features/sync/data/terminal_repository.dart';
 
 /// Biaya bcrypt minimum supaya tes cepat.
 const testHasher = PasswordHasher(logRounds: 4);
@@ -12,5 +13,6 @@ Future<AppDatabase> createSeededDb() async {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
   final db = AppDatabase(NativeDatabase.memory());
   await DatabaseSeeder(db, testHasher).seed();
+  await TerminalRepository(db).ensureInitialized();
   return db;
 }
