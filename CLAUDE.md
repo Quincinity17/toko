@@ -242,11 +242,12 @@ Rencana berikutnya: settings.
 - [x] Kasir tanpa Dashboard; tab Hari Ini tanpa ringkasan (permintaan user)
 - [x] Saran nama barang mirip (FuzzyMatch) + pencarian per kata
 - [x] Sinkron Tahap A — fondasi lokal (terminal, uuid, outbox, nomor faktur per terminal); kuota voucher dihapus
-- [ ] Sinkron Tahap B/C/D — server, mesin sinkron & pairing, VPN
+
 - [ ] Langkah 3 — Master barang
 - [ ] Langkah 4 — Import iPOS (butuh `sample_data/ipos_export.xlsx`)
 - [ ] Langkah 6 — Struk 58 mm (PDF preview)
 - [ ] Langkah 7 — Dashboard + laporan
+- [ ] Sinkron Tahap B/C/D — server, mesin sinkron & pairing, VPN (**ditunda ke paling akhir**, keputusan user 2026-10-01; fokus fitur dulu)
 
 ## Catatan
 
