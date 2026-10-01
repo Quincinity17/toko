@@ -31,10 +31,14 @@ Future<void> settle(WidgetTester tester) async {
   }
 }
 
-Future<void> login(WidgetTester tester, String name, String password) async {
-  await tester.tap(find.text(name));
-  await settle(tester);
-  await tester.enterText(find.byType(EditableText), password);
+Future<void> login(
+  WidgetTester tester,
+  String username,
+  String password,
+) async {
+  final fields = find.byType(EditableText);
+  await tester.enterText(fields.at(0), username);
+  await tester.enterText(fields.at(1), password);
   await settle(tester); // tombol Masuk aktif setelah frame berikutnya
   await tester.tap(find.text('Masuk'));
   await settle(tester);
@@ -78,16 +82,18 @@ void main() {
   testWidgets('Login membedakan admin dan kasir', (tester) async {
     await pumpApp(tester);
 
+    // Tidak ada daftar akun di layar login.
     expect(find.text('Masuk ke Toko'), findsOneWidget);
-    expect(find.text('Administrator'), findsOneWidget);
-    expect(find.text('Kasir Satu'), findsOneWidget);
+    expect(find.text('Administrator'), findsNothing);
+    expect(find.text('Kasir Satu'), findsNothing);
+    expect(find.textContaining('admin123'), findsNothing);
 
     // Password salah: tetap di login dan muncul pesan.
-    await login(tester, 'Kasir Satu', 'salah');
-    expect(find.text('Password salah. Coba lagi.'), findsOneWidget);
+    await login(tester, 'kasir', 'salah');
+    expect(find.text('Username atau password salah.'), findsOneWidget);
 
     // Kasir masuk ke layar kasir; menu admin tidak tampil.
-    await login(tester, 'Kasir Satu', 'kasir123');
+    await login(tester, 'kasir', 'kasir123');
     expect(find.text('Layar kasir belum tersedia'), findsOneWidget);
     expect(find.text('Produk'), findsNothing);
     expect(find.text('Pengaturan'), findsNothing);
@@ -100,7 +106,7 @@ void main() {
     expect(find.text('Masuk ke Toko'), findsOneWidget);
 
     // Admin masuk ke dashboard dengan menu lengkap.
-    await login(tester, 'Administrator', 'admin123');
+    await login(tester, 'admin', 'admin123');
     expect(find.text('Omzet Hari Ini'), findsOneWidget);
     expect(find.text('Produk'), findsOneWidget);
     expect(find.text('Pengaturan'), findsOneWidget);
@@ -110,7 +116,7 @@ void main() {
     tester,
   ) async {
     await pumpApp(tester);
-    await login(tester, 'Administrator', 'admin123');
+    await login(tester, 'admin', 'admin123');
 
     await tester.tap(find.text('Pengaturan'));
     await settle(tester);
@@ -136,7 +142,7 @@ void main() {
     await settle(tester);
     await tester.tap(find.text('Keluar'));
     await settle(tester);
-    await login(tester, 'Siti Aminah', 'rahasia1');
+    await login(tester, 'siti', 'rahasia1');
     expect(find.text('Layar kasir belum tersedia'), findsOneWidget);
   });
 }

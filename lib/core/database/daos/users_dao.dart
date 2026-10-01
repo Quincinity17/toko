@@ -22,17 +22,6 @@ class UsersDao extends DatabaseAccessor<AppDatabase> with _$UsersDaoMixin {
         .getSingleOrNull();
   }
 
-  /// User aktif, diurutkan: admin dulu, lalu nama.
-  Future<List<UserRow>> activeUsers() {
-    return (select(users)
-          ..where((u) => u.isActive.equals(true))
-          ..orderBy([
-            (u) => OrderingTerm.asc(u.role),
-            (u) => OrderingTerm.asc(u.fullName),
-          ]))
-        .get();
-  }
-
   Future<int> insertUser(UsersCompanion user) => into(users).insert(user);
 
   Future<void> touchLastLogin(int id, DateTime at) {

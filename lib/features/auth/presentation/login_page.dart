@@ -1,24 +1,19 @@
 import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/database/seed.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/shake.dart';
-import '../../../core/widgets/state_views.dart';
 import '../data/auth_repository.dart';
-import '../domain/app_user.dart';
 import 'auth_controller.dart';
-import 'widgets/user_avatar.dart';
 
-/// Layar login: pilih akun (admin/kasir terlihat jelas dari warna dan label),
-/// lalu masukkan password. Setelah berhasil, router mengarahkan ke halaman
-/// awal sesuai peran.
+/// Layar login: ketik username dan password. Daftar akun sengaja tidak
+/// ditampilkan. Setelah berhasil, router mengarahkan ke halaman awal sesuai
+/// peran.
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
 
@@ -27,56 +22,29 @@ class LoginPage extends ConsumerStatefulWidget {
 }
 
 class _LoginPageState extends ConsumerState<LoginPage> {
+  final _username = TextEditingController();
   final _password = TextEditingController();
   final _passwordFocus = FocusNode();
   final _shakeKey = GlobalKey<ShakeState>();
 
-  AppUser? _selected;
-  bool _obscure = true;
   bool _loading = false;
   String? _error;
 
-  @override
-  void initState() {
-    super.initState();
-    // Pilih otomatis akun yang terakhir login.
-    ref.listenManual(loginUsersProvider, fireImmediately: true, (_, next) {
-      final list = next.value;
-      if (_selected != null || list == null || list.isEmpty) return;
-      final recent = [...list]
-        ..sort((a, b) {
-          final at = a.lastLoginAt, bt = b.lastLoginAt;
-          if (at == null && bt == null) return 0;
-          if (at == null) return 1;
-          if (bt == null) return -1;
-          return bt.compareTo(at);
-        });
-      // Fokus field baru bisa diminta setelah frame pertama selesai.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _selected == null) _select(recent.first);
-      });
-    });
-  }
+  bool get _canSubmit =>
+      !_loading &&
+      _username.text.trim().isNotEmpty &&
+      _password.text.isNotEmpty;
 
   @override
   void dispose() {
+    _username.dispose();
     _password.dispose();
     _passwordFocus.dispose();
     super.dispose();
   }
 
-  void _select(AppUser user) {
-    setState(() {
-      _selected = user;
-      _error = null;
-      _password.clear();
-    });
-    _passwordFocus.requestFocus();
-  }
-
   Future<void> _submit() async {
-    final user = _selected;
-    if (user == null || _loading) return;
+    if (!_canSubmit) return;
 
     setState(() {
       _loading = true;
@@ -85,7 +53,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     try {
       await ref
           .read(authControllerProvider.notifier)
-          .login(user.username, _password.text);
+          .login(_username.text, _password.text);
       // Router otomatis pindah halaman setelah state login berubah.
     } on AuthFailure catch (e) {
       if (!mounted) return;
@@ -101,7 +69,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final users = ref.watch(loginUsersProvider);
 
     return Scaffold(
       backgroundColor: c.background,
@@ -112,55 +79,30 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(AppSpacing.xl),
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 460),
+                constraints: const BoxConstraints(maxWidth: 420),
                 child: GlassPanel(
                   tint: c.card,
                   opacity: 0.78,
                   blur: 40,
                   borderRadius: AppRadius.xlAll,
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.xxl,
-                      AppSpacing.xxl,
-                      AppSpacing.xxl,
-                      AppSpacing.xl,
-                    ),
+                    padding: const EdgeInsets.all(AppSpacing.xxl),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         const _Header(),
                         const SizedBox(height: AppSpacing.xl),
-                        users.when(
-                          loading: () => const SizedBox(
-                            height: 120,
-                            child: LoadingState(),
-                          ),
-                          error: (e, _) => Text(
-                            'Gagal memuat akun: $e',
-                            textAlign: TextAlign.center,
-                            style: AppTypography.subheadline.copyWith(
-                              color: c.danger,
-                            ),
-                          ),
-                          data: (list) => _UserPicker(
-                            users: list,
-                            selected: _selected,
-                            onSelected: _loading ? null : _select,
-                          ),
-                        ),
-                        const SizedBox(height: AppSpacing.xl),
                         Shake(
                           key: _shakeKey,
-                          child: _PasswordField(
-                            controller: _password,
-                            focusNode: _passwordFocus,
-                            obscure: _obscure,
-                            enabled: _selected != null && !_loading,
+                          child: _CredentialFields(
+                            username: _username,
+                            password: _password,
+                            passwordFocus: _passwordFocus,
+                            enabled: !_loading,
                             hasError: _error != null,
-                            onToggleObscure: () =>
-                                setState(() => _obscure = !_obscure),
-                            onSubmitted: (_) => _submit(),
+                            onChanged: () => setState(() {}),
+                            onSubmit: _submit,
                           ),
                         ),
                         AnimatedSize(
@@ -170,7 +112,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                               ? const SizedBox(width: double.infinity)
                               : Padding(
                                   padding: const EdgeInsets.only(
-                                    top: AppSpacing.xs,
+                                    top: AppSpacing.sm,
                                   ),
                                   child: Text(
                                     _error!,
@@ -182,23 +124,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                 ),
                         ),
                         const SizedBox(height: AppSpacing.lg),
-                        ListenableBuilder(
-                          listenable: _password,
-                          builder: (context, _) => AppButton(
-                            label: 'Masuk',
-                            size: AppButtonSize.large,
-                            expand: true,
-                            loading: _loading,
-                            onPressed:
-                                _selected == null || _password.text.isEmpty
-                                ? null
-                                : _submit,
-                          ),
+                        AppButton(
+                          label: 'Masuk',
+                          size: AppButtonSize.large,
+                          expand: true,
+                          loading: _loading,
+                          onPressed: _canSubmit ? _submit : null,
                         ),
-                        if (kDebugMode) ...[
-                          const SizedBox(height: AppSpacing.lg),
-                          const _DebugAccountsHint(),
-                        ],
                       ],
                     ),
                   ),
@@ -241,7 +173,7 @@ class _Header extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.xxs),
         Text(
-          'Pilih akun, lalu masukkan password.',
+          'Masukkan username dan password.',
           textAlign: TextAlign.center,
           style: AppTypography.subheadline.copyWith(color: c.labelSecondary),
         ),
@@ -250,122 +182,121 @@ class _Header extends StatelessWidget {
   }
 }
 
-class _UserPicker extends StatelessWidget {
-  const _UserPicker({
-    required this.users,
-    required this.selected,
-    required this.onSelected,
-  });
-
-  final List<AppUser> users;
-  final AppUser? selected;
-  final ValueChanged<AppUser>? onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    if (users.isEmpty) {
-      return const EmptyState(
-        icon: CupertinoIcons.person_crop_circle_badge_exclam,
-        title: 'Belum ada akun aktif',
-      );
-    }
-    return Wrap(
-      alignment: WrapAlignment.center,
-      spacing: AppSpacing.md,
-      runSpacing: AppSpacing.md,
-      children: [
-        for (final u in users)
-          UserTile(
-            user: u,
-            selected: u == selected,
-            onPressed: onSelected == null ? null : () => onSelected!(u),
-          ),
-      ],
-    );
-  }
-}
-
-class _PasswordField extends StatelessWidget {
-  const _PasswordField({
-    required this.controller,
-    required this.focusNode,
-    required this.obscure,
+/// Username dan password dalam satu kotak membulat dengan pemisah tipis,
+/// seperti form login iOS. Enter di username pindah ke password; Enter di
+/// password langsung masuk.
+class _CredentialFields extends StatefulWidget {
+  const _CredentialFields({
+    required this.username,
+    required this.password,
+    required this.passwordFocus,
     required this.enabled,
     required this.hasError,
-    required this.onToggleObscure,
-    required this.onSubmitted,
+    required this.onChanged,
+    required this.onSubmit,
   });
 
-  final TextEditingController controller;
-  final FocusNode focusNode;
-  final bool obscure;
+  final TextEditingController username;
+  final TextEditingController password;
+  final FocusNode passwordFocus;
   final bool enabled;
   final bool hasError;
-  final VoidCallback onToggleObscure;
-  final ValueChanged<String> onSubmitted;
+  final VoidCallback onChanged;
+  final VoidCallback onSubmit;
+
+  @override
+  State<_CredentialFields> createState() => _CredentialFieldsState();
+}
+
+class _CredentialFieldsState extends State<_CredentialFields> {
+  bool _obscure = true;
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    return CupertinoTextField(
-      controller: controller,
-      focusNode: focusNode,
-      enabled: enabled,
-      obscureText: obscure,
-      autocorrect: false,
-      enableSuggestions: false,
-      textInputAction: TextInputAction.done,
-      onSubmitted: onSubmitted,
-      placeholder: 'Password',
-      placeholderStyle: AppTypography.body.copyWith(color: c.labelTertiary),
-      style: AppTypography.body.copyWith(color: c.label),
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.sm,
-        vertical: AppSpacing.sm + 2,
-      ),
-      prefix: Padding(
-        padding: const EdgeInsets.only(left: AppSpacing.sm),
-        child: Icon(
-          CupertinoIcons.lock_fill,
-          size: 18,
-          color: c.labelSecondary,
+
+    Widget field({
+      required TextEditingController controller,
+      required String placeholder,
+      required IconData icon,
+      FocusNode? focusNode,
+      bool autofocus = false,
+      bool obscure = false,
+      Widget? suffix,
+      TextInputAction? action,
+      ValueChanged<String>? onSubmitted,
+    }) {
+      return CupertinoTextField(
+        controller: controller,
+        focusNode: focusNode,
+        autofocus: autofocus,
+        enabled: widget.enabled,
+        obscureText: obscure,
+        autocorrect: false,
+        enableSuggestions: false,
+        textInputAction: action,
+        onChanged: (_) => widget.onChanged(),
+        onSubmitted: onSubmitted,
+        placeholder: placeholder,
+        placeholderStyle: AppTypography.body.copyWith(color: c.labelTertiary),
+        style: AppTypography.body.copyWith(color: c.label),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm,
+          vertical: AppSpacing.sm + 2,
         ),
-      ),
-      suffix: CupertinoButton(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-        minimumSize: const Size(AppSizes.touchTarget, AppSizes.touchTarget),
-        onPressed: onToggleObscure,
-        child: Icon(
-          obscure ? CupertinoIcons.eye : CupertinoIcons.eye_slash,
-          size: 20,
-          color: c.labelSecondary,
+        prefix: Padding(
+          padding: const EdgeInsets.only(left: AppSpacing.md),
+          child: Icon(icon, size: 18, color: c.labelSecondary),
         ),
-      ),
+        suffix: suffix,
+        decoration: const BoxDecoration(),
+      );
+    }
+
+    return Container(
       decoration: BoxDecoration(
         color: c.fill,
         borderRadius: AppRadius.mdAll,
         border: Border.all(
-          color: hasError ? c.danger : Colors.transparent,
+          color: widget.hasError ? c.danger : Colors.transparent,
           width: 1.5,
         ),
       ),
-    );
-  }
-}
-
-class _DebugAccountsHint extends StatelessWidget {
-  const _DebugAccountsHint();
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final text = DatabaseSeeder.defaultAccounts
-        .map((a) => '${a.username} / ${a.password}')
-        .join('   ·   ');
-    return Text(
-      'Mode debug — akun awal: $text',
-      textAlign: TextAlign.center,
-      style: AppTypography.caption.copyWith(color: c.labelTertiary),
+      child: Column(
+        children: [
+          field(
+            controller: widget.username,
+            placeholder: 'Username',
+            icon: CupertinoIcons.person_fill,
+            autofocus: true,
+            action: TextInputAction.next,
+            onSubmitted: (_) => widget.passwordFocus.requestFocus(),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 46),
+            child: Container(height: 0.5, color: c.separator),
+          ),
+          field(
+            controller: widget.password,
+            focusNode: widget.passwordFocus,
+            placeholder: 'Password',
+            icon: CupertinoIcons.lock_fill,
+            obscure: _obscure,
+            action: TextInputAction.done,
+            onSubmitted: (_) => widget.onSubmit(),
+            suffix: CupertinoButton(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+              minimumSize: const Size(AppSizes.touchTarget, 40),
+              onPressed: () => setState(() => _obscure = !_obscure),
+              child: Icon(
+                _obscure ? CupertinoIcons.eye : CupertinoIcons.eye_slash,
+                size: 20,
+                color: c.labelSecondary,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

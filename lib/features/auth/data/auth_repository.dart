@@ -22,22 +22,16 @@ class AuthRepository {
   final PasswordHasher _hasher;
   final DateTime Function() _clock;
 
-  /// Akun yang ditampilkan di layar login.
-  Future<List<AppUser>> activeUsers() async {
-    final rows = await _db.usersDao.activeUsers();
-    return rows.map(userFromRow).toList();
-  }
-
   /// Memeriksa username dan password. Pesan gagal sengaja sama untuk username
   /// tidak ada dan password salah.
   Future<AppUser> login(String username, String password) async {
     if (username.trim().isEmpty || password.isEmpty) {
-      throw const AuthFailure('Pilih akun dan isi password.');
+      throw const AuthFailure('Isi username dan password.');
     }
 
     final row = await _db.usersDao.findByUsername(username);
     if (row == null || !await _hasher.verify(password, row.passwordHash)) {
-      throw const AuthFailure('Password salah. Coba lagi.');
+      throw const AuthFailure('Username atau password salah.');
     }
     if (!row.isActive) {
       throw const AuthFailure('Akun ini dinonaktifkan. Hubungi admin.');

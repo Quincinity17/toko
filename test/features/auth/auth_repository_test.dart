@@ -64,14 +64,12 @@ void main() {
     },
   );
 
-  test('user nonaktif tidak bisa login dan tidak muncul di daftar', () async {
+  test('user nonaktif tidak bisa login', () async {
     await (db.update(db.users)..where((u) => u.username.equals('kasir'))).write(
       const UsersCompanion(isActive: Value(false)),
     );
 
     expect(() => repo.login('kasir', 'kasir123'), throwsA(isA<AuthFailure>()));
-    final active = await repo.activeUsers();
-    expect(active.map((u) => u.username), ['admin']);
   });
 
   test('hak akses: kasir hanya Kasir dan Dashboard', () {

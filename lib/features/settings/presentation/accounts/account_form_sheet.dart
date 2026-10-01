@@ -214,9 +214,7 @@ class _AccountFormState extends ConsumerState<_AccountForm> {
               children: [
                 InsetGroupedTile(
                   title: 'Akun aktif',
-                  subtitle: _active
-                      ? 'Bisa login'
-                      : 'Tidak bisa login dan tidak tampil di layar login',
+                  subtitle: _active ? 'Bisa login' : 'Tidak bisa login',
                   trailing: CupertinoSwitch(
                     value: _active,
                     activeTrackColor: c.success,

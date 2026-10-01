@@ -42,11 +42,13 @@ dari artifact `toko-windows` lalu dites di PC Windows.
 - Admin: semua halaman, mulai di Dashboard. Kasir: hanya Kasir + Dashboard,
   mulai di Kasir. URL terlarang dialihkan ke halaman awal peran.
 - Sesi hanya di memori (`authControllerProvider`); aplikasi dibuka = login lagi.
-- Layar login: pilih kartu akun (admin biru, kasir hijau), isi password, Enter.
-  Pesan gagal sama untuk user tidak ada / password salah.
+- Layar login: ketik username + password (Enter pindah/masuk). Sengaja tidak
+  menampilkan daftar akun atau petunjuk akun. Pesan gagal sama untuk user tidak
+  ada / password salah: "Username atau password salah."
+- Warna peran (admin biru, kasir hijau) dipakai di avatar/badge sidebar dan Kelola Akun.
 - Password: bcrypt cost 10 di `Isolate.run` (`PasswordHasher`). Tes memakai cost 4.
-- Akun seed: `admin / admin123`, `kasir / kasir123` (ditampilkan di layar login
-  hanya saat `kDebugMode`). Harus diganti sebelum dipakai di toko.
+- Akun seed: `admin / admin123`, `kasir / kasir123`. Tidak ditampilkan di
+  aplikasi; harus diganti sebelum dipakai di toko.
 - Menu user di bawah sidebar: Ganti Password, Keluar.
 
 ### Kelola akun (Pengaturan › Kelola Akun, `/pengaturan/akun`, khusus admin)
@@ -59,7 +61,7 @@ dari artifact `toko-windows` lalu dites di PC Windows.
   satu admin aktif.
 - Validasi isian di `AccountRules` (dipakai form dan repository): username
   3–32 karakter `[a-z0-9._]`, disimpan huruf kecil; password minimal 6.
-- Akun nonaktif tidak bisa login dan tidak tampil di layar login.
+- Akun nonaktif tidak bisa login.
 - TODO Langkah 5: tolak hapus user yang sudah punya transaksi (sarankan nonaktifkan).
 
 ## Design system (gaya Apple / iOS)

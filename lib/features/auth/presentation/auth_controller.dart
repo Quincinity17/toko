@@ -28,8 +28,3 @@ class AuthController extends Notifier<AppUser?> {
 final authControllerProvider = NotifierProvider<AuthController, AppUser?>(
   AuthController.new,
 );
-
-/// Daftar akun untuk dipilih di layar login.
-final loginUsersProvider = FutureProvider.autoDispose<List<AppUser>>(
-  (ref) => ref.watch(authRepositoryProvider).activeUsers(),
-);

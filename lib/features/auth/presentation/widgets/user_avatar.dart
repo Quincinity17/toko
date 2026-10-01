@@ -1,7 +1,6 @@
 import 'package:flutter/cupertino.dart';
 
 import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widgets/pressable_scale.dart';
 import '../../domain/app_user.dart';
 import '../../domain/user_role.dart';
 
@@ -80,72 +79,6 @@ class RoleBadge extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// Kartu akun di layar login: avatar besar, nama, dan label peran.
-class UserTile extends StatelessWidget {
-  const UserTile({
-    super.key,
-    required this.user,
-    required this.selected,
-    this.onPressed,
-  });
-
-  final AppUser user;
-  final bool selected;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final color = user.role.color(c);
-    return PressableScale(
-      onPressed: onPressed,
-      pressedScale: 0.95,
-      borderRadius: AppRadius.lgAll,
-      child: AnimatedContainer(
-        duration: AppDurations.medium,
-        curve: SpringCurve.smooth,
-        width: 132,
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.sm,
-          vertical: AppSpacing.md,
-        ),
-        decoration: BoxDecoration(
-          color: selected ? color.withValues(alpha: 0.12) : c.fillSecondary,
-          borderRadius: AppRadius.lgAll,
-          border: Border.all(
-            color: selected ? color : const Color(0x00000000),
-            width: 2,
-          ),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AnimatedScale(
-              scale: selected ? 1.06 : 1,
-              duration: AppDurations.medium,
-              curve: SpringCurve.bouncy,
-              child: UserAvatar(user: user, size: 56),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              user.fullName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: AppTypography.subheadline.copyWith(
-                color: c.label,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.xxs),
-            RoleBadge(role: user.role),
-          ],
-        ),
       ),
     );
   }
