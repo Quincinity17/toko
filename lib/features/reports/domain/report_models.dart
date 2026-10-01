@@ -100,10 +100,10 @@ class SalesSummary {
 
   final int transactions;
 
-  /// Omzet bersih (setelah voucher) = uang yang diterima.
+  /// Omzet bersih (setelah potongan) = uang yang diterima.
   final int revenue;
 
-  /// Sebelum potongan voucher.
+  /// Sebelum potongan (potongan hanya ada di faktur lama).
   final int grossSales;
   final int discount;
 
@@ -194,7 +194,7 @@ class ProductPerformance {
   final String? unit;
   final double quantity;
 
-  /// Total baris faktur (sebelum potongan voucher transaksi).
+  /// Total baris faktur.
   final int revenue;
   final int cost;
   final int transactions;
@@ -267,7 +267,7 @@ class GroupPerformance {
   final int revenue;
   final int cost;
 
-  /// Untuk voucher: total potongan.
+  /// Total potongan faktur dalam kelompok ini.
   final int discount;
   final double quantity;
 
@@ -343,7 +343,6 @@ class ReportBundle {
     required this.products,
     required this.categories,
     required this.payments,
-    required this.vouchers,
     required this.cashiers,
     required this.terminals,
   });
@@ -359,7 +358,6 @@ class ReportBundle {
   final List<ProductPerformance> products;
   final List<GroupPerformance> categories;
   final List<GroupPerformance> payments;
-  final List<GroupPerformance> vouchers;
   final List<GroupPerformance> cashiers;
   final List<GroupPerformance> terminals;
 

@@ -2,7 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/presentation/auth_controller.dart';
 import '../../products/domain/product.dart';
-import '../../vouchers/domain/voucher.dart';
 import '../domain/cart.dart';
 
 /// Keranjang kasir yang sedang berjalan. Tetap ada saat pindah halaman,
@@ -20,8 +19,6 @@ class CartController extends Notifier<Cart> {
   void setQty(int index, double qty) => state = state.setQty(index, qty);
 
   void removeAt(int index) => state = state.removeAt(index);
-
-  void setVoucher(Voucher? voucher) => state = state.withVoucher(voucher);
 
   void clear() => state = const Cart();
 }

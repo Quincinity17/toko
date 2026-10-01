@@ -75,10 +75,9 @@ tab **Transaksi Baru** dan **Hari Ini**.
 - Transaksi Baru: kolom Jumlah + Kode/Barcode (selalu fokus kembali untuk
   scanner USB; Enter = cari persis kode/barcode, jika tidak ketemu → sheet cari),
   tabel keranjang (No, Kode, Nama, Jumlah ±, Satuan, Harga, Total), panel kanan:
-  total besar, subtotal, voucher, Bayar.
-- Tidak ada potongan manual (dihapus atas permintaan user). Satu-satunya
-  potongan = **voucher** (F4 → popup kode). Keranjang hanya cek minimal belanja;
-  status/tanggal/kuota dicek saat pasang (`findUsable`) dan ulang saat checkout.
+  total besar, Bayar, Batalkan.
+- **Tidak ada potongan sama sekali**: potongan manual dihapus, lalu fitur voucher
+  juga dihapus (keputusan user, Okt 2026). Total = subtotal.
 - Bayar → **popup** (bukan bottom sheet, permintaan user) berisi pilihan metode
   bayar aktif. Tunai: uang diterima + chip Uang Pas & pecahan + kembalian.
   Non-tunai: dibayar pas + no. referensi opsional. `CheckoutService` menyimpan
@@ -92,13 +91,11 @@ tab **Transaksi Baru** dan **Hari Ini**.
   id+nama semua barang aktif.
 - Hari Ini: hanya tabel faktur hari ini (tanpa kartu ringkasan/angka di label
   tab, permintaan user); klik = rincian.
-- Shortcut: F2 / End = bayar, F3 = cari barang, F4 = voucher, ↑↓ + Enter di
-  sheet cari, Esc menutup popup.
-- Logika di domain murni (`cart.dart`, `invoice_number.dart`, `cash_suggestions.dart`,
-  `vouchers/domain/voucher.dart`) dan `CheckoutService`; widget hanya memanggil
-  `cartControllerProvider`.
-- Pembulatan: total baris = round(qty × harga); potongan voucher tidak pernah
-  melebihi subtotal (persen dibatasi `max_discount`).
+- Shortcut: F2 / End = bayar, F3 = cari barang, ↑↓ + Enter di sheet cari,
+  Esc menutup popup.
+- Logika di domain murni (`cart.dart`, `invoice_number.dart`, `cash_suggestions.dart`)
+  dan `CheckoutService`; widget hanya memanggil `cartControllerProvider`.
+- Pembulatan: total baris = round(qty × harga).
 - Stok boleh minus (penjualan tidak diblokir); baris diberi tanda bila qty > stok tercatat.
 - Keranjang tetap ada saat pindah halaman, kosong otomatis saat ganti user.
 - Belum ada (di luar tahap 1): pelanggan, sales, PPN, biaya lain, pending,
@@ -112,13 +109,12 @@ tab **Transaksi Baru** dan **Hari Ini**.
   di komputer server (lewat localhost), memakai alur yang sama.
 - Server berjalan sebagai **layanan terpisah** (Windows service, Dart), bukan di
   dalam aplikasi kasir, supaya tetap jalan saat aplikasi ditutup.
-- Turun (server → kasir): data master (barang, kategori, satuan, voucher,
+- Turun (server → kasir): data master (barang, kategori, satuan,
   metode bayar, akun) per perubahan (nomor urut), dicek berkala + saat login +
   tombol manual. Naik (kasir → server): faktur lewat `sync_outbox`, dikirim
   segera jika tersambung, kirim ulang otomatis; server harus idempotent (uuid).
 - **Data master hanya diubah admin di komputer server** (satu penulis, tanpa
   konflik). Stok di server dihitung dari `stock_movements`, bukan angka stok.
-- Voucher tanpa kuota (keputusan user) → tidak ada masalah kuota saat offline.
 - Tahap: **A** fondasi lokal (selesai: terminal, uuid, outbox, nomor faktur
   `INV-<kode>-YYYYMMDD-0001`) → **B** layanan server + backup → **C** mesin
   sinkron + pairing + kunci edit master di komputer non-server → **D** VPN.
@@ -172,9 +168,8 @@ tab **Transaksi Baru** dan **Hari Ini**.
   `'unixepoch','localtime'`) → `ReportRepository` → model di
   `reports/domain/report_models.dart`. Nilai SUM dibaca dari `row.data` sebagai
   `num` (bisa INTEGER/REAL). Alias kolom kelompok = `grp` (hindari bentrok `name`).
-- Definisi: omzet bersih = Σ sales.total (setelah voucher); harga pokok =
-  Σ qty × purchase_price (snapshot di sale_items); laba kotor = omzet − pokok.
-  Per barang/kategori: sebelum potongan voucher transaksi.
+- Definisi: omzet = Σ sales.total; harga pokok = Σ qty × purchase_price
+  (snapshot di sale_items); laba kotor = omzet − pokok.
 - Dashboard (`watch*`, otomatis terbarui): omzet hari ini vs kemarin, laba kotor
   & margin, transaksi & rata-rata belanja, stok menipis, grafik omzet 7 hari,
   terlaris hari ini, daftar stok menipis.
@@ -182,7 +177,7 @@ tab **Transaksi Baru** dan **Hari Ini**.
   pembanding periode sebelumnya; bagian Ringkasan, Tren (harian omzet vs laba,
   per jam, per hari), Produk (ABC Pareto berdasarkan laba), Kategori, Stok (nilai
   persediaan, perkiraan habis = stok ÷ rata-rata 30 hari, tidak laku 30 hari),
-  Pembayaran & Voucher, Kasir & Terminal, Faktur. `ReportBundle` dimuat sekali
+  Pembayaran, Kasir & Terminal, Faktur. `ReportBundle` dimuat sekali
   per rentang; data lama tampil samar saat memuat rentang baru.
 - Export Excel: satu file, satu sheet per bagian (`report_export.dart`).
 - Grafik mengikuti skill dataviz: garis 2px, area 10% hanya satu seri, batang
@@ -191,16 +186,23 @@ tab **Transaksi Baru** dan **Hari Ini**.
   `chart2` (#D55181) — divalidasi `validate_palette.js` terang (#007AFF) dan
   gelap (#0A84FF). Oranye/hijau/merah = status, jangan dipakai untuk seri.
 
-## Voucher & metode pembayaran (admin, Pengaturan › Penjualan)
+## Metode pembayaran (admin, Pengaturan › Penjualan)
 
-- `/pengaturan/voucher`: daftar dikelompokkan Bisa dipakai / Terjadwal / Tidak
-  berlaku; form: kode, keterangan, persen|nominal, maks potongan, min belanja,
-  masa berlaku (tanggal, berlaku s.d. akhir hari), aktif. Kode yang sudah
-  dipakai tidak bisa diubah; voucher terpakai tidak bisa dihapus. Tanpa kuota
-  (dihapus di v4, permintaan user): cukup aktif/nonaktif + masa berlaku.
 - `/pengaturan/pembayaran`: tambah/ubah/aktif-nonaktif metode (jenis Tunai atau
   Non-tunai). Minimal satu aktif; yang sudah dipakai transaksi tidak bisa dihapus.
-- Aturan ditegakkan di `VoucherRepository` / `PaymentMethodRepository` (hanya admin).
+- Aturan ditegakkan di `PaymentMethodRepository` (hanya admin).
+
+## Voucher — DIHAPUS (keputusan user, Okt 2026)
+
+- Semua fitur voucher dihapus dari aplikasi: kasir (tombol/F4/popup), checkout,
+  halaman admin, laporan & export. Folder `features/vouchers` dan `VouchersDao`
+  sudah tidak ada.
+- Yang **sengaja dipertahankan**: tabel `vouchers` (+ enum `VoucherType` di
+  `tables/vouchers.dart`) dan kolom `sales.voucher_id/voucher_code/discount`,
+  agar skema tidak berubah (tanpa migrasi) dan fitur bisa dihidupkan lagi dari
+  riwayat git (commit sebelum penghapusan: `94be0cd`).
+- Faktur lama yang punya potongan tetap tampil "Potongan" di rincian faktur dan
+  di Ringkasan laporan (hanya jika > 0).
 
 ## Design system (gaya Apple / iOS)
 
@@ -247,7 +249,7 @@ di `core/utils/number_input.dart`.
 - Isolate (bcrypt) tidak jalan di fake async → tes memakai `_SyncHasher`.
 - Kursor berkedip → pakai `settle()` bukan `pumpAndSettle()`.
 - Akhiri setiap `testWidgets` dengan `unmount(tester)` agar stream drift tertutup.
-- Tes yang memicu pesan voucher perlu `initializeDateFormatting('id_ID')`.
+- Tes yang memformat tanggal Indonesia perlu `initializeDateFormatting('id_ID')`.
 - Kerja di isolate (baca file) butuh `tester.runAsync(() => Future.delayed(...))`.
 - Tombol di halaman panjang: pakai `tapVisible` (ensureVisible dulu).
 - Teks yang juga ada di sidebar (mis. "Produk"): batasi dengan
@@ -260,7 +262,7 @@ di `core/utils/number_input.dart`.
 
 - Ctrl+1..5: pindah halaman (Dashboard, Kasir, Produk, Laporan, Pengaturan)
 - Ctrl+\\: ciutkan/tampilkan sidebar
-- Kasir: F2 / End bayar, F3 cari barang, F4 voucher
+- Kasir: F2 / End bayar, F3 cari barang
 
 ## Skema database
 
@@ -306,7 +308,7 @@ Rencana berikutnya: settings.
 
 ## Keputusan bisnis yang dipakai
 
-- Potongan hanya lewat voucher (potongan manual dihapus, keputusan user).
+- Tidak ada potongan harga (potongan manual dan voucher dihapus, keputusan user).
 - Metode bayar diatur admin (bawaan: Tunai, QRIS, Transfer Bank, Kartu).
 - PPN: tidak dihitung (belum dikonfirmasi user).
 - Laba = laba kotor (omzet − harga beli saat terjual). Laba bersih butuh fitur
@@ -320,7 +322,8 @@ Rencana berikutnya: settings.
 - [x] Kelola akun + ganti password (permintaan tambahan)
 - [x] Langkah 2b — 20 barang contoh (migrasi v2)
 - [x] Langkah 5 — Transaksi penjualan + daftar transaksi hari ini (dikerjakan lebih dulu atas permintaan user)
-- [x] Voucher + metode pembayaran, popup pembayaran, potongan manual dihapus (permintaan user)
+- [x] Metode pembayaran, popup pembayaran, potongan manual dihapus (permintaan user)
+- [x] Fitur voucher dihapus seluruhnya (permintaan user; tabel DB dipertahankan)
 - [x] Kasir tanpa Dashboard; tab Hari Ini tanpa ringkasan (permintaan user)
 - [x] Saran nama barang mirip (FuzzyMatch) + pencarian per kata
 - [x] Sinkron Tahap A — fondasi lokal (terminal, uuid, outbox, nomor faktur per terminal); kuota voucher dihapus

@@ -9,6 +9,5 @@ class AppRoutes {
   static const laporan = '/laporan';
   static const pengaturan = '/pengaturan';
   static const kelolaAkun = '/pengaturan/akun';
-  static const voucher = '/pengaturan/voucher';
   static const metodeBayar = '/pengaturan/pembayaran';
 }

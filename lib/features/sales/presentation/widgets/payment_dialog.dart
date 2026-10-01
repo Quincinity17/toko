@@ -118,7 +118,6 @@ class _PaymentFormState extends ConsumerState<_PaymentForm> {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final cart = widget.cart;
     final methods = ref.watch(activePaymentMethodsProvider);
     const tabular = [FontFeature.tabularFigures()];
 
@@ -151,18 +150,6 @@ class _PaymentFormState extends ConsumerState<_PaymentForm> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (cart.discount > 0) ...[
-                  _AmountRow(
-                    label: 'Subtotal',
-                    value: Fmt.rupiah(cart.subtotal),
-                  ),
-                  _AmountRow(
-                    label: 'Voucher ${cart.voucher!.code}',
-                    value: '− ${Fmt.rupiah(cart.discount)}',
-                    color: c.success,
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                ],
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
@@ -398,33 +385,6 @@ class _Label extends StatelessWidget {
   );
 }
 
-class _AmountRow extends StatelessWidget {
-  const _AmountRow({required this.label, required this.value, this.color});
-
-  final String label;
-  final String value;
-  final Color? color;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final style = AppTypography.subheadline.copyWith(
-      color: color ?? c.labelSecondary,
-      fontFeatures: const [FontFeature.tabularFigures()],
-    );
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 2),
-      child: Row(
-        children: [
-          Text(label, style: style),
-          const Spacer(),
-          Text(value, style: style),
-        ],
-      ),
-    );
-  }
-}
-
 class _MethodChip extends StatelessWidget {
   const _MethodChip({
     required this.method,
@@ -592,8 +552,6 @@ class _SuccessView extends StatelessWidget {
             [
               'Total ${Fmt.rupiah(result.total)}',
               if (hasChange) 'Dibayar ${Fmt.rupiah(result.paid)}',
-              if (result.voucherCode != null)
-                'Voucher ${result.voucherCode} −${Fmt.rupiah(result.discount)}',
             ].join(' · '),
             textAlign: TextAlign.center,
             style: AppTypography.footnote.copyWith(color: c.labelSecondary),

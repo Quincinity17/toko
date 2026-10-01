@@ -41,7 +41,7 @@ enum ReportSection {
   products('Produk', CupertinoIcons.cube_box),
   categories('Kategori', CupertinoIcons.square_stack_3d_up),
   stock('Stok', CupertinoIcons.archivebox),
-  payments('Pembayaran & Voucher', CupertinoIcons.creditcard),
+  payments('Pembayaran', CupertinoIcons.creditcard),
   people('Kasir & Terminal', CupertinoIcons.person_2),
   invoices('Faktur', CupertinoIcons.doc_text);
 

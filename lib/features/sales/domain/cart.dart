@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 
 import '../../products/domain/product.dart';
-import '../../vouchers/domain/voucher.dart';
 
 /// Satu baris keranjang. Total baris = qty × harga, dibulatkan ke Rupiah.
 @immutable
@@ -23,16 +22,12 @@ class CartLine {
 }
 
 /// Keranjang belanja yang sedang diproses kasir. Immutable: setiap perubahan
-/// menghasilkan objek baru. Satu-satunya potongan adalah [voucher].
+/// menghasilkan objek baru. Tidak ada potongan (fitur voucher dihapus).
 @immutable
 class Cart {
-  const Cart({this.lines = const [], this.voucher});
+  const Cart({this.lines = const []});
 
   final List<CartLine> lines;
-
-  /// Voucher yang sudah lolos pemeriksaan saat dipasang. Status/tanggal/kuota
-  /// diperiksa ulang saat checkout; di sini hanya minimal belanja.
-  final Voucher? voucher;
 
   bool get isEmpty => lines.isEmpty;
 
@@ -41,20 +36,7 @@ class Cart {
 
   int get subtotal => lines.fold(0, (s, l) => s + l.total);
 
-  /// Kekurangan belanja agar voucher berlaku (0 = sudah memenuhi).
-  int get voucherShortfall {
-    final v = voucher;
-    if (v == null || subtotal >= v.minPurchase) return 0;
-    return v.minPurchase - subtotal;
-  }
-
-  int get discount {
-    final v = voucher;
-    if (v == null || voucherShortfall > 0) return 0;
-    return v.discountFor(subtotal);
-  }
-
-  int get total => subtotal - discount;
+  int get total => subtotal;
 
   /// Menambah barang. Jika barang yang sama sudah ada, qty-nya dijumlahkan.
   Cart add(Product product, {double qty = 1}) {
@@ -65,7 +47,6 @@ class Cart {
           ...lines,
           CartLine(product: product, qty: qty),
         ],
-        voucher: voucher,
       );
     }
     return _replace(i, lines[i].copyWith(qty: lines[i].qty + qty));
@@ -77,11 +58,8 @@ class Cart {
     return _replace(index, lines[index].copyWith(qty: qty));
   }
 
-  Cart removeAt(int index) =>
-      Cart(lines: [...lines]..removeAt(index), voucher: voucher);
-
-  Cart withVoucher(Voucher? voucher) => Cart(lines: lines, voucher: voucher);
+  Cart removeAt(int index) => Cart(lines: [...lines]..removeAt(index));
 
   Cart _replace(int index, CartLine line) =>
-      Cart(lines: [...lines]..[index] = line, voucher: voucher);
+      Cart(lines: [...lines]..[index] = line);
 }

@@ -30,7 +30,6 @@ class SalesRepository {
                 subtotal: s.subtotal,
                 discount: s.discount,
                 discountPercent: s.discountPercent,
-                voucherCode: s.voucherCode,
                 total: s.total,
                 paid: s.paid,
                 change: s.changeAmount,

@@ -21,7 +21,6 @@ const _cols = <(String, double?, TextAlign)>[
   ('Jam', 70, TextAlign.left),
   ('Kasir', null, TextAlign.left),
   ('Barang', 70, TextAlign.right),
-  ('Voucher', 150, TextAlign.right),
   ('Bayar', 150, TextAlign.left),
   ('Total', 130, TextAlign.right),
   ('', 32, TextAlign.right),
@@ -161,24 +160,9 @@ class _SaleRow extends StatelessWidget {
                 style: muted,
               ),
             ),
-            _cell(
-              _cols[4].$2,
-              Text(
-                sale.discount == 0
-                    ? '–'
-                    : '${sale.voucherCode ?? 'Potongan'} '
-                          '−${Fmt.number(sale.discount)}',
-                textAlign: TextAlign.right,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: sale.discount == 0
-                    ? muted
-                    : style.copyWith(color: c.success),
-              ),
-            ),
             const SizedBox(width: AppSpacing.md),
             _cell(
-              _cols[5].$2! - AppSpacing.md,
+              _cols[4].$2! - AppSpacing.md,
               Text(
                 sale.paymentMethod,
                 maxLines: 1,
@@ -187,7 +171,7 @@ class _SaleRow extends StatelessWidget {
               ),
             ),
             _cell(
-              _cols[6].$2,
+              _cols[5].$2,
               Text(
                 Fmt.rupiah(sale.total),
                 textAlign: TextAlign.right,
@@ -195,7 +179,7 @@ class _SaleRow extends StatelessWidget {
               ),
             ),
             _cell(
-              _cols[7].$2,
+              _cols[6].$2,
               Align(
                 alignment: Alignment.centerRight,
                 child: Icon(

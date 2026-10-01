@@ -5,7 +5,6 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../features/auth/domain/user_role.dart';
 import '../../features/payments/domain/payment_method.dart';
-import '../../features/vouchers/domain/voucher.dart';
 import 'daos/payment_methods_dao.dart';
 import 'daos/outbox_dao.dart';
 import 'daos/products_dao.dart';
@@ -13,7 +12,6 @@ import 'daos/reports_dao.dart';
 import 'daos/sales_dao.dart';
 import 'daos/settings_dao.dart';
 import 'daos/users_dao.dart';
-import 'daos/vouchers_dao.dart';
 import 'sample_products.dart';
 import 'uuid.dart';
 import 'tables/payment_methods.dart';
@@ -54,7 +52,6 @@ part 'app_database.g.dart';
     UsersDao,
     ProductsDao,
     SalesDao,
-    VouchersDao,
     PaymentMethodsDao,
     SettingsDao,
     OutboxDao,

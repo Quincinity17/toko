@@ -12,7 +12,6 @@ import '../../features/reports/presentation/reports_page.dart';
 import '../../features/sales/presentation/pos_page.dart';
 import '../../features/settings/presentation/accounts/accounts_page.dart';
 import '../../features/settings/presentation/settings_page.dart';
-import '../../features/vouchers/presentation/vouchers_page.dart';
 import '../theme/app_theme.dart';
 import 'app_shell.dart';
 import 'routes.dart';
@@ -58,7 +57,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             const SettingsPage(),
             routes: [
               _page('akun', const AccountsPage()),
-              _page('voucher', const VouchersPage()),
               _page('pembayaran', const PaymentMethodsPage()),
             ],
           ),

@@ -12,7 +12,6 @@ class SaleSummary {
     required this.subtotal,
     required this.discount,
     this.discountPercent,
-    this.voucherCode,
     required this.total,
     required this.paid,
     required this.change,
@@ -28,9 +27,8 @@ class SaleSummary {
   final int subtotal;
   final int discount;
 
-  /// Hanya faktur lama (sebelum voucher) yang punya potongan persen manual.
+  /// Hanya faktur lama yang punya potongan persen manual.
   final double? discountPercent;
-  final String? voucherCode;
   final int total;
   final int paid;
   final int change;

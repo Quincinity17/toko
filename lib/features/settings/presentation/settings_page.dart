@@ -66,15 +66,6 @@ class SettingsPage extends ConsumerWidget {
                     children: [
                       InsetGroupedTile(
                         leading: TileIcon(
-                          icon: CupertinoIcons.tag_fill,
-                          color: c.warning,
-                        ),
-                        title: 'Voucher',
-                        subtitle: 'Buat dan atur voucher potongan untuk kasir',
-                        onPressed: () => context.go(AppRoutes.voucher),
-                      ),
-                      InsetGroupedTile(
-                        leading: TileIcon(
                           icon: CupertinoIcons.creditcard_fill,
                           color: c.success,
                         ),

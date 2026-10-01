@@ -1,9 +1,13 @@
 import 'package:drift/drift.dart';
 
-import '../../../features/vouchers/domain/voucher.dart';
 import '../uuid.dart';
 
-/// Voucher potongan yang dipakai kasir lewat kode.
+/// Jenis voucher. Disimpan sebagai nama enum.
+enum VoucherType { percent, amount }
+
+/// Voucher potongan. **Fitur voucher sudah dihapus dari aplikasi** (keputusan
+/// user, Okt 2026); tabel ini dibiarkan agar skema database tidak berubah dan
+/// fitur bisa dihidupkan lagi. Tidak ada kode yang membaca/menulis tabel ini.
 @DataClassName('VoucherRow')
 @TableIndex(name: 'idx_vouchers_uuid', columns: {#uuid}, unique: true)
 class Vouchers extends Table {

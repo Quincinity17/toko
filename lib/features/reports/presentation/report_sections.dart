@@ -145,15 +145,6 @@ class SummarySection extends StatelessWidget {
               color: c.accent,
               caption: 'Total ${Fmt.number(s.quantity)} barang terjual',
             ),
-            StatCard(
-              label: 'Potongan voucher',
-              value: Fmt.rupiah(s.discount),
-              icon: CupertinoIcons.tag_fill,
-              color: c.chart2,
-              caption: s.grossSales == 0
-                  ? 'Tidak ada'
-                  : '${_pct(s.discount / s.grossSales)} dari penjualan kotor',
-            ),
           ],
         ),
         _gap,
@@ -164,16 +155,19 @@ class SummarySection extends StatelessWidget {
               'Laba bersih (laba kotor dikurangi sewa, gaji, listrik, dll.) '
               'butuh fitur pencatatan pengeluaran, belum tersedia.',
           children: [
+            // Potongan hanya ada pada faktur lama (fitur voucher dihapus).
+            if (s.discount > 0) ...[
+              InsetGroupedTile(
+                title: 'Penjualan kotor',
+                value: Fmt.rupiah(s.grossSales),
+              ),
+              InsetGroupedTile(
+                title: '− Potongan',
+                value: Fmt.rupiah(s.discount),
+              ),
+            ],
             InsetGroupedTile(
-              title: 'Penjualan kotor',
-              value: Fmt.rupiah(s.grossSales),
-            ),
-            InsetGroupedTile(
-              title: '− Potongan voucher',
-              value: Fmt.rupiah(s.discount),
-            ),
-            InsetGroupedTile(
-              title: '= Omzet bersih',
+              title: s.discount > 0 ? '= Omzet bersih' : 'Omzet',
               value: Fmt.rupiah(s.revenue),
             ),
             InsetGroupedTile(
@@ -454,8 +448,7 @@ class _ProductsSectionState extends State<ProductsSection> {
             if (list.length > _limit)
               'Menampilkan $_limit dari ${list.length} barang; semua ada di '
                   'file export.',
-            'Omzet dan laba per barang dihitung sebelum potongan voucher '
-                'transaksi.',
+            'Omzet dan laba per barang dari harga jual di faktur.',
           ].join(' '),
         ),
       ],
@@ -544,9 +537,7 @@ class CategoriesSection extends StatelessWidget {
                 CellText(_pct(g.margin), number: true, muted: true),
               ]),
           ],
-          footer:
-              'Kategori mengikuti data barang saat ini. Omzet sebelum potongan '
-              'voucher transaksi.',
+          footer: 'Kategori mengikuti data barang saat ini.',
         ),
       ],
     );
@@ -704,7 +695,7 @@ class StockSection extends StatelessWidget {
 }
 
 // -----------------------------------------------------------------------------
-// 6. Pembayaran & voucher
+// 6. Pembayaran
 // -----------------------------------------------------------------------------
 
 class PaymentsSection extends StatelessWidget {
@@ -715,8 +706,6 @@ class PaymentsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final total = bundle.payments.fold<int>(0, (s, g) => s + g.revenue);
-    final vouchers = bundle.vouchers;
-    final discount = vouchers.fold<int>(0, (s, v) => s + v.discount);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -740,37 +729,6 @@ class PaymentsSection extends StatelessWidget {
                 CellText(Fmt.rupiah(g.revenue), number: true),
               ]),
           ],
-        ),
-        _gap,
-        SectionTitle(
-          'Efektivitas voucher',
-          subtitle: vouchers.isEmpty
-              ? null
-              : 'Total potongan ${Fmt.rupiah(discount)}. Bandingkan laba '
-                    'kotor dengan potongan yang diberikan.',
-        ),
-        DataTableCard(
-          columns: const [
-            TableColumnSpec('Kode', flex: 2),
-            TableColumnSpec.number('Dipakai', width: 90),
-            TableColumnSpec.number('Potongan', width: 130),
-            TableColumnSpec.number('Omzet', width: 130),
-            TableColumnSpec.number('Laba kotor', width: 130),
-          ],
-          emptyMessage: 'Tidak ada voucher yang dipakai pada periode ini.',
-          rows: [
-            for (final v in vouchers)
-              TableRowData([
-                CellText(v.name, bold: true),
-                CellText('${v.transactions}×', number: true),
-                CellText(Fmt.rupiah(v.discount), number: true),
-                CellText(Fmt.rupiah(v.revenue), number: true),
-                CellText(Fmt.rupiah(v.grossProfit), number: true),
-              ]),
-          ],
-          footer:
-              'Omzet dan laba kotor dari transaksi yang memakai voucher '
-              'tersebut, setelah potongan.',
         ),
       ],
     );
@@ -844,7 +802,6 @@ class InvoicesSection extends StatelessWidget {
         TableColumnSpec('Waktu', width: 120),
         TableColumnSpec('Kasir', flex: 1),
         TableColumnSpec('Bayar', width: 130),
-        TableColumnSpec.number('Voucher', width: 110),
         TableColumnSpec.number('Total', width: 130),
       ],
       emptyMessage: 'Tidak ada transaksi pada periode ini.',
@@ -855,11 +812,6 @@ class InvoicesSection extends StatelessWidget {
             CellText(time.format(f.date), muted: true),
             CellText(f.cashierName, muted: true),
             CellText(f.paymentMethod, muted: true),
-            CellText(
-              f.discount == 0 ? '–' : '−${Fmt.number(f.discount)}',
-              number: true,
-              muted: f.discount == 0,
-            ),
             CellText(Fmt.rupiah(f.total), number: true, bold: true),
           ], onTap: () => showSaleDetailSheet(context, f)),
       ],

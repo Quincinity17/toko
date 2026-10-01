@@ -143,9 +143,6 @@ class ReportRepository {
   Future<List<GroupPerformance>> payments(ReportRange range) =>
       _groups(_dao.paymentSales(range.start, range.end));
 
-  Future<List<GroupPerformance>> vouchers(ReportRange range) =>
-      _groups(_dao.voucherSales(range.start, range.end));
-
   Future<List<GroupPerformance>> cashiers(ReportRange range) =>
       _groups(_dao.cashierSales(range.start, range.end));
 
@@ -163,7 +160,6 @@ class ReportRepository {
       products(range),
       categories(range),
       payments(range),
-      vouchers(range),
       cashiers(range),
       terminals(range),
     ]);
@@ -177,9 +173,8 @@ class ReportRepository {
       products: results[5] as List<ProductPerformance>,
       categories: results[6] as List<GroupPerformance>,
       payments: results[7] as List<GroupPerformance>,
-      vouchers: results[8] as List<GroupPerformance>,
-      cashiers: results[9] as List<GroupPerformance>,
-      terminals: results[10] as List<GroupPerformance>,
+      cashiers: results[8] as List<GroupPerformance>,
+      terminals: results[9] as List<GroupPerformance>,
     );
   }
 

@@ -8,7 +8,6 @@ import 'package:toko/core/database/app_database.dart';
 import 'package:toko/features/auth/data/auth_repository.dart';
 import 'package:toko/features/auth/data/user_repository.dart';
 import 'package:toko/features/auth/domain/app_user.dart';
-import 'package:toko/features/auth/domain/user_role.dart';
 import 'package:toko/features/payments/data/payment_method_repository.dart';
 import 'package:toko/features/payments/domain/payment_method.dart';
 import 'package:toko/features/products/data/product_repository.dart';
@@ -16,8 +15,6 @@ import 'package:toko/features/sales/data/checkout_service.dart';
 import 'package:toko/features/sales/data/sales_repository.dart';
 import 'package:toko/features/sales/domain/cart.dart';
 import 'package:toko/features/sync/data/terminal_repository.dart';
-import 'package:toko/features/vouchers/data/voucher_repository.dart';
-import 'package:toko/features/vouchers/domain/voucher.dart';
 
 import '../../helpers/test_app.dart';
 
@@ -30,7 +27,7 @@ void main() {
   late PaymentMethod qris;
   final clock = DateTime(2026, 9, 30, 10, 15);
 
-  // Pesan voucher memuat tanggal berformat Indonesia.
+  // Format tanggal Indonesia untuk pesan dan label.
   setUpAll(() => initializeDateFormatting('id_ID'));
 
   setUp(() async {
@@ -47,7 +44,6 @@ void main() {
   tearDown(() => db.close());
 
   CheckoutService service() => CheckoutService(db, clock: () => clock);
-  VoucherRepository vouchers() => VoucherRepository(db, clock: () => clock);
 
   Future<Cart> cartOf(String code, {double qty = 1}) async =>
       const Cart().add((await products.findByCodeOrBarcode(code))!, qty: qty);
@@ -235,141 +231,6 @@ void main() {
     });
   });
 
-  group('voucher', () {
-    Future<Voucher> create({
-      String code = 'HEMAT10',
-      VoucherType type = VoucherType.percent,
-      double value = 10,
-      int? maxDiscount,
-      int minPurchase = 0,
-      DateTime? end,
-    }) => vouchers().save(
-      actor: admin,
-      draft: VoucherDraft(
-        code: code,
-        type: type,
-        value: value,
-        maxDiscount: maxDiscount,
-        minPurchase: minPurchase,
-        endDate: end,
-      ),
-    );
-
-    test(
-      'dipakai saat checkout: potongan tersimpan, kuota bertambah',
-      () async {
-        await create(maxDiscount: 5000);
-        final v = await vouchers().findUsable('hemat10');
-        final cart = (await cartOf('BRG005')).withVoucher(v); // 76.000
-
-        final result = await service().checkout(
-          cart: cart,
-          cashier: kasir,
-          paymentMethodId: tunai.id,
-          paid: 100000,
-        );
-        expect(result.discount, 5000); // 7.600 dibatasi 5.000
-        expect(result.total, 71000);
-        expect(result.voucherCode, 'HEMAT10');
-
-        final sale = (await SalesRepository(db).watchDay(clock).first).single;
-        expect(sale.voucherCode, 'HEMAT10');
-        expect(sale.discount, 5000);
-      },
-    );
-
-    test('voucher yang dinonaktifkan admin setelah dipasang ditolak', () async {
-      final created = await create(type: VoucherType.amount, value: 1000);
-      final v = await vouchers().findUsable('HEMAT10');
-      final cart = (await cartOf('BRG009')).withVoucher(v);
-
-      await vouchers().save(
-        actor: admin,
-        id: created.id,
-        draft: const VoucherDraft(
-          code: 'HEMAT10',
-          type: VoucherType.amount,
-          value: 1000,
-          isActive: false,
-        ),
-      );
-      await expectLater(
-        service().checkout(
-          cart: cart,
-          cashier: kasir,
-          paymentMethodId: tunai.id,
-          paid: 5000,
-        ),
-        throwsA(isA<CheckoutFailure>()),
-      );
-      expect(vouchers().findUsable('HEMAT10'), throwsA(isA<VoucherFailure>()));
-      expect(await db.select(db.sales).get(), isEmpty);
-    });
-
-    test('voucher tanpa kuota bisa dipakai berkali-kali', () async {
-      await create(type: VoucherType.amount, value: 500);
-      for (var i = 0; i < 3; i++) {
-        final v = await vouchers().findUsable('HEMAT10');
-        await service().checkout(
-          cart: (await cartOf('BRG009')).withVoucher(v),
-          cashier: kasir,
-          paymentMethodId: tunai.id,
-          paid: 5000,
-        );
-      }
-      expect(await db.select(db.sales).get(), hasLength(3));
-    });
-
-    test('minimal belanja diperiksa ulang saat checkout', () async {
-      await create(type: VoucherType.amount, value: 5000, minPurchase: 50000);
-      final v = await vouchers().findUsable('HEMAT10');
-      expect(
-        service().checkout(
-          cart: (await cartOf('BRG009')).withVoucher(v),
-          cashier: kasir,
-          paymentMethodId: tunai.id,
-          paid: 5000,
-        ),
-        throwsA(isA<CheckoutFailure>()),
-      );
-    });
-
-    test('kedaluwarsa, tidak ada, dan nonaktif ditolak', () async {
-      await create(end: DateTime(2026, 9, 29));
-      expect(vouchers().findUsable('HEMAT10'), throwsA(isA<VoucherFailure>()));
-      expect(vouchers().findUsable('TIDAKADA'), throwsA(isA<VoucherFailure>()));
-    });
-
-    test(
-      'kode unik, kasir tidak boleh membuat, terpakai tidak bisa dihapus',
-      () async {
-        final v = await create(type: VoucherType.amount, value: 1000);
-        expect(create(code: 'hemat10'), throwsA(isA<VoucherFailure>()));
-        expect(
-          vouchers().save(
-            actor: kasir,
-            draft: const VoucherDraft(
-              code: 'KASIR',
-              type: VoucherType.amount,
-              value: 1000,
-            ),
-          ),
-          throwsA(isA<VoucherFailure>()),
-        );
-        await service().checkout(
-          cart: (await cartOf('BRG009')).withVoucher(v),
-          cashier: kasir,
-          paymentMethodId: tunai.id,
-          paid: 5000,
-        );
-        expect(
-          vouchers().delete(actor: admin, id: v.id),
-          throwsA(isA<VoucherFailure>()),
-        );
-      },
-    );
-  });
-
   group('metode pembayaran', () {
     test('tambah, tidak boleh duplikat, minimal satu aktif', () async {
       final repo = PaymentMethodRepository(db);
@@ -541,7 +402,7 @@ void main() {
     );
 
     test('v3 (skema asli) → v4: uuid terisi, faktur lama diantrikan, '
-        'kuota voucher lama diabaikan', () async {
+        'data voucher lama tetap ada', () async {
       final schema = File('test/fixtures/schema_v3.sql').readAsStringSync();
       final legacy = NativeDatabase.memory(
         setup: (Database raw) {
@@ -578,25 +439,9 @@ void main() {
       expect(sale.terminalCode, isNull);
       expect((await upgraded.outboxDao.pending()).single.entityUuid, sale.uuid);
 
-      // Dulu "kuota habis" (5/5); sekarang kuota tidak dipakai lagi.
-      final voucher = await VoucherRepository(upgraded).findUsable('LAMA');
-      expect(voucher.code, 'LAMA');
-      // Voucher baru tetap bisa disimpan walau kolom lama masih ada.
-      final admin = AppUser(
-        id: 99,
-        username: 'admin',
-        fullName: 'Admin',
-        role: UserRole.admin,
-      );
-      final baru = await VoucherRepository(upgraded).save(
-        actor: admin,
-        draft: const VoucherDraft(
-          code: 'BARU',
-          type: VoucherType.amount,
-          value: 500,
-        ),
-      );
-      expect(baru.code, 'BARU');
+      // Fitur voucher sudah dihapus, tapi data lama di tabel tetap utuh.
+      final vouchers = await upgraded.select(upgraded.vouchers).get();
+      expect(vouchers.single.code, 'LAMA');
     });
   });
 }

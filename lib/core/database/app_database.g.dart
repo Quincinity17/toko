@@ -6164,7 +6164,6 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final UsersDao usersDao = UsersDao(this as AppDatabase);
   late final ProductsDao productsDao = ProductsDao(this as AppDatabase);
   late final SalesDao salesDao = SalesDao(this as AppDatabase);
-  late final VouchersDao vouchersDao = VouchersDao(this as AppDatabase);
   late final PaymentMethodsDao paymentMethodsDao = PaymentMethodsDao(
     this as AppDatabase,
   );

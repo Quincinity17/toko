@@ -120,9 +120,7 @@ class _SaleDetail extends ConsumerWidget {
           row('Subtotal', Fmt.rupiah(sale.subtotal)),
           if (sale.discount > 0)
             row(
-              sale.voucherCode != null
-                  ? 'Voucher ${sale.voucherCode}'
-                  : sale.discountPercent == null
+              sale.discountPercent == null
                   ? 'Potongan'
                   : 'Potongan (${Fmt.number(sale.discountPercent!)}%)',
               '− ${Fmt.rupiah(sale.discount)}',

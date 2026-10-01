@@ -15,13 +15,12 @@ import 'cart_summary_panel.dart';
 import 'cart_table.dart';
 import 'payment_dialog.dart';
 import 'product_search_sheet.dart';
-import 'voucher_dialog.dart';
 
 /// Tab "Transaksi Baru": input barang, tabel keranjang, dan panel total.
 ///
 /// Kolom kode selalu kembali fokus supaya scanner barcode USB (yang mengetik
 /// seperti keyboard lalu menekan Enter) bisa langsung dipakai.
-/// Shortcut: F2 / End = bayar, F3 = cari barang, F4 = voucher.
+/// Shortcut: F2 / End = bayar, F3 = cari barang.
 class CheckoutView extends ConsumerStatefulWidget {
   const CheckoutView({super.key});
 
@@ -158,16 +157,6 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
     focusEntry();
   }
 
-  Future<void> _applyVoucher() async {
-    final cart = ref.read(cartControllerProvider);
-    if (cart.isEmpty || _busy) return;
-    _busy = true;
-    final voucher = await showVoucherDialog(context);
-    _busy = false;
-    if (voucher != null) _cart.setVoucher(voucher);
-    focusEntry();
-  }
-
   void _remove(int index) {
     _cart.removeAt(index);
     setState(() => _selected = null);
@@ -193,11 +182,6 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
 
     final summary = CartSummaryPanel(
       cart: cart,
-      onApplyVoucher: _applyVoucher,
-      onRemoveVoucher: () {
-        _cart.setVoucher(null);
-        focusEntry();
-      },
       onPay: _pay,
       onClear: _confirmClear,
     );
@@ -207,7 +191,6 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
         const SingleActivator(LogicalKeyboardKey.f2): _pay,
         const SingleActivator(LogicalKeyboardKey.end): _pay,
         const SingleActivator(LogicalKeyboardKey.f3): () => _openSearch(),
-        const SingleActivator(LogicalKeyboardKey.f4): _applyVoucher,
       },
       child: Padding(
         padding: const EdgeInsets.fromLTRB(

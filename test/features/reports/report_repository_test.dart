@@ -13,15 +13,12 @@ import 'package:toko/features/reports/domain/report_models.dart';
 import 'package:toko/features/sales/data/checkout_service.dart';
 import 'package:toko/features/sales/data/sales_repository.dart';
 import 'package:toko/features/sales/domain/cart.dart';
-import 'package:toko/features/vouchers/data/voucher_repository.dart';
-import 'package:toko/features/vouchers/domain/voucher.dart';
 
 import '../../helpers/test_app.dart';
 
 void main() {
   late AppDatabase db;
   late AppUser kasir;
-  late AppUser admin;
   late PaymentMethod tunai;
   late PaymentMethod qris;
   late ProductRepository products;
@@ -37,7 +34,6 @@ void main() {
     db = await createSeededDb();
     final auth = AuthRepository(db, testHasher);
     kasir = await auth.login('kasir', 'kasir123');
-    admin = await auth.login('admin', 'admin123');
     final methods = await PaymentMethodRepository(db).watchAll().first;
     tunai = methods.firstWhere((m) => m.name == 'Tunai');
     qris = methods.firstWhere((m) => m.name == 'QRIS');
@@ -50,18 +46,12 @@ void main() {
     DateTime when,
     Map<String, double> items, {
     PaymentMethod? method,
-    String? voucher,
   }) async {
     var cart = const Cart();
     for (final e in items.entries) {
       cart = cart.add(
         (await products.findByCodeOrBarcode(e.key))!,
         qty: e.value,
-      );
-    }
-    if (voucher != null) {
-      cart = cart.withVoucher(
-        await VoucherRepository(db, clock: () => when).findUsable(voucher),
       );
     }
     await CheckoutService(db, clock: () => when).checkout(
@@ -77,17 +67,9 @@ void main() {
   /// Indomie (BRG001): jual 3.500, beli 2.800. Aqua (BRG009): 3.500 / 2.800.
   /// Teh Botol (BRG010): 5.500 / 4.200.
   Future<void> seedSales() async {
-    await VoucherRepository(db).save(
-      actor: admin,
-      draft: const VoucherDraft(
-        code: 'HEMAT1K',
-        type: VoucherType.amount,
-        value: 1000,
-      ),
-    );
     await sell(at(-1, 10), {'BRG001': 2}); // kemarin
     await sell(at(0, 9, 15), {'BRG009': 1, 'BRG010': 1}, method: qris);
-    await sell(at(0, 14, 30), {'BRG001': 3}, voucher: 'HEMAT1K');
+    await sell(at(0, 14, 30), {'BRG001': 3});
   }
 
   test('ringkasan hari ini dan perbandingan dengan kemarin', () async {
@@ -96,22 +78,22 @@ void main() {
     final range = ReportRange.preset(RangePreset.today, at(0, 20));
     final s = await r.summary(range);
 
-    // Omzet: (3.500 + 5.500) + (3 × 3.500 − 1.000) = 9.000 + 9.500
+    // Omzet: (3.500 + 5.500) + 3 × 3.500 = 9.000 + 10.500
     expect(s.transactions, 2);
     expect(s.grossSales, 19500);
-    expect(s.discount, 1000);
-    expect(s.revenue, 18500);
+    expect(s.discount, 0);
+    expect(s.revenue, 19500);
     // Pokok: 2.800 + 4.200 + 3 × 2.800 = 15.400
     expect(s.cost, 15400);
-    expect(s.grossProfit, 3100);
-    expect(s.margin, closeTo(3100 / 18500, 1e-9));
-    expect(s.averageBasket, 9250);
+    expect(s.grossProfit, 4100);
+    expect(s.margin, closeTo(4100 / 19500, 1e-9));
+    expect(s.averageBasket, 9750);
     expect(s.quantity, 5);
 
     final prev = await r.summary(range.previous);
     expect(prev.transactions, 1);
     expect(prev.revenue, 7000);
-    expect(growth(s.revenue, prev.revenue), closeTo(11500 / 7000, 1e-9));
+    expect(growth(s.revenue, prev.revenue), closeTo(12500 / 7000, 1e-9));
   });
 
   test('harian berisi hari kosong, per jam dan per hari', () async {
@@ -121,7 +103,7 @@ void main() {
     final days = await r.daily(week);
     expect(days, hasLength(7));
     expect(days.last.date, today);
-    expect(days.last.revenue, 18500);
+    expect(days.last.revenue, 19500);
     expect(days[5].revenue, 7000); // kemarin
     expect(days.first.revenue, 0);
 
@@ -129,7 +111,7 @@ void main() {
     expect(hours, hasLength(24));
     expect(hours[9].transactions, 1);
     expect(hours[10].transactions, 1);
-    expect(hours[14].revenue, 9500);
+    expect(hours[14].revenue, 10500);
 
     final weekdays = await r.byWeekday(week);
     expect(weekdays[4].transactions, 2); // Kamis
@@ -155,7 +137,7 @@ void main() {
     expect(cats.first.revenue, 17500);
   });
 
-  test('metode bayar, voucher, kasir, terminal', () async {
+  test('metode bayar, kasir, terminal', () async {
     await seedSales();
     final r = repo();
     final week = ReportRange.preset(RangePreset.last7, at(0, 20));
@@ -163,11 +145,6 @@ void main() {
     final pays = {for (final p in await r.payments(week)) p.name: p};
     expect(pays['Tunai']!.transactions, 2);
     expect(pays['QRIS']!.revenue, 9000);
-
-    final vouchers = await r.vouchers(week);
-    expect(vouchers.single.name, 'HEMAT1K');
-    expect(vouchers.single.discount, 1000);
-    expect(vouchers.single.grossProfit, 9500 - 8400);
 
     expect((await r.cashiers(week)).single.name, 'Kasir Satu');
     expect((await r.terminals(week)).single.name, 'K01');
@@ -275,7 +252,6 @@ void main() {
       'Produk',
       'Kategori',
       'Pembayaran',
-      'Voucher',
       'Kasir',
       'Terminal',
       'Stok',
@@ -284,8 +260,7 @@ void main() {
     String cell(String sheet, int row, int col) =>
         book.tables[sheet]!.rows[row][col]?.value.toString() ?? '';
     expect(cell('Ringkasan', 4, 0), 'Omzet bersih');
-    expect(cell('Ringkasan', 4, 1), '25500'); // 7.000 + 18.500
-    expect(cell('Voucher', 1, 0), 'HEMAT1K');
+    expect(cell('Ringkasan', 4, 1), '26500'); // 7.000 + 19.500
     expect(book.tables['Faktur']!.rows, hasLength(4)); // judul + 3 faktur
     expect(book.tables['Harian']!.rows, hasLength(8)); // judul + 7 hari
   });

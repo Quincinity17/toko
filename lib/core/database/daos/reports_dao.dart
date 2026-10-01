@@ -127,7 +127,7 @@ class ReportsDao extends DatabaseAccessor<AppDatabase> with _$ReportsDaoMixin {
       );
 
   /// Dikelompokkan per [groupExpr] milik tabel sales (alias `s`), mis.
-  /// metode bayar, kasir, terminal, voucher. Biaya per faktur dihitung dari
+  /// metode bayar, kasir, terminal. Biaya per faktur dihitung dari
   /// item supaya laba per kelompok bisa diketahui.
   Selectable<QueryRow> _bySale(
     DateTime start,
@@ -154,13 +154,6 @@ class ReportsDao extends DatabaseAccessor<AppDatabase> with _$ReportsDaoMixin {
 
   Selectable<QueryRow> paymentSales(DateTime start, DateTime end) =>
       _bySale(start, end, 's.payment_method');
-
-  Selectable<QueryRow> voucherSales(DateTime start, DateTime end) => _bySale(
-    start,
-    end,
-    's.voucher_code',
-    where: 'AND s.voucher_code IS NOT NULL',
-  );
 
   Selectable<QueryRow> cashierSales(DateTime start, DateTime end) => _bySale(
     start,

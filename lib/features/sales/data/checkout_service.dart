@@ -8,7 +8,6 @@ import '../../auth/domain/app_user.dart';
 import '../../payments/domain/payment_method.dart';
 import '../../sync/data/terminal_repository.dart';
 import '../../sync/domain/terminal.dart';
-import '../../vouchers/data/voucher_repository.dart';
 import '../domain/cart.dart';
 import '../domain/invoice_number.dart';
 
@@ -30,8 +29,6 @@ class CheckoutResult {
     required this.paid,
     required this.change,
     required this.paymentMethod,
-    this.voucherCode,
-    this.discount = 0,
   });
 
   final int saleId;
@@ -40,8 +37,6 @@ class CheckoutResult {
   final int paid;
   final int change;
   final String paymentMethod;
-  final String? voucherCode;
-  final int discount;
 }
 
 /// Menyimpan transaksi penjualan: faktur, baris barang, pengurangan stok,
@@ -76,26 +71,7 @@ class CheckoutService {
         throw const CheckoutFailure('Metode pembayaran tidak tersedia.');
       }
 
-      // Voucher diperiksa ulang dari database: bisa saja sudah dinonaktifkan
-      // atau kedaluwarsa sejak dipasang di keranjang.
-      final subtotal = cart.subtotal;
-      var discount = 0;
-      String? voucherCode;
-      int? voucherId;
-      if (cart.voucher case final applied?) {
-        final row = await _db.vouchersDao.findById(applied.id);
-        if (row == null) {
-          throw const CheckoutFailure('Voucher sudah dihapus. Lepas voucher.');
-        }
-        final voucher = voucherFromRow(row);
-        final problem = voucher.problemFor(subtotal: subtotal, now: now);
-        if (problem != null) throw CheckoutFailure(problem);
-        discount = voucher.discountFor(subtotal);
-        voucherCode = voucher.code;
-        voucherId = voucher.id;
-      }
-
-      final total = subtotal - discount;
+      final total = cart.total;
       final isCash = methodRow.kind == PaymentKind.cash;
       final paidValue = isCash ? (paid ?? 0) : total;
       if (paidValue < total) {
@@ -125,10 +101,7 @@ class CheckoutService {
               saleDate: now,
               userId: cashier.id,
               itemCount: cart.lines.length,
-              subtotal: subtotal,
-              discount: Value(discount),
-              voucherId: Value(voucherId),
-              voucherCode: Value(voucherCode),
+              subtotal: cart.subtotal,
               total: total,
               paid: paidValue,
               changeAmount: paidValue - total,
@@ -173,8 +146,6 @@ class CheckoutService {
         paid: paidValue,
         change: paidValue - total,
         paymentMethod: methodRow.name,
-        voucherCode: voucherCode,
-        discount: discount,
       );
     });
   }
