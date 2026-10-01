@@ -1,52 +1,32 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart' show Tooltip;
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
-import '../../../../core/utils/number_input.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_card.dart';
 import '../../domain/cart.dart';
 
-/// Panel kanan layar kasir: total besar, rincian dan potongan transaksi,
-/// lalu tombol Bayar. Beri `key` baru setiap transaksi baru agar isian
-/// potongan ikut kosong.
-class CartSummaryPanel extends StatefulWidget {
+/// Panel kanan layar kasir: total besar, rincian, voucher, lalu tombol Bayar.
+class CartSummaryPanel extends StatelessWidget {
   const CartSummaryPanel({
     super.key,
     required this.cart,
-    required this.onDiscountChanged,
+    required this.onApplyVoucher,
+    required this.onRemoveVoucher,
     required this.onPay,
     required this.onClear,
   });
 
   final Cart cart;
-  final void Function(DiscountType type, double value) onDiscountChanged;
+  final VoidCallback onApplyVoucher;
+  final VoidCallback onRemoveVoucher;
   final VoidCallback onPay;
   final VoidCallback onClear;
 
   @override
-  State<CartSummaryPanel> createState() => _CartSummaryPanelState();
-}
-
-class _CartSummaryPanelState extends State<CartSummaryPanel> {
-  final _discount = TextEditingController();
-
-  @override
-  void dispose() {
-    _discount.dispose();
-    super.dispose();
-  }
-
-  void _changeType(DiscountType type) {
-    _discount.clear();
-    widget.onDiscountChanged(type, 0);
-  }
-
-  @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final cart = widget.cart;
-    final num = const [FontFeature.tabularFigures()];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -67,14 +47,19 @@ class _CartSummaryPanelState extends State<CartSummaryPanel> {
                       letterSpacing: 0.4,
                     ),
                   ),
-                  const Spacer(),
-                  Text(
-                    cart.isEmpty
-                        ? 'Keranjang kosong'
-                        : '${cart.lines.length} barang · '
-                              '${Fmt.number(cart.totalQty)} item',
-                    style: AppTypography.footnote.copyWith(
-                      color: c.labelSecondary,
+                  const SizedBox(width: AppSpacing.xs),
+                  Expanded(
+                    child: Text(
+                      cart.isEmpty
+                          ? 'Keranjang kosong'
+                          : '${cart.lines.length} barang · '
+                                '${Fmt.number(cart.totalQty)} item',
+                      textAlign: TextAlign.right,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.footnote.copyWith(
+                        color: c.labelSecondary,
+                      ),
                     ),
                   ),
                 ],
@@ -111,77 +96,15 @@ class _CartSummaryPanelState extends State<CartSummaryPanel> {
         AppCard(
           padding: const EdgeInsets.all(AppSpacing.md),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _Line(label: 'Subtotal', value: Fmt.rupiah(cart.subtotal)),
               const SizedBox(height: AppSpacing.sm),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Potongan',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTypography.subheadline.copyWith(color: c.label),
-                    ),
-                  ),
-                  CupertinoSlidingSegmentedControl<DiscountType>(
-                    groupValue: cart.discountType,
-                    padding: const EdgeInsets.all(2),
-                    onValueChanged: (t) {
-                      if (t != null && t != cart.discountType) _changeType(t);
-                    },
-                    children: const {
-                      DiscountType.percent: _Seg('%'),
-                      DiscountType.amount: _Seg('Rp'),
-                    },
-                  ),
-                  const SizedBox(width: AppSpacing.xs),
-                  SizedBox(
-                    width: 96,
-                    child: CupertinoTextField(
-                      controller: _discount,
-                      placeholder: '0',
-                      textAlign: TextAlign.right,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      inputFormatters: [
-                        if (cart.discountType == DiscountType.amount)
-                          RupiahInputFormatter(),
-                      ],
-                      style: AppTypography.subheadline.copyWith(
-                        color: c.label,
-                        fontFeatures: num,
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: c.fill,
-                        borderRadius: AppRadius.smAll,
-                      ),
-                      onChanged: (v) => widget.onDiscountChanged(
-                        cart.discountType,
-                        parseIdNumber(v) ?? 0,
-                      ),
-                    ),
-                  ),
-                ],
+              _VoucherBox(
+                cart: cart,
+                onApply: onApplyVoucher,
+                onRemove: onRemoveVoucher,
               ),
-              if (cart.discount > 0) ...[
-                const SizedBox(height: AppSpacing.xxs),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Text(
-                    '− ${Fmt.rupiah(cart.discount)}',
-                    style: AppTypography.subheadline.copyWith(
-                      color: c.danger,
-                      fontFeatures: num,
-                    ),
-                  ),
-                ),
-              ],
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
                 child: Container(height: 0.5, color: c.separator),
@@ -196,7 +119,7 @@ class _CartSummaryPanelState extends State<CartSummaryPanel> {
           icon: CupertinoIcons.creditcard_fill,
           size: AppButtonSize.large,
           expand: true,
-          onPressed: cart.isEmpty ? null : widget.onPay,
+          onPressed: cart.isEmpty ? null : onPay,
         ),
         const SizedBox(height: AppSpacing.xs),
         AppButton(
@@ -205,9 +128,107 @@ class _CartSummaryPanelState extends State<CartSummaryPanel> {
           variant: AppButtonVariant.gray,
           destructive: true,
           expand: true,
-          onPressed: cart.isEmpty ? null : widget.onClear,
+          onPressed: cart.isEmpty ? null : onClear,
         ),
       ],
+    );
+  }
+}
+
+/// Tombol "Pakai Voucher", atau kartu voucher terpasang beserta potongannya.
+class _VoucherBox extends StatelessWidget {
+  const _VoucherBox({
+    required this.cart,
+    required this.onApply,
+    required this.onRemove,
+  });
+
+  final Cart cart;
+  final VoidCallback onApply;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final v = cart.voucher;
+
+    if (v == null) {
+      return AppButton(
+        label: 'Pakai Voucher  (F4)',
+        icon: CupertinoIcons.tag,
+        variant: AppButtonVariant.tinted,
+        size: AppButtonSize.small,
+        expand: true,
+        onPressed: cart.isEmpty ? null : onApply,
+      );
+    }
+
+    final short = cart.voucherShortfall;
+    final ok = short == 0;
+    return AnimatedContainer(
+      duration: AppDurations.fast,
+      padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+      decoration: BoxDecoration(
+        color: (ok ? c.success : c.warning).withValues(alpha: 0.12),
+        borderRadius: AppRadius.mdAll,
+      ),
+      child: Row(
+        children: [
+          Icon(
+            CupertinoIcons.tag_fill,
+            size: 18,
+            color: ok ? c.success : c.warning,
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  v.code,
+                  style: AppTypography.subheadline.copyWith(
+                    color: c.label,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  ok
+                      ? (v.name.isEmpty ? v.summary : v.name)
+                      : 'Tambah belanja ${Fmt.rupiah(short)} lagi '
+                            'agar voucher berlaku',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.caption.copyWith(
+                    color: ok ? c.labelSecondary : c.warning,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (ok)
+            Text(
+              '− ${Fmt.rupiah(cart.discount)}',
+              style: AppTypography.subheadline.copyWith(
+                color: c.success,
+                fontWeight: FontWeight.w600,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          Tooltip(
+            message: 'Lepas voucher',
+            child: CupertinoButton(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(36, 36),
+              onPressed: onRemove,
+              child: Icon(
+                CupertinoIcons.xmark_circle_fill,
+                size: 20,
+                color: c.labelTertiary,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -235,16 +256,4 @@ class _Line extends StatelessWidget {
       ],
     );
   }
-}
-
-class _Seg extends StatelessWidget {
-  const _Seg(this.label);
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-    child: Text(label, style: AppTypography.footnote),
-  );
 }

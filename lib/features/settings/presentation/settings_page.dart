@@ -60,6 +60,31 @@ class SettingsPage extends ConsumerWidget {
                   ),
                   const SizedBox(height: AppSpacing.xl),
                   InsetGroupedSection(
+                    header: 'Penjualan',
+                    dividerIndent: 58,
+                    children: [
+                      InsetGroupedTile(
+                        leading: TileIcon(
+                          icon: CupertinoIcons.tag_fill,
+                          color: c.warning,
+                        ),
+                        title: 'Voucher',
+                        subtitle: 'Buat dan atur voucher potongan untuk kasir',
+                        onPressed: () => context.go(AppRoutes.voucher),
+                      ),
+                      InsetGroupedTile(
+                        leading: TileIcon(
+                          icon: CupertinoIcons.creditcard_fill,
+                          color: c.success,
+                        ),
+                        title: 'Metode Pembayaran',
+                        subtitle: 'Tunai, QRIS, transfer, kartu, dll.',
+                        onPressed: () => context.go(AppRoutes.metodeBayar),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+                  InsetGroupedSection(
                     header: 'Tampilan',
                     dividerIndent: 58,
                     children: [

@@ -71,20 +71,38 @@ tab **Transaksi Baru** dan **Hari Ini**.
 
 - Transaksi Baru: kolom Jumlah + Kode/Barcode (selalu fokus kembali untuk
   scanner USB; Enter = cari persis kode/barcode, jika tidak ketemu → sheet cari),
-  tabel keranjang (No, Kode, Nama, Jumlah ±, Satuan, Harga, Pot.% per barang,
-  Total), panel kanan: total besar, subtotal, potongan transaksi (% atau Rp), Bayar.
-- Bayar → sheet pembayaran tunai (chip Uang Pas & pecahan, kembalian langsung)
-  → `CheckoutService` menyimpan semuanya dalam satu transaction → sheet sukses.
+  tabel keranjang (No, Kode, Nama, Jumlah ±, Satuan, Harga, Total), panel kanan:
+  total besar, subtotal, voucher, Bayar.
+- Tidak ada potongan manual (dihapus atas permintaan user). Satu-satunya
+  potongan = **voucher** (F4 → popup kode). Keranjang hanya cek minimal belanja;
+  status/tanggal/kuota dicek saat pasang (`findUsable`) dan ulang saat checkout.
+- Bayar → **popup** (bukan bottom sheet, permintaan user) berisi pilihan metode
+  bayar aktif. Tunai: uang diterima + chip Uang Pas & pecahan + kembalian.
+  Non-tunai: dibayar pas + no. referensi opsional. `CheckoutService` menyimpan
+  faktur, item, pemakaian voucher (`tryConsume` atomik terhadap kuota), stok,
+  dan riwayat stok dalam satu transaction → popup sukses.
 - Hari Ini: ringkasan (jumlah, omzet, rata-rata) + tabel faktur; klik = rincian.
-- Shortcut: F2 / End = bayar, F3 = cari barang, ↑↓ + Enter di sheet cari.
-- Logika di domain murni (`cart.dart`, `invoice_number.dart`, `cash_suggestions.dart`)
-  dan `CheckoutService`; widget hanya memanggil `cartControllerProvider`.
-- Pembulatan: total baris = round(qty × harga × (100 − pot%)/100); potongan
-  transaksi tidak pernah melebihi subtotal.
+- Shortcut: F2 / End = bayar, F3 = cari barang, F4 = voucher, ↑↓ + Enter di
+  sheet cari, Esc menutup popup.
+- Logika di domain murni (`cart.dart`, `invoice_number.dart`, `cash_suggestions.dart`,
+  `vouchers/domain/voucher.dart`) dan `CheckoutService`; widget hanya memanggil
+  `cartControllerProvider`.
+- Pembulatan: total baris = round(qty × harga); potongan voucher tidak pernah
+  melebihi subtotal (persen dibatasi `max_discount`).
 - Stok boleh minus (penjualan tidak diblokir); baris diberi tanda bila qty > stok tercatat.
 - Keranjang tetap ada saat pindah halaman, kosong otomatis saat ganti user.
 - Belum ada (di luar tahap 1): pelanggan, sales, PPN, biaya lain, pending,
-  buka laci, metode bayar selain tunai, cetak struk (Langkah 6).
+  buka laci, split payment (satu faktur dua metode), cetak struk (Langkah 6).
+
+## Voucher & metode pembayaran (admin, Pengaturan › Penjualan)
+
+- `/pengaturan/voucher`: daftar dikelompokkan Bisa dipakai / Terjadwal / Tidak
+  berlaku; form: kode, keterangan, persen|nominal, maks potongan, min belanja,
+  masa berlaku (tanggal, berlaku s.d. akhir hari), kuota, aktif. Kode yang sudah
+  dipakai tidak bisa diubah; voucher terpakai tidak bisa dihapus.
+- `/pengaturan/pembayaran`: tambah/ubah/aktif-nonaktif metode (jenis Tunai atau
+  Non-tunai). Minimal satu aktif; yang sudah dipakai transaksi tidak bisa dihapus.
+- Aturan ditegakkan di `VoucherRepository` / `PaymentMethodRepository` (hanya admin).
 
 ## Design system (gaya Apple / iOS)
 
@@ -111,7 +129,7 @@ tab **Transaksi Baru** dan **Hari Ini**.
 | `InsetGroupedSection` / `InsetGroupedTile` / `TileIcon` | List bergaya Pengaturan iOS |
 | `LargeTitlePage` | Halaman dengan large title + toolbar kaca saat digulir; `backLabel`/`onBack` untuk sub-halaman |
 | `AppSidebar` | Sidebar kaca yang bisa diciutkan |
-| `AppDialogs` | `alert`, `confirm`, `promptNumber`, `actionSheet`, `sheet` (bottom sheet dengan handle) |
+| `AppDialogs` | `alert`, `confirm`, `promptNumber`, `popup` (dialog tengah, Esc menutup), `pickDate`, `actionSheet`, `sheet` (bottom sheet dengan handle) |
 | `EmptyState`, `LoadingState`, `SkeletonBox`, `ErrorBanner` | State kosong/loading/error |
 | `StatCard` | Kartu angka ringkasan (dashboard, kasir) |
 | `AppTextField` | Input dengan label, helper/error, mode password |
@@ -126,12 +144,13 @@ di `core/utils/number_input.dart`.
 - Isolate (bcrypt) tidak jalan di fake async → tes memakai `_SyncHasher`.
 - Kursor berkedip → pakai `settle()` bukan `pumpAndSettle()`.
 - Akhiri setiap `testWidgets` dengan `unmount(tester)` agar stream drift tertutup.
+- Tes yang memicu pesan voucher perlu `initializeDateFormatting('id_ID')`.
 
 ### Shortcut keyboard
 
 - Ctrl+1..5: pindah halaman (Dashboard, Kasir, Produk, Laporan, Pengaturan)
 - Ctrl+\\: ciutkan/tampilkan sidebar
-- Kasir: F2 / End bayar, F3 cari barang
+- Kasir: F2 / End bayar, F3 cari barang, F4 voucher
 
 ## Skema database
 
@@ -149,7 +168,18 @@ Uang = INTEGER Rupiah; stok = REAL (mendukung kg/liter).
     discount_percent, purchase_price, subtotal
   - `stock_movements`: product_id, type (sale|import|adjust), qty_change (negatif
     = keluar), ref_id, note
-- Tes migrasi: `checkout_service_test.dart` membuat DB v1 manual lalu membuka v2.
+- v3: `vouchers` (code unik huruf besar, name, type percent|amount, value,
+  max_discount, min_purchase, start_date, end_date, quota, used_count, is_active),
+  `payment_methods` (name unik, kind cash|nonCash, is_active, sort_order; 4 bawaan:
+  Tunai, QRIS, Transfer Bank, Kartu Debit/Kredit). `sales` + voucher_id,
+  voucher_code, payment_method_id, payment_ref. Faktur lama → Tunai.
+  `sales.discount_percent` dan `sale_items.discount_percent` tidak diisi lagi
+  (sisa potongan manual v2), tetap ada untuk faktur lama.
+- PENTING migrasi: `createTable` memakai definisi TERBARU, jadi cabang `from < 2`
+  membuat semua tabel baru sekaligus dan cabang `else if (from < 3)` hanya
+  menambah yang belum ada. Pola ini harus dijaga untuk v4 dst.
+- Tes migrasi (`checkout_service_test.dart`): v1 manual → v3, dan v2 dari
+  `test/fixtures/schema_v2.sql` (skema asli DB user) → v3.
 - Data contoh (`sample_products.dart`) dimasukkan di onCreate/onUpgrade, bukan di
   seeder start-up, supaya tidak muncul lagi jika user menghapusnya.
 
@@ -169,6 +199,7 @@ Rencana berikutnya: settings.
 - [x] Kelola akun + ganti password (permintaan tambahan)
 - [x] Langkah 2b — 20 barang contoh (migrasi v2)
 - [x] Langkah 5 — Transaksi penjualan + daftar transaksi hari ini (dikerjakan lebih dulu atas permintaan user)
+- [x] Voucher + metode pembayaran, popup pembayaran, potongan manual dihapus (permintaan user)
 - [ ] Langkah 3 — Master barang
 - [ ] Langkah 4 — Import iPOS (butuh `sample_data/ipos_export.xlsx`)
 - [ ] Langkah 6 — Struk 58 mm (PDF preview)

@@ -1667,6 +1667,1171 @@ class ProductsCompanion extends UpdateCompanion<ProductRow> {
   }
 }
 
+class $VouchersTable extends Vouchers
+    with TableInfo<$VouchersTable, VoucherRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $VouchersTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _codeMeta = const VerificationMeta('code');
+  @override
+  late final GeneratedColumn<String> code = GeneratedColumn<String>(
+    'code',
+    aliasedName,
+    false,
+    additionalChecks: GeneratedColumn.checkTextLength(
+      minTextLength: 3,
+      maxTextLength: 20,
+    ),
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<VoucherType, String> type =
+      GeneratedColumn<String>(
+        'type',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+      ).withConverter<VoucherType>($VouchersTable.$convertertype);
+  static const VerificationMeta _valueMeta = const VerificationMeta('value');
+  @override
+  late final GeneratedColumn<double> value = GeneratedColumn<double>(
+    'value',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _maxDiscountMeta = const VerificationMeta(
+    'maxDiscount',
+  );
+  @override
+  late final GeneratedColumn<int> maxDiscount = GeneratedColumn<int>(
+    'max_discount',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _minPurchaseMeta = const VerificationMeta(
+    'minPurchase',
+  );
+  @override
+  late final GeneratedColumn<int> minPurchase = GeneratedColumn<int>(
+    'min_purchase',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _startDateMeta = const VerificationMeta(
+    'startDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> startDate = GeneratedColumn<DateTime>(
+    'start_date',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _endDateMeta = const VerificationMeta(
+    'endDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> endDate = GeneratedColumn<DateTime>(
+    'end_date',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _quotaMeta = const VerificationMeta('quota');
+  @override
+  late final GeneratedColumn<int> quota = GeneratedColumn<int>(
+    'quota',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _usedCountMeta = const VerificationMeta(
+    'usedCount',
+  );
+  @override
+  late final GeneratedColumn<int> usedCount = GeneratedColumn<int>(
+    'used_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _isActiveMeta = const VerificationMeta(
+    'isActive',
+  );
+  @override
+  late final GeneratedColumn<bool> isActive = GeneratedColumn<bool>(
+    'is_active',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_active" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    code,
+    name,
+    type,
+    value,
+    maxDiscount,
+    minPurchase,
+    startDate,
+    endDate,
+    quota,
+    usedCount,
+    isActive,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'vouchers';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<VoucherRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('code')) {
+      context.handle(
+        _codeMeta,
+        code.isAcceptableOrUnknown(data['code']!, _codeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_codeMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    }
+    if (data.containsKey('value')) {
+      context.handle(
+        _valueMeta,
+        value.isAcceptableOrUnknown(data['value']!, _valueMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_valueMeta);
+    }
+    if (data.containsKey('max_discount')) {
+      context.handle(
+        _maxDiscountMeta,
+        maxDiscount.isAcceptableOrUnknown(
+          data['max_discount']!,
+          _maxDiscountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('min_purchase')) {
+      context.handle(
+        _minPurchaseMeta,
+        minPurchase.isAcceptableOrUnknown(
+          data['min_purchase']!,
+          _minPurchaseMeta,
+        ),
+      );
+    }
+    if (data.containsKey('start_date')) {
+      context.handle(
+        _startDateMeta,
+        startDate.isAcceptableOrUnknown(data['start_date']!, _startDateMeta),
+      );
+    }
+    if (data.containsKey('end_date')) {
+      context.handle(
+        _endDateMeta,
+        endDate.isAcceptableOrUnknown(data['end_date']!, _endDateMeta),
+      );
+    }
+    if (data.containsKey('quota')) {
+      context.handle(
+        _quotaMeta,
+        quota.isAcceptableOrUnknown(data['quota']!, _quotaMeta),
+      );
+    }
+    if (data.containsKey('used_count')) {
+      context.handle(
+        _usedCountMeta,
+        usedCount.isAcceptableOrUnknown(data['used_count']!, _usedCountMeta),
+      );
+    }
+    if (data.containsKey('is_active')) {
+      context.handle(
+        _isActiveMeta,
+        isActive.isAcceptableOrUnknown(data['is_active']!, _isActiveMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  VoucherRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return VoucherRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      code: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}code'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      type: $VouchersTable.$convertertype.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}type'],
+        )!,
+      ),
+      value: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}value'],
+      )!,
+      maxDiscount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}max_discount'],
+      ),
+      minPurchase: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}min_purchase'],
+      )!,
+      startDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}start_date'],
+      ),
+      endDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}end_date'],
+      ),
+      quota: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}quota'],
+      ),
+      usedCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}used_count'],
+      )!,
+      isActive: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_active'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $VouchersTable createAlias(String alias) {
+    return $VouchersTable(attachedDatabase, alias);
+  }
+
+  static JsonTypeConverter2<VoucherType, String, String> $convertertype =
+      const EnumNameConverter<VoucherType>(VoucherType.values);
+}
+
+class VoucherRow extends DataClass implements Insertable<VoucherRow> {
+  final int id;
+
+  /// Huruf besar, mis. `HEMAT10`.
+  final String code;
+  final String name;
+  final VoucherType type;
+
+  /// Persen (0–100) atau nominal Rupiah, sesuai [type].
+  final double value;
+
+  /// Batas potongan untuk voucher persen (null = tanpa batas).
+  final int? maxDiscount;
+  final int minPurchase;
+
+  /// Tanggal (tanpa jam). Berlaku sejak awal [startDate] s.d. akhir [endDate].
+  final DateTime? startDate;
+  final DateTime? endDate;
+
+  /// Batas total pemakaian (null = tanpa batas).
+  final int? quota;
+  final int usedCount;
+  final bool isActive;
+  final DateTime createdAt;
+  const VoucherRow({
+    required this.id,
+    required this.code,
+    required this.name,
+    required this.type,
+    required this.value,
+    this.maxDiscount,
+    required this.minPurchase,
+    this.startDate,
+    this.endDate,
+    this.quota,
+    required this.usedCount,
+    required this.isActive,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['code'] = Variable<String>(code);
+    map['name'] = Variable<String>(name);
+    {
+      map['type'] = Variable<String>($VouchersTable.$convertertype.toSql(type));
+    }
+    map['value'] = Variable<double>(value);
+    if (!nullToAbsent || maxDiscount != null) {
+      map['max_discount'] = Variable<int>(maxDiscount);
+    }
+    map['min_purchase'] = Variable<int>(minPurchase);
+    if (!nullToAbsent || startDate != null) {
+      map['start_date'] = Variable<DateTime>(startDate);
+    }
+    if (!nullToAbsent || endDate != null) {
+      map['end_date'] = Variable<DateTime>(endDate);
+    }
+    if (!nullToAbsent || quota != null) {
+      map['quota'] = Variable<int>(quota);
+    }
+    map['used_count'] = Variable<int>(usedCount);
+    map['is_active'] = Variable<bool>(isActive);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  VouchersCompanion toCompanion(bool nullToAbsent) {
+    return VouchersCompanion(
+      id: Value(id),
+      code: Value(code),
+      name: Value(name),
+      type: Value(type),
+      value: Value(value),
+      maxDiscount: maxDiscount == null && nullToAbsent
+          ? const Value.absent()
+          : Value(maxDiscount),
+      minPurchase: Value(minPurchase),
+      startDate: startDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(startDate),
+      endDate: endDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(endDate),
+      quota: quota == null && nullToAbsent
+          ? const Value.absent()
+          : Value(quota),
+      usedCount: Value(usedCount),
+      isActive: Value(isActive),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory VoucherRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return VoucherRow(
+      id: serializer.fromJson<int>(json['id']),
+      code: serializer.fromJson<String>(json['code']),
+      name: serializer.fromJson<String>(json['name']),
+      type: $VouchersTable.$convertertype.fromJson(
+        serializer.fromJson<String>(json['type']),
+      ),
+      value: serializer.fromJson<double>(json['value']),
+      maxDiscount: serializer.fromJson<int?>(json['maxDiscount']),
+      minPurchase: serializer.fromJson<int>(json['minPurchase']),
+      startDate: serializer.fromJson<DateTime?>(json['startDate']),
+      endDate: serializer.fromJson<DateTime?>(json['endDate']),
+      quota: serializer.fromJson<int?>(json['quota']),
+      usedCount: serializer.fromJson<int>(json['usedCount']),
+      isActive: serializer.fromJson<bool>(json['isActive']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'code': serializer.toJson<String>(code),
+      'name': serializer.toJson<String>(name),
+      'type': serializer.toJson<String>(
+        $VouchersTable.$convertertype.toJson(type),
+      ),
+      'value': serializer.toJson<double>(value),
+      'maxDiscount': serializer.toJson<int?>(maxDiscount),
+      'minPurchase': serializer.toJson<int>(minPurchase),
+      'startDate': serializer.toJson<DateTime?>(startDate),
+      'endDate': serializer.toJson<DateTime?>(endDate),
+      'quota': serializer.toJson<int?>(quota),
+      'usedCount': serializer.toJson<int>(usedCount),
+      'isActive': serializer.toJson<bool>(isActive),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  VoucherRow copyWith({
+    int? id,
+    String? code,
+    String? name,
+    VoucherType? type,
+    double? value,
+    Value<int?> maxDiscount = const Value.absent(),
+    int? minPurchase,
+    Value<DateTime?> startDate = const Value.absent(),
+    Value<DateTime?> endDate = const Value.absent(),
+    Value<int?> quota = const Value.absent(),
+    int? usedCount,
+    bool? isActive,
+    DateTime? createdAt,
+  }) => VoucherRow(
+    id: id ?? this.id,
+    code: code ?? this.code,
+    name: name ?? this.name,
+    type: type ?? this.type,
+    value: value ?? this.value,
+    maxDiscount: maxDiscount.present ? maxDiscount.value : this.maxDiscount,
+    minPurchase: minPurchase ?? this.minPurchase,
+    startDate: startDate.present ? startDate.value : this.startDate,
+    endDate: endDate.present ? endDate.value : this.endDate,
+    quota: quota.present ? quota.value : this.quota,
+    usedCount: usedCount ?? this.usedCount,
+    isActive: isActive ?? this.isActive,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  VoucherRow copyWithCompanion(VouchersCompanion data) {
+    return VoucherRow(
+      id: data.id.present ? data.id.value : this.id,
+      code: data.code.present ? data.code.value : this.code,
+      name: data.name.present ? data.name.value : this.name,
+      type: data.type.present ? data.type.value : this.type,
+      value: data.value.present ? data.value.value : this.value,
+      maxDiscount: data.maxDiscount.present
+          ? data.maxDiscount.value
+          : this.maxDiscount,
+      minPurchase: data.minPurchase.present
+          ? data.minPurchase.value
+          : this.minPurchase,
+      startDate: data.startDate.present ? data.startDate.value : this.startDate,
+      endDate: data.endDate.present ? data.endDate.value : this.endDate,
+      quota: data.quota.present ? data.quota.value : this.quota,
+      usedCount: data.usedCount.present ? data.usedCount.value : this.usedCount,
+      isActive: data.isActive.present ? data.isActive.value : this.isActive,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('VoucherRow(')
+          ..write('id: $id, ')
+          ..write('code: $code, ')
+          ..write('name: $name, ')
+          ..write('type: $type, ')
+          ..write('value: $value, ')
+          ..write('maxDiscount: $maxDiscount, ')
+          ..write('minPurchase: $minPurchase, ')
+          ..write('startDate: $startDate, ')
+          ..write('endDate: $endDate, ')
+          ..write('quota: $quota, ')
+          ..write('usedCount: $usedCount, ')
+          ..write('isActive: $isActive, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    code,
+    name,
+    type,
+    value,
+    maxDiscount,
+    minPurchase,
+    startDate,
+    endDate,
+    quota,
+    usedCount,
+    isActive,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is VoucherRow &&
+          other.id == this.id &&
+          other.code == this.code &&
+          other.name == this.name &&
+          other.type == this.type &&
+          other.value == this.value &&
+          other.maxDiscount == this.maxDiscount &&
+          other.minPurchase == this.minPurchase &&
+          other.startDate == this.startDate &&
+          other.endDate == this.endDate &&
+          other.quota == this.quota &&
+          other.usedCount == this.usedCount &&
+          other.isActive == this.isActive &&
+          other.createdAt == this.createdAt);
+}
+
+class VouchersCompanion extends UpdateCompanion<VoucherRow> {
+  final Value<int> id;
+  final Value<String> code;
+  final Value<String> name;
+  final Value<VoucherType> type;
+  final Value<double> value;
+  final Value<int?> maxDiscount;
+  final Value<int> minPurchase;
+  final Value<DateTime?> startDate;
+  final Value<DateTime?> endDate;
+  final Value<int?> quota;
+  final Value<int> usedCount;
+  final Value<bool> isActive;
+  final Value<DateTime> createdAt;
+  const VouchersCompanion({
+    this.id = const Value.absent(),
+    this.code = const Value.absent(),
+    this.name = const Value.absent(),
+    this.type = const Value.absent(),
+    this.value = const Value.absent(),
+    this.maxDiscount = const Value.absent(),
+    this.minPurchase = const Value.absent(),
+    this.startDate = const Value.absent(),
+    this.endDate = const Value.absent(),
+    this.quota = const Value.absent(),
+    this.usedCount = const Value.absent(),
+    this.isActive = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  VouchersCompanion.insert({
+    this.id = const Value.absent(),
+    required String code,
+    this.name = const Value.absent(),
+    required VoucherType type,
+    required double value,
+    this.maxDiscount = const Value.absent(),
+    this.minPurchase = const Value.absent(),
+    this.startDate = const Value.absent(),
+    this.endDate = const Value.absent(),
+    this.quota = const Value.absent(),
+    this.usedCount = const Value.absent(),
+    this.isActive = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  }) : code = Value(code),
+       type = Value(type),
+       value = Value(value);
+  static Insertable<VoucherRow> custom({
+    Expression<int>? id,
+    Expression<String>? code,
+    Expression<String>? name,
+    Expression<String>? type,
+    Expression<double>? value,
+    Expression<int>? maxDiscount,
+    Expression<int>? minPurchase,
+    Expression<DateTime>? startDate,
+    Expression<DateTime>? endDate,
+    Expression<int>? quota,
+    Expression<int>? usedCount,
+    Expression<bool>? isActive,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (code != null) 'code': code,
+      if (name != null) 'name': name,
+      if (type != null) 'type': type,
+      if (value != null) 'value': value,
+      if (maxDiscount != null) 'max_discount': maxDiscount,
+      if (minPurchase != null) 'min_purchase': minPurchase,
+      if (startDate != null) 'start_date': startDate,
+      if (endDate != null) 'end_date': endDate,
+      if (quota != null) 'quota': quota,
+      if (usedCount != null) 'used_count': usedCount,
+      if (isActive != null) 'is_active': isActive,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  VouchersCompanion copyWith({
+    Value<int>? id,
+    Value<String>? code,
+    Value<String>? name,
+    Value<VoucherType>? type,
+    Value<double>? value,
+    Value<int?>? maxDiscount,
+    Value<int>? minPurchase,
+    Value<DateTime?>? startDate,
+    Value<DateTime?>? endDate,
+    Value<int?>? quota,
+    Value<int>? usedCount,
+    Value<bool>? isActive,
+    Value<DateTime>? createdAt,
+  }) {
+    return VouchersCompanion(
+      id: id ?? this.id,
+      code: code ?? this.code,
+      name: name ?? this.name,
+      type: type ?? this.type,
+      value: value ?? this.value,
+      maxDiscount: maxDiscount ?? this.maxDiscount,
+      minPurchase: minPurchase ?? this.minPurchase,
+      startDate: startDate ?? this.startDate,
+      endDate: endDate ?? this.endDate,
+      quota: quota ?? this.quota,
+      usedCount: usedCount ?? this.usedCount,
+      isActive: isActive ?? this.isActive,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (code.present) {
+      map['code'] = Variable<String>(code.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (type.present) {
+      map['type'] = Variable<String>(
+        $VouchersTable.$convertertype.toSql(type.value),
+      );
+    }
+    if (value.present) {
+      map['value'] = Variable<double>(value.value);
+    }
+    if (maxDiscount.present) {
+      map['max_discount'] = Variable<int>(maxDiscount.value);
+    }
+    if (minPurchase.present) {
+      map['min_purchase'] = Variable<int>(minPurchase.value);
+    }
+    if (startDate.present) {
+      map['start_date'] = Variable<DateTime>(startDate.value);
+    }
+    if (endDate.present) {
+      map['end_date'] = Variable<DateTime>(endDate.value);
+    }
+    if (quota.present) {
+      map['quota'] = Variable<int>(quota.value);
+    }
+    if (usedCount.present) {
+      map['used_count'] = Variable<int>(usedCount.value);
+    }
+    if (isActive.present) {
+      map['is_active'] = Variable<bool>(isActive.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('VouchersCompanion(')
+          ..write('id: $id, ')
+          ..write('code: $code, ')
+          ..write('name: $name, ')
+          ..write('type: $type, ')
+          ..write('value: $value, ')
+          ..write('maxDiscount: $maxDiscount, ')
+          ..write('minPurchase: $minPurchase, ')
+          ..write('startDate: $startDate, ')
+          ..write('endDate: $endDate, ')
+          ..write('quota: $quota, ')
+          ..write('usedCount: $usedCount, ')
+          ..write('isActive: $isActive, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PaymentMethodsTable extends PaymentMethods
+    with TableInfo<$PaymentMethodsTable, PaymentMethodRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PaymentMethodsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    additionalChecks: GeneratedColumn.checkTextLength(
+      minTextLength: 1,
+      maxTextLength: 40,
+    ),
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<PaymentKind, String> kind =
+      GeneratedColumn<String>(
+        'kind',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+      ).withConverter<PaymentKind>($PaymentMethodsTable.$converterkind);
+  static const VerificationMeta _isActiveMeta = const VerificationMeta(
+    'isActive',
+  );
+  @override
+  late final GeneratedColumn<bool> isActive = GeneratedColumn<bool>(
+    'is_active',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_active" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    kind,
+    isActive,
+    sortOrder,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'payment_methods';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PaymentMethodRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('is_active')) {
+      context.handle(
+        _isActiveMeta,
+        isActive.isAcceptableOrUnknown(data['is_active']!, _isActiveMeta),
+      );
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PaymentMethodRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PaymentMethodRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      kind: $PaymentMethodsTable.$converterkind.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}kind'],
+        )!,
+      ),
+      isActive: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_active'],
+      )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PaymentMethodsTable createAlias(String alias) {
+    return $PaymentMethodsTable(attachedDatabase, alias);
+  }
+
+  static JsonTypeConverter2<PaymentKind, String, String> $converterkind =
+      const EnumNameConverter<PaymentKind>(PaymentKind.values);
+}
+
+class PaymentMethodRow extends DataClass
+    implements Insertable<PaymentMethodRow> {
+  final int id;
+  final String name;
+  final PaymentKind kind;
+  final bool isActive;
+  final int sortOrder;
+  final DateTime createdAt;
+  const PaymentMethodRow({
+    required this.id,
+    required this.name,
+    required this.kind,
+    required this.isActive,
+    required this.sortOrder,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['name'] = Variable<String>(name);
+    {
+      map['kind'] = Variable<String>(
+        $PaymentMethodsTable.$converterkind.toSql(kind),
+      );
+    }
+    map['is_active'] = Variable<bool>(isActive);
+    map['sort_order'] = Variable<int>(sortOrder);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  PaymentMethodsCompanion toCompanion(bool nullToAbsent) {
+    return PaymentMethodsCompanion(
+      id: Value(id),
+      name: Value(name),
+      kind: Value(kind),
+      isActive: Value(isActive),
+      sortOrder: Value(sortOrder),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory PaymentMethodRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PaymentMethodRow(
+      id: serializer.fromJson<int>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      kind: $PaymentMethodsTable.$converterkind.fromJson(
+        serializer.fromJson<String>(json['kind']),
+      ),
+      isActive: serializer.fromJson<bool>(json['isActive']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'name': serializer.toJson<String>(name),
+      'kind': serializer.toJson<String>(
+        $PaymentMethodsTable.$converterkind.toJson(kind),
+      ),
+      'isActive': serializer.toJson<bool>(isActive),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  PaymentMethodRow copyWith({
+    int? id,
+    String? name,
+    PaymentKind? kind,
+    bool? isActive,
+    int? sortOrder,
+    DateTime? createdAt,
+  }) => PaymentMethodRow(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    kind: kind ?? this.kind,
+    isActive: isActive ?? this.isActive,
+    sortOrder: sortOrder ?? this.sortOrder,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  PaymentMethodRow copyWithCompanion(PaymentMethodsCompanion data) {
+    return PaymentMethodRow(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      isActive: data.isActive.present ? data.isActive.value : this.isActive,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PaymentMethodRow(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('kind: $kind, ')
+          ..write('isActive: $isActive, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, name, kind, isActive, sortOrder, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PaymentMethodRow &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.kind == this.kind &&
+          other.isActive == this.isActive &&
+          other.sortOrder == this.sortOrder &&
+          other.createdAt == this.createdAt);
+}
+
+class PaymentMethodsCompanion extends UpdateCompanion<PaymentMethodRow> {
+  final Value<int> id;
+  final Value<String> name;
+  final Value<PaymentKind> kind;
+  final Value<bool> isActive;
+  final Value<int> sortOrder;
+  final Value<DateTime> createdAt;
+  const PaymentMethodsCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.isActive = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  PaymentMethodsCompanion.insert({
+    this.id = const Value.absent(),
+    required String name,
+    required PaymentKind kind,
+    this.isActive = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  }) : name = Value(name),
+       kind = Value(kind);
+  static Insertable<PaymentMethodRow> custom({
+    Expression<int>? id,
+    Expression<String>? name,
+    Expression<String>? kind,
+    Expression<bool>? isActive,
+    Expression<int>? sortOrder,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (kind != null) 'kind': kind,
+      if (isActive != null) 'is_active': isActive,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  PaymentMethodsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? name,
+    Value<PaymentKind>? kind,
+    Value<bool>? isActive,
+    Value<int>? sortOrder,
+    Value<DateTime>? createdAt,
+  }) {
+    return PaymentMethodsCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      kind: kind ?? this.kind,
+      isActive: isActive ?? this.isActive,
+      sortOrder: sortOrder ?? this.sortOrder,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(
+        $PaymentMethodsTable.$converterkind.toSql(kind.value),
+      );
+    }
+    if (isActive.present) {
+      map['is_active'] = Variable<bool>(isActive.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PaymentMethodsCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('kind: $kind, ')
+          ..write('isActive: $isActive, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $SalesTable extends Sales with TableInfo<$SalesTable, SaleRow> {
   @override
   final GeneratedDatabase attachedDatabase;
@@ -1765,6 +2930,31 @@ class $SalesTable extends Sales with TableInfo<$SalesTable, SaleRow> {
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _voucherIdMeta = const VerificationMeta(
+    'voucherId',
+  );
+  @override
+  late final GeneratedColumn<int> voucherId = GeneratedColumn<int>(
+    'voucher_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES vouchers (id)',
+    ),
+  );
+  static const VerificationMeta _voucherCodeMeta = const VerificationMeta(
+    'voucherCode',
+  );
+  @override
+  late final GeneratedColumn<String> voucherCode = GeneratedColumn<String>(
+    'voucher_code',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _totalMeta = const VerificationMeta('total');
   @override
   late final GeneratedColumn<int> total = GeneratedColumn<int>(
@@ -1806,6 +2996,31 @@ class $SalesTable extends Sales with TableInfo<$SalesTable, SaleRow> {
     requiredDuringInsert: false,
     defaultValue: const Constant('tunai'),
   );
+  static const VerificationMeta _paymentMethodIdMeta = const VerificationMeta(
+    'paymentMethodId',
+  );
+  @override
+  late final GeneratedColumn<int> paymentMethodId = GeneratedColumn<int>(
+    'payment_method_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES payment_methods (id)',
+    ),
+  );
+  static const VerificationMeta _paymentRefMeta = const VerificationMeta(
+    'paymentRef',
+  );
+  @override
+  late final GeneratedColumn<String> paymentRef = GeneratedColumn<String>(
+    'payment_ref',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -1828,10 +3043,14 @@ class $SalesTable extends Sales with TableInfo<$SalesTable, SaleRow> {
     subtotal,
     discountPercent,
     discount,
+    voucherId,
+    voucherCode,
     total,
     paid,
     changeAmount,
     paymentMethod,
+    paymentMethodId,
+    paymentRef,
     createdAt,
   ];
   @override
@@ -1904,6 +3123,21 @@ class $SalesTable extends Sales with TableInfo<$SalesTable, SaleRow> {
         discount.isAcceptableOrUnknown(data['discount']!, _discountMeta),
       );
     }
+    if (data.containsKey('voucher_id')) {
+      context.handle(
+        _voucherIdMeta,
+        voucherId.isAcceptableOrUnknown(data['voucher_id']!, _voucherIdMeta),
+      );
+    }
+    if (data.containsKey('voucher_code')) {
+      context.handle(
+        _voucherCodeMeta,
+        voucherCode.isAcceptableOrUnknown(
+          data['voucher_code']!,
+          _voucherCodeMeta,
+        ),
+      );
+    }
     if (data.containsKey('total')) {
       context.handle(
         _totalMeta,
@@ -1938,6 +3172,21 @@ class $SalesTable extends Sales with TableInfo<$SalesTable, SaleRow> {
           data['payment_method']!,
           _paymentMethodMeta,
         ),
+      );
+    }
+    if (data.containsKey('payment_method_id')) {
+      context.handle(
+        _paymentMethodIdMeta,
+        paymentMethodId.isAcceptableOrUnknown(
+          data['payment_method_id']!,
+          _paymentMethodIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('payment_ref')) {
+      context.handle(
+        _paymentRefMeta,
+        paymentRef.isAcceptableOrUnknown(data['payment_ref']!, _paymentRefMeta),
       );
     }
     if (data.containsKey('created_at')) {
@@ -1987,6 +3236,14 @@ class $SalesTable extends Sales with TableInfo<$SalesTable, SaleRow> {
         DriftSqlType.int,
         data['${effectivePrefix}discount'],
       )!,
+      voucherId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}voucher_id'],
+      ),
+      voucherCode: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}voucher_code'],
+      ),
       total: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}total'],
@@ -2003,6 +3260,14 @@ class $SalesTable extends Sales with TableInfo<$SalesTable, SaleRow> {
         DriftSqlType.string,
         data['${effectivePrefix}payment_method'],
       )!,
+      paymentMethodId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}payment_method_id'],
+      ),
+      paymentRef: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}payment_ref'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -2030,14 +3295,26 @@ class SaleRow extends DataClass implements Insertable<SaleRow> {
   /// Total semua baris setelah potongan per barang.
   final int subtotal;
 
-  /// Potongan per transaksi yang dipakai. Jika diisi persen, [discountPercent]
-  /// menyimpan persennya dan [discount] hasil perhitungannya.
+  /// Sejak v3 tidak diisi lagi (potongan manual diganti voucher); tetap ada
+  /// untuk faktur lama.
   final double? discountPercent;
+
+  /// Potongan dalam Rupiah. Sejak v3 berasal dari voucher.
   final int discount;
+
+  /// v3: voucher yang dipakai (kode disalin agar faktur tetap terbaca).
+  final int? voucherId;
+  final String? voucherCode;
   final int total;
   final int paid;
   final int changeAmount;
+
+  /// Nama metode pembayaran saat transaksi (salinan).
   final String paymentMethod;
+
+  /// v3: metode pembayaran dan nomor referensi (QRIS/transfer/kartu).
+  final int? paymentMethodId;
+  final String? paymentRef;
   final DateTime createdAt;
   const SaleRow({
     required this.id,
@@ -2048,10 +3325,14 @@ class SaleRow extends DataClass implements Insertable<SaleRow> {
     required this.subtotal,
     this.discountPercent,
     required this.discount,
+    this.voucherId,
+    this.voucherCode,
     required this.total,
     required this.paid,
     required this.changeAmount,
     required this.paymentMethod,
+    this.paymentMethodId,
+    this.paymentRef,
     required this.createdAt,
   });
   @override
@@ -2067,10 +3348,22 @@ class SaleRow extends DataClass implements Insertable<SaleRow> {
       map['discount_percent'] = Variable<double>(discountPercent);
     }
     map['discount'] = Variable<int>(discount);
+    if (!nullToAbsent || voucherId != null) {
+      map['voucher_id'] = Variable<int>(voucherId);
+    }
+    if (!nullToAbsent || voucherCode != null) {
+      map['voucher_code'] = Variable<String>(voucherCode);
+    }
     map['total'] = Variable<int>(total);
     map['paid'] = Variable<int>(paid);
     map['change_amount'] = Variable<int>(changeAmount);
     map['payment_method'] = Variable<String>(paymentMethod);
+    if (!nullToAbsent || paymentMethodId != null) {
+      map['payment_method_id'] = Variable<int>(paymentMethodId);
+    }
+    if (!nullToAbsent || paymentRef != null) {
+      map['payment_ref'] = Variable<String>(paymentRef);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -2087,10 +3380,22 @@ class SaleRow extends DataClass implements Insertable<SaleRow> {
           ? const Value.absent()
           : Value(discountPercent),
       discount: Value(discount),
+      voucherId: voucherId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(voucherId),
+      voucherCode: voucherCode == null && nullToAbsent
+          ? const Value.absent()
+          : Value(voucherCode),
       total: Value(total),
       paid: Value(paid),
       changeAmount: Value(changeAmount),
       paymentMethod: Value(paymentMethod),
+      paymentMethodId: paymentMethodId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(paymentMethodId),
+      paymentRef: paymentRef == null && nullToAbsent
+          ? const Value.absent()
+          : Value(paymentRef),
       createdAt: Value(createdAt),
     );
   }
@@ -2109,10 +3414,14 @@ class SaleRow extends DataClass implements Insertable<SaleRow> {
       subtotal: serializer.fromJson<int>(json['subtotal']),
       discountPercent: serializer.fromJson<double?>(json['discountPercent']),
       discount: serializer.fromJson<int>(json['discount']),
+      voucherId: serializer.fromJson<int?>(json['voucherId']),
+      voucherCode: serializer.fromJson<String?>(json['voucherCode']),
       total: serializer.fromJson<int>(json['total']),
       paid: serializer.fromJson<int>(json['paid']),
       changeAmount: serializer.fromJson<int>(json['changeAmount']),
       paymentMethod: serializer.fromJson<String>(json['paymentMethod']),
+      paymentMethodId: serializer.fromJson<int?>(json['paymentMethodId']),
+      paymentRef: serializer.fromJson<String?>(json['paymentRef']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -2128,10 +3437,14 @@ class SaleRow extends DataClass implements Insertable<SaleRow> {
       'subtotal': serializer.toJson<int>(subtotal),
       'discountPercent': serializer.toJson<double?>(discountPercent),
       'discount': serializer.toJson<int>(discount),
+      'voucherId': serializer.toJson<int?>(voucherId),
+      'voucherCode': serializer.toJson<String?>(voucherCode),
       'total': serializer.toJson<int>(total),
       'paid': serializer.toJson<int>(paid),
       'changeAmount': serializer.toJson<int>(changeAmount),
       'paymentMethod': serializer.toJson<String>(paymentMethod),
+      'paymentMethodId': serializer.toJson<int?>(paymentMethodId),
+      'paymentRef': serializer.toJson<String?>(paymentRef),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -2145,10 +3458,14 @@ class SaleRow extends DataClass implements Insertable<SaleRow> {
     int? subtotal,
     Value<double?> discountPercent = const Value.absent(),
     int? discount,
+    Value<int?> voucherId = const Value.absent(),
+    Value<String?> voucherCode = const Value.absent(),
     int? total,
     int? paid,
     int? changeAmount,
     String? paymentMethod,
+    Value<int?> paymentMethodId = const Value.absent(),
+    Value<String?> paymentRef = const Value.absent(),
     DateTime? createdAt,
   }) => SaleRow(
     id: id ?? this.id,
@@ -2161,10 +3478,16 @@ class SaleRow extends DataClass implements Insertable<SaleRow> {
         ? discountPercent.value
         : this.discountPercent,
     discount: discount ?? this.discount,
+    voucherId: voucherId.present ? voucherId.value : this.voucherId,
+    voucherCode: voucherCode.present ? voucherCode.value : this.voucherCode,
     total: total ?? this.total,
     paid: paid ?? this.paid,
     changeAmount: changeAmount ?? this.changeAmount,
     paymentMethod: paymentMethod ?? this.paymentMethod,
+    paymentMethodId: paymentMethodId.present
+        ? paymentMethodId.value
+        : this.paymentMethodId,
+    paymentRef: paymentRef.present ? paymentRef.value : this.paymentRef,
     createdAt: createdAt ?? this.createdAt,
   );
   SaleRow copyWithCompanion(SalesCompanion data) {
@@ -2179,6 +3502,10 @@ class SaleRow extends DataClass implements Insertable<SaleRow> {
           ? data.discountPercent.value
           : this.discountPercent,
       discount: data.discount.present ? data.discount.value : this.discount,
+      voucherId: data.voucherId.present ? data.voucherId.value : this.voucherId,
+      voucherCode: data.voucherCode.present
+          ? data.voucherCode.value
+          : this.voucherCode,
       total: data.total.present ? data.total.value : this.total,
       paid: data.paid.present ? data.paid.value : this.paid,
       changeAmount: data.changeAmount.present
@@ -2187,6 +3514,12 @@ class SaleRow extends DataClass implements Insertable<SaleRow> {
       paymentMethod: data.paymentMethod.present
           ? data.paymentMethod.value
           : this.paymentMethod,
+      paymentMethodId: data.paymentMethodId.present
+          ? data.paymentMethodId.value
+          : this.paymentMethodId,
+      paymentRef: data.paymentRef.present
+          ? data.paymentRef.value
+          : this.paymentRef,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -2202,10 +3535,14 @@ class SaleRow extends DataClass implements Insertable<SaleRow> {
           ..write('subtotal: $subtotal, ')
           ..write('discountPercent: $discountPercent, ')
           ..write('discount: $discount, ')
+          ..write('voucherId: $voucherId, ')
+          ..write('voucherCode: $voucherCode, ')
           ..write('total: $total, ')
           ..write('paid: $paid, ')
           ..write('changeAmount: $changeAmount, ')
           ..write('paymentMethod: $paymentMethod, ')
+          ..write('paymentMethodId: $paymentMethodId, ')
+          ..write('paymentRef: $paymentRef, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -2221,10 +3558,14 @@ class SaleRow extends DataClass implements Insertable<SaleRow> {
     subtotal,
     discountPercent,
     discount,
+    voucherId,
+    voucherCode,
     total,
     paid,
     changeAmount,
     paymentMethod,
+    paymentMethodId,
+    paymentRef,
     createdAt,
   );
   @override
@@ -2239,10 +3580,14 @@ class SaleRow extends DataClass implements Insertable<SaleRow> {
           other.subtotal == this.subtotal &&
           other.discountPercent == this.discountPercent &&
           other.discount == this.discount &&
+          other.voucherId == this.voucherId &&
+          other.voucherCode == this.voucherCode &&
           other.total == this.total &&
           other.paid == this.paid &&
           other.changeAmount == this.changeAmount &&
           other.paymentMethod == this.paymentMethod &&
+          other.paymentMethodId == this.paymentMethodId &&
+          other.paymentRef == this.paymentRef &&
           other.createdAt == this.createdAt);
 }
 
@@ -2255,10 +3600,14 @@ class SalesCompanion extends UpdateCompanion<SaleRow> {
   final Value<int> subtotal;
   final Value<double?> discountPercent;
   final Value<int> discount;
+  final Value<int?> voucherId;
+  final Value<String?> voucherCode;
   final Value<int> total;
   final Value<int> paid;
   final Value<int> changeAmount;
   final Value<String> paymentMethod;
+  final Value<int?> paymentMethodId;
+  final Value<String?> paymentRef;
   final Value<DateTime> createdAt;
   const SalesCompanion({
     this.id = const Value.absent(),
@@ -2269,10 +3618,14 @@ class SalesCompanion extends UpdateCompanion<SaleRow> {
     this.subtotal = const Value.absent(),
     this.discountPercent = const Value.absent(),
     this.discount = const Value.absent(),
+    this.voucherId = const Value.absent(),
+    this.voucherCode = const Value.absent(),
     this.total = const Value.absent(),
     this.paid = const Value.absent(),
     this.changeAmount = const Value.absent(),
     this.paymentMethod = const Value.absent(),
+    this.paymentMethodId = const Value.absent(),
+    this.paymentRef = const Value.absent(),
     this.createdAt = const Value.absent(),
   });
   SalesCompanion.insert({
@@ -2284,10 +3637,14 @@ class SalesCompanion extends UpdateCompanion<SaleRow> {
     required int subtotal,
     this.discountPercent = const Value.absent(),
     this.discount = const Value.absent(),
+    this.voucherId = const Value.absent(),
+    this.voucherCode = const Value.absent(),
     required int total,
     required int paid,
     required int changeAmount,
     this.paymentMethod = const Value.absent(),
+    this.paymentMethodId = const Value.absent(),
+    this.paymentRef = const Value.absent(),
     this.createdAt = const Value.absent(),
   }) : invoiceNo = Value(invoiceNo),
        saleDate = Value(saleDate),
@@ -2306,10 +3663,14 @@ class SalesCompanion extends UpdateCompanion<SaleRow> {
     Expression<int>? subtotal,
     Expression<double>? discountPercent,
     Expression<int>? discount,
+    Expression<int>? voucherId,
+    Expression<String>? voucherCode,
     Expression<int>? total,
     Expression<int>? paid,
     Expression<int>? changeAmount,
     Expression<String>? paymentMethod,
+    Expression<int>? paymentMethodId,
+    Expression<String>? paymentRef,
     Expression<DateTime>? createdAt,
   }) {
     return RawValuesInsertable({
@@ -2321,10 +3682,14 @@ class SalesCompanion extends UpdateCompanion<SaleRow> {
       if (subtotal != null) 'subtotal': subtotal,
       if (discountPercent != null) 'discount_percent': discountPercent,
       if (discount != null) 'discount': discount,
+      if (voucherId != null) 'voucher_id': voucherId,
+      if (voucherCode != null) 'voucher_code': voucherCode,
       if (total != null) 'total': total,
       if (paid != null) 'paid': paid,
       if (changeAmount != null) 'change_amount': changeAmount,
       if (paymentMethod != null) 'payment_method': paymentMethod,
+      if (paymentMethodId != null) 'payment_method_id': paymentMethodId,
+      if (paymentRef != null) 'payment_ref': paymentRef,
       if (createdAt != null) 'created_at': createdAt,
     });
   }
@@ -2338,10 +3703,14 @@ class SalesCompanion extends UpdateCompanion<SaleRow> {
     Value<int>? subtotal,
     Value<double?>? discountPercent,
     Value<int>? discount,
+    Value<int?>? voucherId,
+    Value<String?>? voucherCode,
     Value<int>? total,
     Value<int>? paid,
     Value<int>? changeAmount,
     Value<String>? paymentMethod,
+    Value<int?>? paymentMethodId,
+    Value<String?>? paymentRef,
     Value<DateTime>? createdAt,
   }) {
     return SalesCompanion(
@@ -2353,10 +3722,14 @@ class SalesCompanion extends UpdateCompanion<SaleRow> {
       subtotal: subtotal ?? this.subtotal,
       discountPercent: discountPercent ?? this.discountPercent,
       discount: discount ?? this.discount,
+      voucherId: voucherId ?? this.voucherId,
+      voucherCode: voucherCode ?? this.voucherCode,
       total: total ?? this.total,
       paid: paid ?? this.paid,
       changeAmount: changeAmount ?? this.changeAmount,
       paymentMethod: paymentMethod ?? this.paymentMethod,
+      paymentMethodId: paymentMethodId ?? this.paymentMethodId,
+      paymentRef: paymentRef ?? this.paymentRef,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -2388,6 +3761,12 @@ class SalesCompanion extends UpdateCompanion<SaleRow> {
     if (discount.present) {
       map['discount'] = Variable<int>(discount.value);
     }
+    if (voucherId.present) {
+      map['voucher_id'] = Variable<int>(voucherId.value);
+    }
+    if (voucherCode.present) {
+      map['voucher_code'] = Variable<String>(voucherCode.value);
+    }
     if (total.present) {
       map['total'] = Variable<int>(total.value);
     }
@@ -2399,6 +3778,12 @@ class SalesCompanion extends UpdateCompanion<SaleRow> {
     }
     if (paymentMethod.present) {
       map['payment_method'] = Variable<String>(paymentMethod.value);
+    }
+    if (paymentMethodId.present) {
+      map['payment_method_id'] = Variable<int>(paymentMethodId.value);
+    }
+    if (paymentRef.present) {
+      map['payment_ref'] = Variable<String>(paymentRef.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -2417,10 +3802,14 @@ class SalesCompanion extends UpdateCompanion<SaleRow> {
           ..write('subtotal: $subtotal, ')
           ..write('discountPercent: $discountPercent, ')
           ..write('discount: $discount, ')
+          ..write('voucherId: $voucherId, ')
+          ..write('voucherCode: $voucherCode, ')
           ..write('total: $total, ')
           ..write('paid: $paid, ')
           ..write('changeAmount: $changeAmount, ')
           ..write('paymentMethod: $paymentMethod, ')
+          ..write('paymentMethodId: $paymentMethodId, ')
+          ..write('paymentRef: $paymentRef, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -2745,6 +4134,8 @@ class SaleItemRow extends DataClass implements Insertable<SaleItemRow> {
   final String? unitName;
   final double qty;
   final int price;
+
+  /// Sejak v3 selalu 0 (potongan per barang dihapus); tetap ada untuk faktur lama.
   final double discountPercent;
   final int purchasePrice;
   final int subtotal;
@@ -3553,6 +4944,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $CategoriesTable categories = $CategoriesTable(this);
   late final $UnitsTable units = $UnitsTable(this);
   late final $ProductsTable products = $ProductsTable(this);
+  late final $VouchersTable vouchers = $VouchersTable(this);
+  late final $PaymentMethodsTable paymentMethods = $PaymentMethodsTable(this);
   late final $SalesTable sales = $SalesTable(this);
   late final $SaleItemsTable saleItems = $SaleItemsTable(this);
   late final $StockMovementsTable stockMovements = $StockMovementsTable(this);
@@ -3567,6 +4960,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final UsersDao usersDao = UsersDao(this as AppDatabase);
   late final ProductsDao productsDao = ProductsDao(this as AppDatabase);
   late final SalesDao salesDao = SalesDao(this as AppDatabase);
+  late final VouchersDao vouchersDao = VouchersDao(this as AppDatabase);
+  late final PaymentMethodsDao paymentMethodsDao = PaymentMethodsDao(
+    this as AppDatabase,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3576,6 +4973,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     categories,
     units,
     products,
+    vouchers,
+    paymentMethods,
     sales,
     saleItems,
     stockMovements,
@@ -5134,6 +6533,778 @@ typedef $$ProductsTableProcessedTableManager =
         bool stockMovementsRefs,
       })
     >;
+typedef $$VouchersTableCreateCompanionBuilder = VouchersCompanion Function({
+  Value<int> id,
+  required String code,
+  Value<String> name,
+  required VoucherType type,
+  required double value,
+  Value<int?> maxDiscount,
+  Value<int> minPurchase,
+  Value<DateTime?> startDate,
+  Value<DateTime?> endDate,
+  Value<int?> quota,
+  Value<int> usedCount,
+  Value<bool> isActive,
+  Value<DateTime> createdAt,
+});
+typedef $$VouchersTableUpdateCompanionBuilder = VouchersCompanion Function({
+  Value<int> id,
+  Value<String> code,
+  Value<String> name,
+  Value<VoucherType> type,
+  Value<double> value,
+  Value<int?> maxDiscount,
+  Value<int> minPurchase,
+  Value<DateTime?> startDate,
+  Value<DateTime?> endDate,
+  Value<int?> quota,
+  Value<int> usedCount,
+  Value<bool> isActive,
+  Value<DateTime> createdAt,
+});
+
+final class $$VouchersTableReferences
+    extends BaseReferences<_$AppDatabase, $VouchersTable, VoucherRow> {
+  $$VouchersTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static MultiTypedResultKey<$SalesTable, List<SaleRow>> _salesRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.sales,
+    aliasName: 'vouchers__id__sales__voucher_id',
+  );
+
+  $$SalesTableProcessedTableManager get salesRefs {
+    final manager = $$SalesTableTableManager(
+      $_db,
+      $_db.sales,
+    ).filter((f) => f.voucherId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_salesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$VouchersTableFilterComposer
+    extends Composer<_$AppDatabase, $VouchersTable> {
+  $$VouchersTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get code => $composableBuilder(
+    column: $table.code,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<VoucherType, VoucherType, String> get type =>
+      $composableBuilder(
+        column: $table.type,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnFilters<double> get value => $composableBuilder(
+    column: $table.value,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get maxDiscount => $composableBuilder(
+    column: $table.maxDiscount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get minPurchase => $composableBuilder(
+    column: $table.minPurchase,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get startDate => $composableBuilder(
+    column: $table.startDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get endDate => $composableBuilder(
+    column: $table.endDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get quota => $composableBuilder(
+    column: $table.quota,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get usedCount => $composableBuilder(
+    column: $table.usedCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isActive => $composableBuilder(
+    column: $table.isActive,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  Expression<bool> salesRefs(
+    Expression<bool> Function($$SalesTableFilterComposer f) f,
+  ) {
+    final $$SalesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.sales,
+      getReferencedColumn: (t) => t.voucherId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SalesTableFilterComposer(
+            $db: $db,
+            $table: $db.sales,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$VouchersTableOrderingComposer
+    extends Composer<_$AppDatabase, $VouchersTable> {
+  $$VouchersTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get code => $composableBuilder(
+    column: $table.code,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get type => $composableBuilder(
+    column: $table.type,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get value => $composableBuilder(
+    column: $table.value,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get maxDiscount => $composableBuilder(
+    column: $table.maxDiscount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get minPurchase => $composableBuilder(
+    column: $table.minPurchase,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get startDate => $composableBuilder(
+    column: $table.startDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get endDate => $composableBuilder(
+    column: $table.endDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get quota => $composableBuilder(
+    column: $table.quota,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get usedCount => $composableBuilder(
+    column: $table.usedCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isActive => $composableBuilder(
+    column: $table.isActive,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$VouchersTableAnnotationComposer
+    extends Composer<_$AppDatabase, $VouchersTable> {
+  $$VouchersTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get code =>
+      $composableBuilder(column: $table.code, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<VoucherType, String> get type =>
+      $composableBuilder(column: $table.type, builder: (column) => column);
+
+  GeneratedColumn<double> get value =>
+      $composableBuilder(column: $table.value, builder: (column) => column);
+
+  GeneratedColumn<int> get maxDiscount => $composableBuilder(
+    column: $table.maxDiscount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get minPurchase => $composableBuilder(
+    column: $table.minPurchase,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get startDate =>
+      $composableBuilder(column: $table.startDate, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get endDate =>
+      $composableBuilder(column: $table.endDate, builder: (column) => column);
+
+  GeneratedColumn<int> get quota =>
+      $composableBuilder(column: $table.quota, builder: (column) => column);
+
+  GeneratedColumn<int> get usedCount =>
+      $composableBuilder(column: $table.usedCount, builder: (column) => column);
+
+  GeneratedColumn<bool> get isActive =>
+      $composableBuilder(column: $table.isActive, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  Expression<T> salesRefs<T extends Object>(
+    Expression<T> Function($$SalesTableAnnotationComposer a) f,
+  ) {
+    final $$SalesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.sales,
+      getReferencedColumn: (t) => t.voucherId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SalesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.sales,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$VouchersTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $VouchersTable,
+          VoucherRow,
+          $$VouchersTableFilterComposer,
+          $$VouchersTableOrderingComposer,
+          $$VouchersTableAnnotationComposer,
+          $$VouchersTableCreateCompanionBuilder,
+          $$VouchersTableUpdateCompanionBuilder,
+          (VoucherRow, $$VouchersTableReferences),
+          VoucherRow,
+          PrefetchHooks Function({bool salesRefs})
+        > {
+  $$VouchersTableTableManager(_$AppDatabase db, $VouchersTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$VouchersTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$VouchersTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$VouchersTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> code = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<VoucherType> type = const Value.absent(),
+                Value<double> value = const Value.absent(),
+                Value<int?> maxDiscount = const Value.absent(),
+                Value<int> minPurchase = const Value.absent(),
+                Value<DateTime?> startDate = const Value.absent(),
+                Value<DateTime?> endDate = const Value.absent(),
+                Value<int?> quota = const Value.absent(),
+                Value<int> usedCount = const Value.absent(),
+                Value<bool> isActive = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => VouchersCompanion(
+                id: id,
+                code: code,
+                name: name,
+                type: type,
+                value: value,
+                maxDiscount: maxDiscount,
+                minPurchase: minPurchase,
+                startDate: startDate,
+                endDate: endDate,
+                quota: quota,
+                usedCount: usedCount,
+                isActive: isActive,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String code,
+                Value<String> name = const Value.absent(),
+                required VoucherType type,
+                required double value,
+                Value<int?> maxDiscount = const Value.absent(),
+                Value<int> minPurchase = const Value.absent(),
+                Value<DateTime?> startDate = const Value.absent(),
+                Value<DateTime?> endDate = const Value.absent(),
+                Value<int?> quota = const Value.absent(),
+                Value<int> usedCount = const Value.absent(),
+                Value<bool> isActive = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => VouchersCompanion.insert(
+                id: id,
+                code: code,
+                name: name,
+                type: type,
+                value: value,
+                maxDiscount: maxDiscount,
+                minPurchase: minPurchase,
+                startDate: startDate,
+                endDate: endDate,
+                quota: quota,
+                usedCount: usedCount,
+                isActive: isActive,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$VouchersTable, VoucherRow>(table),
+                  $$VouchersTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({salesRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [if (salesRefs) db.sales],
+              addJoins: null,
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (salesRefs)
+                    await $_getPrefetchedData<
+                      VoucherRow,
+                      $VouchersTable,
+                      SaleRow
+                    >(
+                      currentTable: table,
+                      referencedTable: $$VouchersTableReferences
+                          ._salesRefsTable(db),
+                      managerFromTypedResult: (p0) =>
+                          $$VouchersTableReferences(db, table, p0).salesRefs,
+                      referencedItemsForCurrentItem: (item, referencedItems) =>
+                          referencedItems.where((e) => e.voucherId == item.id),
+                      typedResults: items,
+                    ),
+                ];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$VouchersTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $VouchersTable,
+      VoucherRow,
+      $$VouchersTableFilterComposer,
+      $$VouchersTableOrderingComposer,
+      $$VouchersTableAnnotationComposer,
+      $$VouchersTableCreateCompanionBuilder,
+      $$VouchersTableUpdateCompanionBuilder,
+      (VoucherRow, $$VouchersTableReferences),
+      VoucherRow,
+      PrefetchHooks Function({bool salesRefs})
+    >;
+typedef $$PaymentMethodsTableCreateCompanionBuilder =
+    PaymentMethodsCompanion Function({
+      Value<int> id,
+      required String name,
+      required PaymentKind kind,
+      Value<bool> isActive,
+      Value<int> sortOrder,
+      Value<DateTime> createdAt,
+    });
+typedef $$PaymentMethodsTableUpdateCompanionBuilder =
+    PaymentMethodsCompanion Function({
+      Value<int> id,
+      Value<String> name,
+      Value<PaymentKind> kind,
+      Value<bool> isActive,
+      Value<int> sortOrder,
+      Value<DateTime> createdAt,
+    });
+
+final class $$PaymentMethodsTableReferences
+    extends
+        BaseReferences<_$AppDatabase, $PaymentMethodsTable, PaymentMethodRow> {
+  $$PaymentMethodsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static MultiTypedResultKey<$SalesTable, List<SaleRow>> _salesRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.sales,
+    aliasName: 'payment_methods__id__sales__payment_method_id',
+  );
+
+  $$SalesTableProcessedTableManager get salesRefs {
+    final manager = $$SalesTableTableManager(
+      $_db,
+      $_db.sales,
+    ).filter((f) => f.paymentMethodId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_salesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$PaymentMethodsTableFilterComposer
+    extends Composer<_$AppDatabase, $PaymentMethodsTable> {
+  $$PaymentMethodsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<PaymentKind, PaymentKind, String> get kind =>
+      $composableBuilder(
+        column: $table.kind,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnFilters<bool> get isActive => $composableBuilder(
+    column: $table.isActive,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  Expression<bool> salesRefs(
+    Expression<bool> Function($$SalesTableFilterComposer f) f,
+  ) {
+    final $$SalesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.sales,
+      getReferencedColumn: (t) => t.paymentMethodId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SalesTableFilterComposer(
+            $db: $db,
+            $table: $db.sales,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$PaymentMethodsTableOrderingComposer
+    extends Composer<_$AppDatabase, $PaymentMethodsTable> {
+  $$PaymentMethodsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isActive => $composableBuilder(
+    column: $table.isActive,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PaymentMethodsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PaymentMethodsTable> {
+  $$PaymentMethodsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<PaymentKind, String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<bool> get isActive =>
+      $composableBuilder(column: $table.isActive, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  Expression<T> salesRefs<T extends Object>(
+    Expression<T> Function($$SalesTableAnnotationComposer a) f,
+  ) {
+    final $$SalesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.sales,
+      getReferencedColumn: (t) => t.paymentMethodId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SalesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.sales,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$PaymentMethodsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PaymentMethodsTable,
+          PaymentMethodRow,
+          $$PaymentMethodsTableFilterComposer,
+          $$PaymentMethodsTableOrderingComposer,
+          $$PaymentMethodsTableAnnotationComposer,
+          $$PaymentMethodsTableCreateCompanionBuilder,
+          $$PaymentMethodsTableUpdateCompanionBuilder,
+          (PaymentMethodRow, $$PaymentMethodsTableReferences),
+          PaymentMethodRow,
+          PrefetchHooks Function({bool salesRefs})
+        > {
+  $$PaymentMethodsTableTableManager(
+    _$AppDatabase db,
+    $PaymentMethodsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PaymentMethodsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PaymentMethodsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PaymentMethodsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<PaymentKind> kind = const Value.absent(),
+                Value<bool> isActive = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => PaymentMethodsCompanion(
+                id: id,
+                name: name,
+                kind: kind,
+                isActive: isActive,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String name,
+                required PaymentKind kind,
+                Value<bool> isActive = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => PaymentMethodsCompanion.insert(
+                id: id,
+                name: name,
+                kind: kind,
+                isActive: isActive,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$PaymentMethodsTable, PaymentMethodRow>(table),
+                  $$PaymentMethodsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({salesRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [if (salesRefs) db.sales],
+              addJoins: null,
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (salesRefs)
+                    await $_getPrefetchedData<
+                      PaymentMethodRow,
+                      $PaymentMethodsTable,
+                      SaleRow
+                    >(
+                      currentTable: table,
+                      referencedTable: $$PaymentMethodsTableReferences
+                          ._salesRefsTable(db),
+                      managerFromTypedResult: (p0) =>
+                          $$PaymentMethodsTableReferences(
+                            db,
+                            table,
+                            p0,
+                          ).salesRefs,
+                      referencedItemsForCurrentItem: (item, referencedItems) =>
+                          referencedItems.where(
+                            (e) => e.paymentMethodId == item.id,
+                          ),
+                      typedResults: items,
+                    ),
+                ];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$PaymentMethodsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PaymentMethodsTable,
+      PaymentMethodRow,
+      $$PaymentMethodsTableFilterComposer,
+      $$PaymentMethodsTableOrderingComposer,
+      $$PaymentMethodsTableAnnotationComposer,
+      $$PaymentMethodsTableCreateCompanionBuilder,
+      $$PaymentMethodsTableUpdateCompanionBuilder,
+      (PaymentMethodRow, $$PaymentMethodsTableReferences),
+      PaymentMethodRow,
+      PrefetchHooks Function({bool salesRefs})
+    >;
 typedef $$SalesTableCreateCompanionBuilder = SalesCompanion Function({
   Value<int> id,
   required String invoiceNo,
@@ -5143,10 +7314,14 @@ typedef $$SalesTableCreateCompanionBuilder = SalesCompanion Function({
   required int subtotal,
   Value<double?> discountPercent,
   Value<int> discount,
+  Value<int?> voucherId,
+  Value<String?> voucherCode,
   required int total,
   required int paid,
   required int changeAmount,
   Value<String> paymentMethod,
+  Value<int?> paymentMethodId,
+  Value<String?> paymentRef,
   Value<DateTime> createdAt,
 });
 typedef $$SalesTableUpdateCompanionBuilder = SalesCompanion Function({
@@ -5158,10 +7333,14 @@ typedef $$SalesTableUpdateCompanionBuilder = SalesCompanion Function({
   Value<int> subtotal,
   Value<double?> discountPercent,
   Value<int> discount,
+  Value<int?> voucherId,
+  Value<String?> voucherCode,
   Value<int> total,
   Value<int> paid,
   Value<int> changeAmount,
   Value<String> paymentMethod,
+  Value<int?> paymentMethodId,
+  Value<String?> paymentRef,
   Value<DateTime> createdAt,
 });
 
@@ -5180,6 +7359,41 @@ final class $$SalesTableReferences
       $_db.users,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_userIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $VouchersTable _voucherIdTable(_$AppDatabase db) =>
+      db.vouchers.createAlias('sales__voucher_id__vouchers__id');
+
+  $$VouchersTableProcessedTableManager? get voucherId {
+    final $_column = $_itemColumn<int>('voucher_id');
+    if ($_column == null) return null;
+    final manager = $$VouchersTableTableManager(
+      $_db,
+      $_db.vouchers,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_voucherIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $PaymentMethodsTable _paymentMethodIdTable(_$AppDatabase db) => db
+      .paymentMethods
+      .createAlias('sales__payment_method_id__payment_methods__id');
+
+  $$PaymentMethodsTableProcessedTableManager? get paymentMethodId {
+    final $_column = $_itemColumn<int>('payment_method_id');
+    if ($_column == null) return null;
+    final manager = $$PaymentMethodsTableTableManager(
+      $_db,
+      $_db.paymentMethods,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_paymentMethodIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -5248,6 +7462,11 @@ class $$SalesTableFilterComposer extends Composer<_$AppDatabase, $SalesTable> {
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get voucherCode => $composableBuilder(
+    column: $table.voucherCode,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<int> get total => $composableBuilder(
     column: $table.total,
     builder: (column) => ColumnFilters(column),
@@ -5265,6 +7484,11 @@ class $$SalesTableFilterComposer extends Composer<_$AppDatabase, $SalesTable> {
 
   ColumnFilters<String> get paymentMethod => $composableBuilder(
     column: $table.paymentMethod,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get paymentRef => $composableBuilder(
+    column: $table.paymentRef,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5287,6 +7511,52 @@ class $$SalesTableFilterComposer extends Composer<_$AppDatabase, $SalesTable> {
           }) => $$UsersTableFilterComposer(
             $db: $db,
             $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$VouchersTableFilterComposer get voucherId {
+    final $$VouchersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.voucherId,
+      referencedTable: $db.vouchers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VouchersTableFilterComposer(
+            $db: $db,
+            $table: $db.vouchers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$PaymentMethodsTableFilterComposer get paymentMethodId {
+    final $$PaymentMethodsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.paymentMethodId,
+      referencedTable: $db.paymentMethods,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PaymentMethodsTableFilterComposer(
+            $db: $db,
+            $table: $db.paymentMethods,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -5366,6 +7636,11 @@ class $$SalesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get voucherCode => $composableBuilder(
+    column: $table.voucherCode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get total => $composableBuilder(
     column: $table.total,
     builder: (column) => ColumnOrderings(column),
@@ -5383,6 +7658,11 @@ class $$SalesTableOrderingComposer
 
   ColumnOrderings<String> get paymentMethod => $composableBuilder(
     column: $table.paymentMethod,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get paymentRef => $composableBuilder(
+    column: $table.paymentRef,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -5405,6 +7685,52 @@ class $$SalesTableOrderingComposer
           }) => $$UsersTableOrderingComposer(
             $db: $db,
             $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$VouchersTableOrderingComposer get voucherId {
+    final $$VouchersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.voucherId,
+      referencedTable: $db.vouchers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VouchersTableOrderingComposer(
+            $db: $db,
+            $table: $db.vouchers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$PaymentMethodsTableOrderingComposer get paymentMethodId {
+    final $$PaymentMethodsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.paymentMethodId,
+      referencedTable: $db.paymentMethods,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PaymentMethodsTableOrderingComposer(
+            $db: $db,
+            $table: $db.paymentMethods,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -5447,6 +7773,11 @@ class $$SalesTableAnnotationComposer
   GeneratedColumn<int> get discount =>
       $composableBuilder(column: $table.discount, builder: (column) => column);
 
+  GeneratedColumn<String> get voucherCode => $composableBuilder(
+    column: $table.voucherCode,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<int> get total =>
       $composableBuilder(column: $table.total, builder: (column) => column);
 
@@ -5460,6 +7791,11 @@ class $$SalesTableAnnotationComposer
 
   GeneratedColumn<String> get paymentMethod => $composableBuilder(
     column: $table.paymentMethod,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get paymentRef => $composableBuilder(
+    column: $table.paymentRef,
     builder: (column) => column,
   );
 
@@ -5480,6 +7816,52 @@ class $$SalesTableAnnotationComposer
           }) => $$UsersTableAnnotationComposer(
             $db: $db,
             $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$VouchersTableAnnotationComposer get voucherId {
+    final $$VouchersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.voucherId,
+      referencedTable: $db.vouchers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VouchersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.vouchers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$PaymentMethodsTableAnnotationComposer get paymentMethodId {
+    final $$PaymentMethodsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.paymentMethodId,
+      referencedTable: $db.paymentMethods,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PaymentMethodsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.paymentMethods,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -5528,7 +7910,12 @@ class $$SalesTableTableManager
           $$SalesTableUpdateCompanionBuilder,
           (SaleRow, $$SalesTableReferences),
           SaleRow,
-          PrefetchHooks Function({bool userId, bool saleItemsRefs})
+          PrefetchHooks Function({
+            bool userId,
+            bool voucherId,
+            bool paymentMethodId,
+            bool saleItemsRefs,
+          })
         > {
   $$SalesTableTableManager(_$AppDatabase db, $SalesTable table)
     : super(
@@ -5551,10 +7938,14 @@ class $$SalesTableTableManager
                 Value<int> subtotal = const Value.absent(),
                 Value<double?> discountPercent = const Value.absent(),
                 Value<int> discount = const Value.absent(),
+                Value<int?> voucherId = const Value.absent(),
+                Value<String?> voucherCode = const Value.absent(),
                 Value<int> total = const Value.absent(),
                 Value<int> paid = const Value.absent(),
                 Value<int> changeAmount = const Value.absent(),
                 Value<String> paymentMethod = const Value.absent(),
+                Value<int?> paymentMethodId = const Value.absent(),
+                Value<String?> paymentRef = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => SalesCompanion(
                 id: id,
@@ -5565,10 +7956,14 @@ class $$SalesTableTableManager
                 subtotal: subtotal,
                 discountPercent: discountPercent,
                 discount: discount,
+                voucherId: voucherId,
+                voucherCode: voucherCode,
                 total: total,
                 paid: paid,
                 changeAmount: changeAmount,
                 paymentMethod: paymentMethod,
+                paymentMethodId: paymentMethodId,
+                paymentRef: paymentRef,
                 createdAt: createdAt,
               ),
           createCompanionCallback:
@@ -5581,10 +7976,14 @@ class $$SalesTableTableManager
                 required int subtotal,
                 Value<double?> discountPercent = const Value.absent(),
                 Value<int> discount = const Value.absent(),
+                Value<int?> voucherId = const Value.absent(),
+                Value<String?> voucherCode = const Value.absent(),
                 required int total,
                 required int paid,
                 required int changeAmount,
                 Value<String> paymentMethod = const Value.absent(),
+                Value<int?> paymentMethodId = const Value.absent(),
+                Value<String?> paymentRef = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => SalesCompanion.insert(
                 id: id,
@@ -5595,10 +7994,14 @@ class $$SalesTableTableManager
                 subtotal: subtotal,
                 discountPercent: discountPercent,
                 discount: discount,
+                voucherId: voucherId,
+                voucherCode: voucherCode,
                 total: total,
                 paid: paid,
                 changeAmount: changeAmount,
                 paymentMethod: paymentMethod,
+                paymentMethodId: paymentMethodId,
+                paymentRef: paymentRef,
                 createdAt: createdAt,
               ),
           withReferenceMapper: (p0) => p0
@@ -5609,62 +8012,95 @@ class $$SalesTableTableManager
                 ),
               )
               .toList(),
-          prefetchHooksCallback: ({userId = false, saleItemsRefs = false}) {
-            return PrefetchHooks(
-              db: db,
-              explicitlyWatchedTables: [if (saleItemsRefs) db.saleItems],
-              addJoins:
-                  <
-                    T extends TableManagerState<
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic
-                    >
-                  >(state) {
-                    if (userId) {
-                      state = state.withJoin(
-                        currentTable: table,
-                        currentColumn: table.userId,
-                        referencedTable: $$SalesTableReferences._userIdTable(
-                          db,
-                        ),
-                        referencedColumn: $$SalesTableReferences
-                            ._userIdTable(db)
-                            .id,
-                      ) as T;
-                    }
+          prefetchHooksCallback:
+              ({
+                userId = false,
+                voucherId = false,
+                paymentMethodId = false,
+                saleItemsRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [if (saleItemsRefs) db.saleItems],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (userId) {
+                          state = state.withJoin(
+                            currentTable: table,
+                            currentColumn: table.userId,
+                            referencedTable: $$SalesTableReferences
+                                ._userIdTable(db),
+                            referencedColumn: $$SalesTableReferences
+                                ._userIdTable(db)
+                                .id,
+                          ) as T;
+                        }
+                        if (voucherId) {
+                          state = state.withJoin(
+                            currentTable: table,
+                            currentColumn: table.voucherId,
+                            referencedTable: $$SalesTableReferences
+                                ._voucherIdTable(db),
+                            referencedColumn: $$SalesTableReferences
+                                ._voucherIdTable(db)
+                                .id,
+                          ) as T;
+                        }
+                        if (paymentMethodId) {
+                          state = state.withJoin(
+                            currentTable: table,
+                            currentColumn: table.paymentMethodId,
+                            referencedTable: $$SalesTableReferences
+                                ._paymentMethodIdTable(db),
+                            referencedColumn: $$SalesTableReferences
+                                ._paymentMethodIdTable(db)
+                                .id,
+                          ) as T;
+                        }
 
-                    return state;
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (saleItemsRefs)
+                        await $_getPrefetchedData<
+                          SaleRow,
+                          $SalesTable,
+                          SaleItemRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$SalesTableReferences
+                              ._saleItemsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$SalesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).saleItemsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.saleId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
                   },
-              getPrefetchedDataCallback: (items) async {
-                return [
-                  if (saleItemsRefs)
-                    await $_getPrefetchedData<
-                      SaleRow,
-                      $SalesTable,
-                      SaleItemRow
-                    >(
-                      currentTable: table,
-                      referencedTable: $$SalesTableReferences
-                          ._saleItemsRefsTable(db),
-                      managerFromTypedResult: (p0) =>
-                          $$SalesTableReferences(db, table, p0).saleItemsRefs,
-                      referencedItemsForCurrentItem: (item, referencedItems) =>
-                          referencedItems.where((e) => e.saleId == item.id),
-                      typedResults: items,
-                    ),
-                ];
+                );
               },
-            );
-          },
         ),
       );
 }
@@ -5681,7 +8117,12 @@ typedef $$SalesTableProcessedTableManager =
       $$SalesTableUpdateCompanionBuilder,
       (SaleRow, $$SalesTableReferences),
       SaleRow,
-      PrefetchHooks Function({bool userId, bool saleItemsRefs})
+      PrefetchHooks Function({
+        bool userId,
+        bool voucherId,
+        bool paymentMethodId,
+        bool saleItemsRefs,
+      })
     >;
 typedef $$SaleItemsTableCreateCompanionBuilder = SaleItemsCompanion Function({
   Value<int> id,
@@ -6563,6 +9004,10 @@ class $AppDatabaseManager {
       $$UnitsTableTableManager(_db, _db.units);
   $$ProductsTableTableManager get products =>
       $$ProductsTableTableManager(_db, _db.products);
+  $$VouchersTableTableManager get vouchers =>
+      $$VouchersTableTableManager(_db, _db.vouchers);
+  $$PaymentMethodsTableTableManager get paymentMethods =>
+      $$PaymentMethodsTableTableManager(_db, _db.paymentMethods);
   $$SalesTableTableManager get sales =>
       $$SalesTableTableManager(_db, _db.sales);
   $$SaleItemsTableTableManager get saleItems =>

@@ -15,9 +15,8 @@ const _cols = <(String, double?, TextAlign)>[
   ('Nama Barang', null, TextAlign.left),
   ('Jumlah', 132, TextAlign.center),
   ('Satuan', 64, TextAlign.left),
-  ('Harga', 104, TextAlign.right),
-  ('Pot.', 64, TextAlign.right),
-  ('Total', 120, TextAlign.right),
+  ('Harga', 110, TextAlign.right),
+  ('Total', 130, TextAlign.right),
   ('', 44, TextAlign.center),
 ];
 
@@ -31,7 +30,6 @@ class CartTable extends StatelessWidget {
     required this.onSelect,
     required this.onQtyChanged,
     required this.onEditQty,
-    required this.onEditDiscount,
     required this.onRemove,
   });
 
@@ -41,7 +39,6 @@ class CartTable extends StatelessWidget {
   final ValueChanged<int> onSelect;
   final void Function(int index, double qty) onQtyChanged;
   final ValueChanged<int> onEditQty;
-  final ValueChanged<int> onEditDiscount;
   final ValueChanged<int> onRemove;
 
   @override
@@ -79,7 +76,6 @@ class CartTable extends StatelessWidget {
                       onMinus: () => onQtyChanged(i, cart.lines[i].qty - 1),
                       onPlus: () => onQtyChanged(i, cart.lines[i].qty + 1),
                       onEditQty: () => onEditQty(i),
-                      onEditDiscount: () => onEditDiscount(i),
                       onRemove: () => onRemove(i),
                     ),
                   ),
@@ -131,7 +127,6 @@ class _Row extends StatelessWidget {
     required this.onMinus,
     required this.onPlus,
     required this.onEditQty,
-    required this.onEditDiscount,
     required this.onRemove,
   });
 
@@ -142,7 +137,6 @@ class _Row extends StatelessWidget {
   final VoidCallback onMinus;
   final VoidCallback onPlus;
   final VoidCallback onEditQty;
-  final VoidCallback onEditDiscount;
   final VoidCallback onRemove;
 
   @override
@@ -231,20 +225,6 @@ class _Row extends StatelessWidget {
             ),
             _cell(
               _cols[6].$2,
-              Align(
-                alignment: Alignment.centerRight,
-                child: _TappableValue(
-                  text: line.discountPercent == 0
-                      ? '–'
-                      : '${Fmt.number(line.discountPercent)}%',
-                  color: line.discountPercent == 0 ? c.labelTertiary : c.danger,
-                  onTap: onEditDiscount,
-                  tooltip: 'Ubah potongan barang',
-                ),
-              ),
-            ),
-            _cell(
-              _cols[7].$2,
               AnimatedSwitcher(
                 duration: AppDurations.medium,
                 switchInCurve: SpringCurve.bouncy,
@@ -259,7 +239,7 @@ class _Row extends StatelessWidget {
               ),
             ),
             _cell(
-              _cols[8].$2,
+              _cols[7].$2,
               Tooltip(
                 message: 'Hapus barang',
                 child: CupertinoButton(

@@ -1,52 +1,38 @@
 import 'package:flutter/foundation.dart';
 
 import '../../products/domain/product.dart';
+import '../../vouchers/domain/voucher.dart';
 
-enum DiscountType { percent, amount }
-
-/// Satu baris keranjang. Total baris = qty × harga − potongan % baris,
-/// dibulatkan ke Rupiah terdekat.
+/// Satu baris keranjang. Total baris = qty × harga, dibulatkan ke Rupiah.
 @immutable
 class CartLine {
-  const CartLine({
-    required this.product,
-    required this.qty,
-    this.discountPercent = 0,
-  });
+  const CartLine({required this.product, required this.qty});
 
   final Product product;
   final double qty;
-  final double discountPercent;
 
   int get price => product.sellingPrice;
 
-  int get total => (qty * price * (100 - discountPercent) / 100).round();
+  int get total => (qty * price).round();
 
   /// Stok di database tidak cukup untuk qty ini (penjualan tetap diizinkan).
   bool get exceedsStock => qty > product.stock;
 
-  CartLine copyWith({double? qty, double? discountPercent}) => CartLine(
-    product: product,
-    qty: qty ?? this.qty,
-    discountPercent: discountPercent ?? this.discountPercent,
-  );
+  CartLine copyWith({double? qty}) =>
+      CartLine(product: product, qty: qty ?? this.qty);
 }
 
 /// Keranjang belanja yang sedang diproses kasir. Immutable: setiap perubahan
-/// menghasilkan objek baru.
+/// menghasilkan objek baru. Satu-satunya potongan adalah [voucher].
 @immutable
 class Cart {
-  const Cart({
-    this.lines = const [],
-    this.discountType = DiscountType.percent,
-    this.discountValue = 0,
-  });
+  const Cart({this.lines = const [], this.voucher});
 
   final List<CartLine> lines;
-  final DiscountType discountType;
 
-  /// Persen (0–100) atau nominal Rupiah, sesuai [discountType].
-  final double discountValue;
+  /// Voucher yang sudah lolos pemeriksaan saat dipasang. Status/tanggal/kuota
+  /// diperiksa ulang saat checkout; di sini hanya minimal belanja.
+  final Voucher? voucher;
 
   bool get isEmpty => lines.isEmpty;
 
@@ -55,36 +41,31 @@ class Cart {
 
   int get subtotal => lines.fold(0, (s, l) => s + l.total);
 
-  /// Potongan per transaksi dalam Rupiah, tidak pernah melebihi subtotal.
+  /// Kekurangan belanja agar voucher berlaku (0 = sudah memenuhi).
+  int get voucherShortfall {
+    final v = voucher;
+    if (v == null || subtotal >= v.minPurchase) return 0;
+    return v.minPurchase - subtotal;
+  }
+
   int get discount {
-    final raw = switch (discountType) {
-      DiscountType.percent => (subtotal * discountValue / 100).round(),
-      DiscountType.amount => discountValue.round(),
-    };
-    return raw.clamp(0, subtotal);
+    final v = voucher;
+    if (v == null || voucherShortfall > 0) return 0;
+    return v.discountFor(subtotal);
   }
 
   int get total => subtotal - discount;
-
-  Cart copyWith({
-    List<CartLine>? lines,
-    DiscountType? discountType,
-    double? discountValue,
-  }) => Cart(
-    lines: lines ?? this.lines,
-    discountType: discountType ?? this.discountType,
-    discountValue: discountValue ?? this.discountValue,
-  );
 
   /// Menambah barang. Jika barang yang sama sudah ada, qty-nya dijumlahkan.
   Cart add(Product product, {double qty = 1}) {
     final i = lines.indexWhere((l) => l.product.id == product.id);
     if (i == -1) {
-      return copyWith(
+      return Cart(
         lines: [
           ...lines,
           CartLine(product: product, qty: qty),
         ],
+        voucher: voucher,
       );
     }
     return _replace(i, lines[i].copyWith(qty: lines[i].qty + qty));
@@ -96,21 +77,11 @@ class Cart {
     return _replace(index, lines[index].copyWith(qty: qty));
   }
 
-  Cart setLineDiscount(int index, double percent) => _replace(
-    index,
-    lines[index].copyWith(discountPercent: percent.clamp(0, 100)),
-  );
+  Cart removeAt(int index) =>
+      Cart(lines: [...lines]..removeAt(index), voucher: voucher);
 
-  Cart removeAt(int index) => copyWith(lines: [...lines]..removeAt(index));
-
-  Cart setDiscount(DiscountType type, double value) => copyWith(
-    discountType: type,
-    discountValue: switch (type) {
-      DiscountType.percent => value.clamp(0, 100),
-      DiscountType.amount => value < 0 ? 0 : value,
-    },
-  );
+  Cart withVoucher(Voucher? voucher) => Cart(lines: lines, voucher: voucher);
 
   Cart _replace(int index, CartLine line) =>
-      copyWith(lines: [...lines]..[index] = line);
+      Cart(lines: [...lines]..[index] = line, voucher: voucher);
 }

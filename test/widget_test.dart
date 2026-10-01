@@ -9,6 +9,7 @@ import 'package:toko/core/database/app_database.dart';
 import 'package:toko/core/security/password_hasher.dart';
 import 'package:toko/core/widgets/app_button.dart';
 import 'package:toko/core/widgets/app_sidebar.dart';
+import 'package:toko/features/vouchers/domain/voucher.dart';
 
 import 'helpers/test_app.dart';
 
@@ -165,7 +166,7 @@ void main() {
     await unmount(tester);
   });
 
-  testWidgets('Kasir scan barang, bayar, dan faktur muncul di Hari Ini', (
+  testWidgets('Kasir scan, pakai voucher, bayar tunai dan QRIS', (
     tester,
   ) async {
     final db = await pumpApp(tester);
@@ -192,13 +193,35 @@ void main() {
     // 2 × 3.500 + 3.500 = 10.500
     expect(find.text('Rp 10.500'), findsWidgets);
 
-    // F2 membuka pembayaran.
+    // F4: pasang voucher (dibuat admin sebelumnya).
+    await tester.runAsync(
+      () => db
+          .into(db.vouchers)
+          .insert(
+            VouchersCompanion.insert(
+              code: 'HEMAT1K',
+              type: VoucherType.amount,
+              value: 1000,
+            ),
+          ),
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.f4);
+    await settle(tester);
+    expect(find.text('Pakai Voucher'), findsWidgets);
+    await tester.enterText(find.byType(EditableText).last, 'hemat1k');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await settle(tester);
+    expect(find.text('HEMAT1K'), findsOneWidget);
+    expect(find.text('Rp 9.500'), findsWidgets); // 10.500 − 1.000
+
+    // F2 membuka popup pembayaran; Tunai terpilih otomatis.
     await tester.sendKeyEvent(LogicalKeyboardKey.f2);
     await settle(tester);
     expect(find.text('Pembayaran'), findsOneWidget);
+    expect(find.text('QRIS'), findsOneWidget);
     await tester.enterText(find.byType(EditableText).last, '20000');
     await settle(tester);
-    expect(find.text('Rp 9.500'), findsOneWidget); // kembalian
+    expect(find.text('Rp 10.500'), findsWidgets); // kembalian
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await settle(tester);
 
@@ -208,11 +231,27 @@ void main() {
     await settle(tester);
     expect(find.text('Belum ada barang'), findsOneWidget);
 
-    // Tab Hari Ini menampilkan faktur.
-    await tester.tap(find.text('Hari Ini (1)'));
+    // Transaksi kedua dibayar QRIS (non-tunai, bayar pas).
+    await scan('BRG010');
+    await tester.sendKeyEvent(LogicalKeyboardKey.f2);
     await settle(tester);
-    expect(find.textContaining('INV-'), findsOneWidget);
-    expect(find.text('Kasir Satu'), findsWidgets);
+    await tester.tap(find.text('QRIS'));
+    await settle(tester);
+    expect(find.textContaining('No. referensi'), findsOneWidget);
+    await tester.enterText(find.byType(EditableText).last, 'QR-77');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await settle(tester);
+    expect(find.textContaining('QRIS'), findsWidgets);
+    await tester.tap(find.textContaining('Transaksi Baru  (Enter)'));
+    await settle(tester);
+
+    // Tab Hari Ini menampilkan kedua faktur beserta voucher dan metode.
+    await tester.tap(find.text('Hari Ini (2)'));
+    await settle(tester);
+    expect(find.textContaining('INV-'), findsNWidgets(2));
+    expect(find.textContaining('HEMAT1K'), findsOneWidget);
+    expect(find.text('QRIS'), findsOneWidget);
+    expect(find.text('Tunai'), findsOneWidget);
 
     // Stok berkurang.
     final indomie = (await tester.runAsync(

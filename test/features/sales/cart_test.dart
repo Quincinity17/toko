@@ -3,6 +3,29 @@ import 'package:toko/features/products/domain/product.dart';
 import 'package:toko/features/sales/domain/cart.dart';
 import 'package:toko/features/sales/domain/cash_suggestions.dart';
 import 'package:toko/features/sales/domain/invoice_number.dart';
+import 'package:toko/features/vouchers/domain/voucher.dart';
+
+Voucher voucher(
+  VoucherType type,
+  double value, {
+  int? maxDiscount,
+  int minPurchase = 0,
+  DateTime? start,
+  DateTime? end,
+  int? quota,
+  int used = 0,
+}) => Voucher(
+  id: 1,
+  code: 'TES',
+  type: type,
+  value: value,
+  maxDiscount: maxDiscount,
+  minPurchase: minPurchase,
+  startDate: start,
+  endDate: end,
+  quota: quota,
+  usedCount: used,
+);
 
 Product product(int id, int price, {double stock = 100}) => Product(
   id: id,
@@ -16,14 +39,13 @@ Product product(int id, int price, {double stock = 100}) => Product(
 
 void main() {
   group('Cart', () {
-    test('contoh dari layar iPOS: 2 barang, potongan 2%', () {
+    test('subtotal dan total tanpa voucher', () {
       final cart = const Cart()
           .add(product(1, 1500), qty: 5)
-          .add(product(2, 1700), qty: 5)
-          .setDiscount(DiscountType.percent, 2);
+          .add(product(2, 1700), qty: 5);
       expect(cart.subtotal, 16000);
-      expect(cart.discount, 320);
-      expect(cart.total, 15680);
+      expect(cart.discount, 0);
+      expect(cart.total, 16000);
     });
 
     test('barang yang sama digabung, bukan baris baru', () {
@@ -34,22 +56,9 @@ void main() {
       expect(cart.lines.single.qty, 3);
     });
 
-    test('potongan per barang dan qty desimal dibulatkan ke Rupiah', () {
-      final cart = const Cart()
-          .add(product(1, 29000), qty: 0.75) // 21.750
-          .add(product(2, 3333), qty: 3) // 9.999
-          .setLineDiscount(1, 10); // 9.999 × 0,9 = 8.999,1 → 8.999
-      expect(cart.lines[0].total, 21750);
-      expect(cart.lines[1].total, 8999);
-      expect(cart.subtotal, 30749);
-    });
-
-    test('potongan nominal tidak boleh melebihi subtotal', () {
-      final cart = const Cart()
-          .add(product(1, 5000))
-          .setDiscount(DiscountType.amount, 999999);
-      expect(cart.discount, 5000);
-      expect(cart.total, 0);
+    test('qty desimal dibulatkan ke Rupiah', () {
+      final cart = const Cart().add(product(1, 3333), qty: 0.75);
+      expect(cart.lines.single.total, 2500); // 2.499,75
     });
 
     test('qty 0 menghapus baris', () {
@@ -60,6 +69,85 @@ void main() {
     test('tanda stok kurang', () {
       final cart = const Cart().add(product(1, 5000, stock: 2), qty: 3);
       expect(cart.lines.single.exceedsStock, isTrue);
+    });
+
+    test('voucher persen dengan batas maksimal', () {
+      final cart = const Cart()
+          .add(product(1, 10000), qty: 10)
+          .withVoucher(voucher(VoucherType.percent, 10, maxDiscount: 5000));
+      expect(cart.discount, 5000); // 10% dari 100.000 = 10.000 → dibatasi
+      expect(cart.total, 95000);
+    });
+
+    test('voucher belum berlaku sampai minimal belanja terpenuhi', () {
+      var cart = const Cart()
+          .add(product(1, 10000))
+          .withVoucher(voucher(VoucherType.amount, 5000, minPurchase: 25000));
+      expect(cart.voucherShortfall, 15000);
+      expect(cart.discount, 0);
+      cart = cart.setQty(0, 3);
+      expect(cart.voucherShortfall, 0);
+      expect(cart.discount, 5000);
+    });
+
+    test('voucher nominal tidak melebihi subtotal', () {
+      final cart = const Cart()
+          .add(product(1, 3000))
+          .withVoucher(voucher(VoucherType.amount, 10000));
+      expect(cart.discount, 3000);
+      expect(cart.total, 0);
+    });
+  });
+
+  group('Voucher', () {
+    final now = DateTime(2026, 10, 15, 13);
+
+    test('status mengikuti tanggal, kuota, dan aktif', () {
+      expect(
+        voucher(VoucherType.amount, 1000).statusAt(now),
+        VoucherStatus.active,
+      );
+      expect(
+        voucher(
+          VoucherType.amount,
+          1000,
+          start: DateTime(2026, 10, 16),
+        ).statusAt(now),
+        VoucherStatus.scheduled,
+      );
+      // Berlaku sampai akhir hari tanggal berakhir.
+      expect(
+        voucher(
+          VoucherType.amount,
+          1000,
+          end: DateTime(2026, 10, 15),
+        ).statusAt(now),
+        VoucherStatus.active,
+      );
+      expect(
+        voucher(
+          VoucherType.amount,
+          1000,
+          end: DateTime(2026, 10, 14),
+        ).statusAt(now),
+        VoucherStatus.expired,
+      );
+      expect(
+        voucher(VoucherType.amount, 1000, quota: 2, used: 2).statusAt(now),
+        VoucherStatus.exhausted,
+      );
+    });
+
+    test('aturan isian form', () {
+      expect(VoucherRules.code('hemat 10'), isNotNull);
+      expect(VoucherRules.code('hemat10'), isNull);
+      expect(VoucherRules.value(VoucherType.percent, 120), isNotNull);
+      expect(VoucherRules.value(VoucherType.amount, 0), isNotNull);
+      expect(VoucherRules.quota(3, 5), isNotNull);
+      expect(
+        VoucherRules.period(DateTime(2026, 10, 2), DateTime(2026, 10, 1)),
+        isNotNull,
+      );
     });
   });
 

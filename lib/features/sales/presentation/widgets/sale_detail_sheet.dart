@@ -120,7 +120,9 @@ class _SaleDetail extends ConsumerWidget {
           row('Subtotal', Fmt.rupiah(sale.subtotal)),
           if (sale.discount > 0)
             row(
-              sale.discountPercent == null
+              sale.voucherCode != null
+                  ? 'Voucher ${sale.voucherCode}'
+                  : sale.discountPercent == null
                   ? 'Potongan'
                   : 'Potongan (${Fmt.number(sale.discountPercent!)}%)',
               '− ${Fmt.rupiah(sale.discount)}',
@@ -137,8 +139,9 @@ class _SaleDetail extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
             child: Container(height: 0.5, color: c.separator),
           ),
-          row('Dibayar (tunai)', Fmt.rupiah(sale.paid)),
-          row('Kembalian', Fmt.rupiah(sale.change)),
+          row('Dibayar (${sale.paymentMethod})', Fmt.rupiah(sale.paid)),
+          if (sale.paymentRef != null) row('No. referensi', sale.paymentRef!),
+          if (sale.change > 0) row('Kembalian', Fmt.rupiah(sale.change)),
         ],
       ),
     );

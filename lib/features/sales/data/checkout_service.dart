@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../auth/domain/app_user.dart';
+import '../../payments/domain/payment_method.dart';
+import '../../vouchers/data/voucher_repository.dart';
 import '../domain/cart.dart';
 import '../domain/invoice_number.dart';
 
@@ -23,6 +25,9 @@ class CheckoutResult {
     required this.total,
     required this.paid,
     required this.change,
+    required this.paymentMethod,
+    this.voucherCode,
+    this.discount = 0,
   });
 
   final int saleId;
@@ -30,11 +35,14 @@ class CheckoutResult {
   final int total;
   final int paid;
   final int change;
+  final String paymentMethod;
+  final String? voucherCode;
+  final int discount;
 }
 
-/// Menyimpan transaksi penjualan: faktur, baris barang, pengurangan stok, dan
-/// riwayat stok, semuanya dalam satu database transaction. Jika satu langkah
-/// gagal, tidak ada yang tersimpan.
+/// Menyimpan transaksi penjualan: faktur, baris barang, pemakaian voucher,
+/// pengurangan stok, dan riwayat stok, semuanya dalam satu database
+/// transaction. Jika satu langkah gagal, tidak ada yang tersimpan.
 class CheckoutService {
   CheckoutService(this._db, {DateTime Function()? clock})
     : _clock = clock ?? DateTime.now;
@@ -42,10 +50,13 @@ class CheckoutService {
   final AppDatabase _db;
   final DateTime Function() _clock;
 
+  /// [paid] diabaikan untuk metode non-tunai (dianggap pas sesuai total).
   Future<CheckoutResult> checkout({
     required Cart cart,
     required AppUser cashier,
-    required int paid,
+    required int paymentMethodId,
+    int? paid,
+    String? paymentRef,
   }) async {
     if (cart.isEmpty) {
       throw const CheckoutFailure('Keranjang masih kosong.');
@@ -53,12 +64,44 @@ class CheckoutService {
     if (cart.lines.any((l) => l.qty <= 0)) {
       throw const CheckoutFailure('Jumlah barang harus lebih dari 0.');
     }
-    if (paid < cart.total) {
-      throw const CheckoutFailure('Uang yang dibayar kurang dari total.');
-    }
 
     final now = _clock();
     return _db.transaction(() async {
+      final methodRow = await _db.paymentMethodsDao.findById(paymentMethodId);
+      if (methodRow == null || !methodRow.isActive) {
+        throw const CheckoutFailure('Metode pembayaran tidak tersedia.');
+      }
+
+      // Voucher diperiksa ulang dari database: bisa saja sudah dinonaktifkan
+      // atau kuotanya habis sejak dipasang di keranjang.
+      final subtotal = cart.subtotal;
+      var discount = 0;
+      String? voucherCode;
+      int? voucherId;
+      if (cart.voucher case final applied?) {
+        final row = await _db.vouchersDao.findById(applied.id);
+        if (row == null) {
+          throw const CheckoutFailure('Voucher sudah dihapus. Lepas voucher.');
+        }
+        final voucher = voucherFromRow(row);
+        final problem = voucher.problemFor(subtotal: subtotal, now: now);
+        if (problem != null) throw CheckoutFailure(problem);
+        if (!await _db.vouchersDao.tryConsume(voucher.id)) {
+          throw CheckoutFailure('Kuota voucher ${voucher.code} sudah habis.');
+        }
+        discount = voucher.discountFor(subtotal);
+        voucherCode = voucher.code;
+        voucherId = voucher.id;
+      }
+
+      final total = subtotal - discount;
+      final isCash = methodRow.kind == PaymentKind.cash;
+      final paidValue = isCash ? (paid ?? 0) : total;
+      if (paidValue < total) {
+        throw const CheckoutFailure('Uang yang dibayar kurang dari total.');
+      }
+      final ref = paymentRef?.trim();
+
       final invoiceNo = InvoiceNumber.next(
         now,
         await _db.salesDao.lastInvoiceWithPrefix(InvoiceNumber.prefixFor(now)),
@@ -72,17 +115,16 @@ class CheckoutService {
               saleDate: now,
               userId: cashier.id,
               itemCount: cart.lines.length,
-              subtotal: cart.subtotal,
-              discountPercent: Value(
-                cart.discountType == DiscountType.percent &&
-                        cart.discountValue > 0
-                    ? cart.discountValue
-                    : null,
-              ),
-              discount: Value(cart.discount),
-              total: cart.total,
-              paid: paid,
-              changeAmount: paid - cart.total,
+              subtotal: subtotal,
+              discount: Value(discount),
+              voucherId: Value(voucherId),
+              voucherCode: Value(voucherCode),
+              total: total,
+              paid: paidValue,
+              changeAmount: paidValue - total,
+              paymentMethod: Value(methodRow.name),
+              paymentMethodId: Value(methodRow.id),
+              paymentRef: Value(ref == null || ref.isEmpty ? null : ref),
             ),
           );
 
@@ -98,7 +140,6 @@ class CheckoutService {
                 unitName: Value(line.product.unitName),
                 qty: line.qty,
                 price: line.price,
-                discountPercent: Value(line.discountPercent),
                 purchasePrice: line.product.purchasePrice,
                 subtotal: line.total,
               ),
@@ -114,9 +155,12 @@ class CheckoutService {
       return CheckoutResult(
         saleId: saleId,
         invoiceNo: invoiceNo,
-        total: cart.total,
-        paid: paid,
-        change: paid - cart.total,
+        total: total,
+        paid: paidValue,
+        change: paidValue - total,
+        paymentMethod: methodRow.name,
+        voucherCode: voucherCode,
+        discount: discount,
       );
     });
   }

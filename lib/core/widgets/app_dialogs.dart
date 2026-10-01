@@ -167,6 +167,92 @@ class AppDialogs {
     );
   }
 
+  /// Popup di tengah layar (kartu membulat, muncul dengan animasi pegas).
+  /// Tidak tertutup saat klik di luar; tutup dengan tombol ✕ atau Esc.
+  ///
+  /// Isi [autofocusRoot] `false` jika isi popup punya field `autofocus`
+  /// (agar fokus jatuh ke field itu, bukan ke kerangka popup).
+  static Future<T?> popup<T>(
+    BuildContext context, {
+    required WidgetBuilder builder,
+    String? title,
+    double maxWidth = 480,
+    bool autofocusRoot = true,
+  }) {
+    return showGeneralDialog<T>(
+      context: context,
+      barrierDismissible: false,
+      barrierLabel: title ?? 'Popup',
+      barrierColor: Colors.black.withValues(alpha: 0.3),
+      transitionDuration: AppDurations.medium,
+      pageBuilder: (ctx, _, _) => _Popup(
+        title: title,
+        maxWidth: maxWidth,
+        autofocusRoot: autofocusRoot,
+        child: Builder(builder: builder),
+      ),
+      transitionBuilder: (ctx, animation, _, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: SpringCurve.smooth,
+          reverseCurve: Curves.easeIn,
+        );
+        return FadeTransition(
+          opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+          child: ScaleTransition(
+            scale: Tween(begin: 0.94, end: 1.0).animate(curved),
+            child: child,
+          ),
+        );
+      },
+    );
+  }
+
+  /// Memilih tanggal dengan roda tanggal iOS di dalam popup.
+  /// Mengembalikan tanggal terpilih, atau `null` jika dibatalkan.
+  static Future<DateTime?> pickDate(
+    BuildContext context, {
+    required String title,
+    DateTime? initial,
+  }) {
+    var selected = initial ?? DateTime.now();
+    return popup<DateTime>(
+      context,
+      title: title,
+      maxWidth: 380,
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          0,
+          AppSpacing.lg,
+          AppSpacing.lg,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              height: 200,
+              child: CupertinoDatePicker(
+                mode: CupertinoDatePickerMode.date,
+                initialDateTime: selected,
+                dateOrder: DatePickerDateOrder.dmy,
+                onDateTimeChanged: (d) => selected = d,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            SizedBox(
+              width: double.infinity,
+              child: CupertinoButton.filled(
+                onPressed: () => Navigator.pop(ctx, selected),
+                child: const Text('Pilih Tanggal'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// Bottom sheet dengan handle, sudut membulat, dan animasi pegas.
   /// Di layar lebar lebarnya dibatasi supaya tidak membentang penuh.
   static Future<T?> sheet<T>(
@@ -245,6 +331,117 @@ class SheetHandle extends StatelessWidget {
         decoration: BoxDecoration(
           color: context.colors.labelTertiary,
           borderRadius: BorderRadius.circular(3),
+        ),
+      ),
+    );
+  }
+}
+
+class _Popup extends StatelessWidget {
+  const _Popup({
+    required this.title,
+    required this.maxWidth,
+    required this.autofocusRoot,
+    required this.child,
+  });
+
+  final String? title;
+  final double maxWidth;
+  final bool autofocusRoot;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final size = MediaQuery.sizeOf(context);
+
+    // Esc menutup popup walau klik di luar tidak (barrierDismissible: false).
+    return Actions(
+      actions: {
+        DismissIntent: CallbackAction<DismissIntent>(
+          onInvoke: (_) => Navigator.of(context).maybePop(),
+        ),
+      },
+      child: Focus(
+        autofocus: autofocusRoot,
+        child: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.xl),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: maxWidth,
+                  maxHeight: size.height * 0.9,
+                ),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: AppRadius.xlAll,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.18),
+                        blurRadius: 40,
+                        offset: const Offset(0, 16),
+                      ),
+                    ],
+                  ),
+                  child: Material(
+                    color: c.cardElevated,
+                    borderRadius: AppRadius.xlAll,
+                    clipBehavior: Clip.antiAlias,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(
+                            AppSpacing.lg,
+                            AppSpacing.md,
+                            AppSpacing.sm,
+                            AppSpacing.sm,
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  title ?? '',
+                                  style: AppTypography.title3.copyWith(
+                                    color: c.label,
+                                  ),
+                                ),
+                              ),
+                              Tooltip(
+                                message: 'Tutup (Esc)',
+                                child: CupertinoButton(
+                                  padding: EdgeInsets.zero,
+                                  minimumSize: const Size(36, 36),
+                                  onPressed: () =>
+                                      Navigator.of(context).maybePop(),
+                                  child: Container(
+                                    width: 30,
+                                    height: 30,
+                                    decoration: BoxDecoration(
+                                      color: c.fill,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      CupertinoIcons.xmark,
+                                      size: 14,
+                                      color: c.labelSecondary,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Flexible(child: child),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );

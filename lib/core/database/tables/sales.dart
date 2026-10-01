@@ -1,7 +1,9 @@
 import 'package:drift/drift.dart';
 
+import 'payment_methods.dart';
 import 'products.dart';
 import 'users.dart';
+import 'vouchers.dart';
 
 /// Faktur penjualan. Semua nominal dalam Rupiah.
 @DataClassName('SaleRow')
@@ -20,14 +22,27 @@ class Sales extends Table {
   /// Total semua baris setelah potongan per barang.
   IntColumn get subtotal => integer()();
 
-  /// Potongan per transaksi yang dipakai. Jika diisi persen, [discountPercent]
-  /// menyimpan persennya dan [discount] hasil perhitungannya.
+  /// Sejak v3 tidak diisi lagi (potongan manual diganti voucher); tetap ada
+  /// untuk faktur lama.
   RealColumn get discountPercent => real().nullable()();
+
+  /// Potongan dalam Rupiah. Sejak v3 berasal dari voucher.
   IntColumn get discount => integer().withDefault(const Constant(0))();
+
+  /// v3: voucher yang dipakai (kode disalin agar faktur tetap terbaca).
+  IntColumn get voucherId => integer().nullable().references(Vouchers, #id)();
+  TextColumn get voucherCode => text().nullable()();
   IntColumn get total => integer()();
   IntColumn get paid => integer()();
   IntColumn get changeAmount => integer()();
+
+  /// Nama metode pembayaran saat transaksi (salinan).
   TextColumn get paymentMethod => text().withDefault(const Constant('tunai'))();
+
+  /// v3: metode pembayaran dan nomor referensi (QRIS/transfer/kartu).
+  IntColumn get paymentMethodId =>
+      integer().nullable().references(PaymentMethods, #id)();
+  TextColumn get paymentRef => text().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
 
@@ -44,6 +59,8 @@ class SaleItems extends Table {
   TextColumn get unitName => text().nullable()();
   RealColumn get qty => real()();
   IntColumn get price => integer()();
+
+  /// Sejak v3 selalu 0 (potongan per barang dihapus); tetap ada untuk faktur lama.
   RealColumn get discountPercent => real().withDefault(const Constant(0))();
   IntColumn get purchasePrice => integer()();
   IntColumn get subtotal => integer()();

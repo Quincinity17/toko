@@ -1,14 +1,21 @@
+import 'dart:io';
+
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:toko/core/database/app_database.dart';
 import 'package:toko/features/auth/data/auth_repository.dart';
 import 'package:toko/features/auth/data/user_repository.dart';
 import 'package:toko/features/auth/domain/app_user.dart';
+import 'package:toko/features/payments/data/payment_method_repository.dart';
+import 'package:toko/features/payments/domain/payment_method.dart';
 import 'package:toko/features/products/data/product_repository.dart';
 import 'package:toko/features/sales/data/checkout_service.dart';
 import 'package:toko/features/sales/data/sales_repository.dart';
 import 'package:toko/features/sales/domain/cart.dart';
+import 'package:toko/features/vouchers/data/voucher_repository.dart';
+import 'package:toko/features/vouchers/domain/voucher.dart';
 
 import '../../helpers/test_app.dart';
 
@@ -16,90 +23,324 @@ void main() {
   late AppDatabase db;
   late ProductRepository products;
   late AppUser kasir;
+  late AppUser admin;
+  late PaymentMethod tunai;
+  late PaymentMethod qris;
   final clock = DateTime(2026, 9, 30, 10, 15);
+
+  // Pesan voucher memuat tanggal berformat Indonesia.
+  setUpAll(() => initializeDateFormatting('id_ID'));
 
   setUp(() async {
     db = await createSeededDb();
     products = ProductRepository(db);
-    kasir = await AuthRepository(db, testHasher).login('kasir', 'kasir123');
+    final auth = AuthRepository(db, testHasher);
+    kasir = await auth.login('kasir', 'kasir123');
+    admin = await auth.login('admin', 'admin123');
+    final methods = await PaymentMethodRepository(db).watchAll().first;
+    tunai = methods.firstWhere((m) => m.name == 'Tunai');
+    qris = methods.firstWhere((m) => m.name == 'QRIS');
   });
 
   tearDown(() => db.close());
 
   CheckoutService service() => CheckoutService(db, clock: () => clock);
+  VoucherRepository vouchers() => VoucherRepository(db, clock: () => clock);
 
-  test('20 barang contoh tersedia dan bisa dicari', () async {
+  Future<Cart> cartOf(String code, {double qty = 1}) async =>
+      const Cart().add((await products.findByCodeOrBarcode(code))!, qty: qty);
+
+  test('20 barang contoh dan 4 metode bayar bawaan', () async {
     expect(await db.select(db.products).get(), hasLength(20));
+    final methods = await PaymentMethodRepository(db).watchAll().first;
+    expect(methods.map((m) => m.name), [
+      'Tunai',
+      'QRIS',
+      'Transfer Bank',
+      'Kartu Debit/Kredit',
+    ]);
     final byCode = await products.findByCodeOrBarcode('brg001');
     expect(byCode?.name, 'Indomie Goreng 85g');
-    final byBarcode = await products.findByCodeOrBarcode(byCode!.barcode!);
-    expect(byBarcode?.id, byCode.id);
-    final found = await products.search('indomie');
-    expect(found, hasLength(2));
+    expect(
+      (await products.findByCodeOrBarcode(byCode!.barcode!))?.id,
+      byCode.id,
+    );
+    expect(await products.search('indomie'), hasLength(2));
   });
 
-  test(
-    'checkout menyimpan faktur, mengurangi stok, dan mencatat riwayat',
-    () async {
-      final indomie = (await products.findByCodeOrBarcode('BRG001'))!;
-      final telur = (await products.findByCodeOrBarcode('BRG008'))!;
-      final cart = const Cart()
-          .add(indomie, qty: 5)
-          .add(telur, qty: 0.5)
-          .setDiscount(DiscountType.amount, 500);
+  test('checkout tunai: faktur, stok, riwayat, kembalian', () async {
+    final indomie = (await products.findByCodeOrBarcode('BRG001'))!;
+    final telur = (await products.findByCodeOrBarcode('BRG008'))!;
+    final cart = const Cart().add(indomie, qty: 5).add(telur, qty: 0.5);
 
-      final result = await service().checkout(
+    final result = await service().checkout(
+      cart: cart,
+      cashier: kasir,
+      paymentMethodId: tunai.id,
+      paid: 50000,
+    );
+
+    expect(result.invoiceNo, 'INV-20260930-0001');
+    expect(result.total, 5 * 3500 + 14500);
+    expect(result.change, 50000 - result.total);
+    expect(result.paymentMethod, 'Tunai');
+
+    expect(
+      (await products.findByCodeOrBarcode('BRG001'))!.stock,
+      indomie.stock - 5,
+    );
+    expect((await db.select(db.stockMovements).get()), hasLength(2));
+    final lines = await SalesRepository(db).linesOf(result.saleId);
+    expect(lines.map((l) => l.name), ['Indomie Goreng 85g', 'Telur Ayam']);
+  });
+
+  test('checkout non-tunai dibayar pas dan menyimpan referensi', () async {
+    final result = await service().checkout(
+      cart: await cartOf('BRG005'),
+      cashier: kasir,
+      paymentMethodId: qris.id,
+      paid: 999999, // diabaikan untuk non-tunai
+      paymentRef: ' QR-123 ',
+    );
+    expect(result.paid, result.total);
+    expect(result.change, 0);
+    final sale = (await SalesRepository(db).watchDay(clock).first).single;
+    expect(sale.paymentMethod, 'QRIS');
+    expect(sale.paymentRef, 'QR-123');
+  });
+
+  test('uang tunai kurang ditolak dan tidak ada yang tersimpan', () async {
+    final cart = await cartOf('BRG005');
+    await expectLater(
+      service().checkout(
         cart: cart,
         cashier: kasir,
-        paid: 50000,
-      );
-
-      expect(result.invoiceNo, 'INV-20260930-0001');
-      expect(result.total, 5 * 3500 + 14500 - 500);
-      expect(result.change, 50000 - result.total);
-
-      final after = (await products.findByCodeOrBarcode('BRG001'))!;
-      expect(after.stock, indomie.stock - 5);
-      final telurAfter = (await products.findByCodeOrBarcode('BRG008'))!;
-      expect(telurAfter.stock, closeTo(telur.stock - 0.5, 1e-9));
-
-      final moves = await db.select(db.stockMovements).get();
-      expect(moves, hasLength(2));
-      expect(moves.first.refId, result.saleId);
-
-      final lines = await SalesRepository(db).linesOf(result.saleId);
-      expect(lines.map((l) => l.name), ['Indomie Goreng 85g', 'Telur Ayam']);
-    },
-  );
-
-  test('nomor faktur berurutan dalam satu hari', () async {
-    final p = (await products.findByCodeOrBarcode('BRG009'))!;
-    final cart = const Cart().add(p);
-    final a = await service().checkout(cart: cart, cashier: kasir, paid: 5000);
-    final b = await service().checkout(cart: cart, cashier: kasir, paid: 5000);
-    expect(a.invoiceNo, 'INV-20260930-0001');
-    expect(b.invoiceNo, 'INV-20260930-0002');
-  });
-
-  test('uang kurang ditolak dan tidak ada yang tersimpan', () async {
-    final p = (await products.findByCodeOrBarcode('BRG005'))!;
-    await expectLater(
-      service().checkout(cart: const Cart().add(p), cashier: kasir, paid: 1000),
+        paymentMethodId: tunai.id,
+        paid: 1000,
+      ),
       throwsA(isA<CheckoutFailure>()),
     );
     expect(await db.select(db.sales).get(), isEmpty);
-    expect((await products.findByCodeOrBarcode('BRG005'))!.stock, p.stock);
+    expect(
+      (await products.findByCodeOrBarcode('BRG005'))!.stock,
+      cart.lines.single.product.stock,
+    );
+  });
+
+  test('metode nonaktif tidak bisa dipakai', () async {
+    await PaymentMethodRepository(db).save(
+      actor: admin,
+      id: qris.id,
+      name: qris.name,
+      kind: qris.kind,
+      isActive: false,
+    );
+    expect(
+      service().checkout(
+        cart: await cartOf('BRG009'),
+        cashier: kasir,
+        paymentMethodId: qris.id,
+      ),
+      throwsA(isA<CheckoutFailure>()),
+    );
+  });
+
+  test('nomor faktur berurutan dalam satu hari', () async {
+    final cart = await cartOf('BRG009');
+    Future<String> pay() async => (await service().checkout(
+      cart: cart,
+      cashier: kasir,
+      paymentMethodId: tunai.id,
+      paid: 5000,
+    )).invoiceNo;
+    expect(await pay(), 'INV-20260930-0001');
+    expect(await pay(), 'INV-20260930-0002');
+  });
+
+  group('voucher', () {
+    Future<Voucher> create({
+      String code = 'HEMAT10',
+      VoucherType type = VoucherType.percent,
+      double value = 10,
+      int? maxDiscount,
+      int minPurchase = 0,
+      int? quota,
+      DateTime? end,
+    }) => vouchers().save(
+      actor: admin,
+      draft: VoucherDraft(
+        code: code,
+        type: type,
+        value: value,
+        maxDiscount: maxDiscount,
+        minPurchase: minPurchase,
+        quota: quota,
+        endDate: end,
+      ),
+    );
+
+    test(
+      'dipakai saat checkout: potongan tersimpan, kuota bertambah',
+      () async {
+        await create(maxDiscount: 5000);
+        final v = await vouchers().findUsable('hemat10');
+        final cart = (await cartOf('BRG005')).withVoucher(v); // 76.000
+
+        final result = await service().checkout(
+          cart: cart,
+          cashier: kasir,
+          paymentMethodId: tunai.id,
+          paid: 100000,
+        );
+        expect(result.discount, 5000); // 7.600 dibatasi 5.000
+        expect(result.total, 71000);
+        expect(result.voucherCode, 'HEMAT10');
+
+        final after = await vouchers().findUsable('HEMAT10');
+        expect(after.usedCount, 1);
+        final sale = (await SalesRepository(db).watchDay(clock).first).single;
+        expect(sale.voucherCode, 'HEMAT10');
+        expect(sale.discount, 5000);
+      },
+    );
+
+    test('kuota habis ditolak saat dipasang dan saat checkout', () async {
+      await create(quota: 1, type: VoucherType.amount, value: 1000);
+      final v = await vouchers().findUsable('HEMAT10');
+      final cart = (await cartOf('BRG009')).withVoucher(v);
+      await service().checkout(
+        cart: cart,
+        cashier: kasir,
+        paymentMethodId: tunai.id,
+        paid: 5000,
+      );
+      // Keranjang lain yang sudah memasang voucher sebelum kuota habis.
+      await expectLater(
+        service().checkout(
+          cart: cart,
+          cashier: kasir,
+          paymentMethodId: tunai.id,
+          paid: 5000,
+        ),
+        throwsA(isA<CheckoutFailure>()),
+      );
+      expect(vouchers().findUsable('HEMAT10'), throwsA(isA<VoucherFailure>()));
+    });
+
+    test('minimal belanja diperiksa ulang saat checkout', () async {
+      await create(type: VoucherType.amount, value: 5000, minPurchase: 50000);
+      final v = await vouchers().findUsable('HEMAT10');
+      expect(
+        service().checkout(
+          cart: (await cartOf('BRG009')).withVoucher(v),
+          cashier: kasir,
+          paymentMethodId: tunai.id,
+          paid: 5000,
+        ),
+        throwsA(isA<CheckoutFailure>()),
+      );
+    });
+
+    test('kedaluwarsa, tidak ada, dan nonaktif ditolak', () async {
+      await create(end: DateTime(2026, 9, 29));
+      expect(vouchers().findUsable('HEMAT10'), throwsA(isA<VoucherFailure>()));
+      expect(vouchers().findUsable('TIDAKADA'), throwsA(isA<VoucherFailure>()));
+    });
+
+    test(
+      'kode unik, kasir tidak boleh membuat, terpakai tidak bisa dihapus',
+      () async {
+        final v = await create(type: VoucherType.amount, value: 1000);
+        expect(create(code: 'hemat10'), throwsA(isA<VoucherFailure>()));
+        expect(
+          vouchers().save(
+            actor: kasir,
+            draft: const VoucherDraft(
+              code: 'KASIR',
+              type: VoucherType.amount,
+              value: 1000,
+            ),
+          ),
+          throwsA(isA<VoucherFailure>()),
+        );
+        await service().checkout(
+          cart: (await cartOf('BRG009')).withVoucher(v),
+          cashier: kasir,
+          paymentMethodId: tunai.id,
+          paid: 5000,
+        );
+        expect(
+          vouchers().delete(actor: admin, id: v.id),
+          throwsA(isA<VoucherFailure>()),
+        );
+      },
+    );
+  });
+
+  group('metode pembayaran', () {
+    test('tambah, tidak boleh duplikat, minimal satu aktif', () async {
+      final repo = PaymentMethodRepository(db);
+      final gopay = await repo.save(
+        actor: admin,
+        name: 'GoPay',
+        kind: PaymentKind.nonCash,
+        isActive: true,
+      );
+      expect(gopay.sortOrder, 5);
+      expect(
+        repo.save(
+          actor: admin,
+          name: 'gopay',
+          kind: PaymentKind.nonCash,
+          isActive: true,
+        ),
+        throwsA(isA<PaymentMethodFailure>()),
+      );
+
+      // Nonaktifkan semua kecuali satu, lalu yang terakhir harus ditolak.
+      final all = await repo.watchAll().first;
+      for (final m in all.skip(1)) {
+        await repo.save(
+          actor: admin,
+          id: m.id,
+          name: m.name,
+          kind: m.kind,
+          isActive: false,
+        );
+      }
+      expect(
+        repo.save(
+          actor: admin,
+          id: all.first.id,
+          name: all.first.name,
+          kind: all.first.kind,
+          isActive: false,
+        ),
+        throwsA(isA<PaymentMethodFailure>()),
+      );
+    });
+
+    test('metode yang sudah dipakai tidak bisa dihapus', () async {
+      await service().checkout(
+        cart: await cartOf('BRG009'),
+        cashier: kasir,
+        paymentMethodId: qris.id,
+      );
+      expect(
+        PaymentMethodRepository(db).delete(actor: admin, id: qris.id),
+        throwsA(isA<PaymentMethodFailure>()),
+      );
+    });
   });
 
   test('transaksi hari ini muncul di daftar beserta nama kasir', () async {
-    final p = (await products.findByCodeOrBarcode('BRG010'))!;
     await service().checkout(
-      cart: const Cart().add(p),
+      cart: await cartOf('BRG010'),
       cashier: kasir,
+      paymentMethodId: tunai.id,
       paid: 10000,
     );
     final today = await SalesRepository(db).watchDay(clock).first;
-    expect(today, hasLength(1));
     expect(today.single.cashierName, 'Kasir Satu');
     final yesterday = await SalesRepository(db)
         .watchDay(clock.subtract(const Duration(days: 1)))
@@ -108,14 +349,10 @@ void main() {
   });
 
   test('akun yang punya transaksi tidak bisa dihapus', () async {
-    final admin = await AuthRepository(
-      db,
-      testHasher,
-    ).login('admin', 'admin123');
-    final p = (await products.findByCodeOrBarcode('BRG010'))!;
     await service().checkout(
-      cart: const Cart().add(p),
+      cart: await cartOf('BRG010'),
       cashier: kasir,
+      paymentMethodId: tunai.id,
       paid: 10000,
     );
     expect(
@@ -124,34 +361,79 @@ void main() {
     );
   });
 
-  test('database v1 lama di-upgrade ke v2 tanpa kehilangan user', () async {
-    final legacy = NativeDatabase.memory(
-      setup: (Database raw) {
-        raw.execute('''
-          CREATE TABLE users (
-            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-            username TEXT NOT NULL UNIQUE,
-            full_name TEXT NOT NULL,
-            password_hash TEXT NOT NULL,
-            role TEXT NOT NULL,
-            is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
-            created_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)),
-            last_login_at INTEGER NULL
+  group('migrasi', () {
+    test('v1 → v3: user tetap, semua tabel dan data bawaan dibuat', () async {
+      final legacy = NativeDatabase.memory(
+        setup: (Database raw) {
+          raw.execute('''
+            CREATE TABLE users (
+              id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+              username TEXT NOT NULL UNIQUE,
+              full_name TEXT NOT NULL,
+              password_hash TEXT NOT NULL,
+              role TEXT NOT NULL,
+              is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+              created_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)),
+              last_login_at INTEGER NULL
+            );
+          ''');
+          raw.execute(
+            "INSERT INTO users (username, full_name, password_hash, role) "
+            "VALUES ('lama', 'User Lama', 'x', 'admin')",
           );
-        ''');
-        raw.execute(
-          "INSERT INTO users (username, full_name, password_hash, role) "
-          "VALUES ('lama', 'User Lama', 'x', 'admin')",
+          raw.userVersion = 1;
+        },
+      );
+      final upgraded = AppDatabase(legacy);
+      addTearDown(upgraded.close);
+
+      expect(
+        (await upgraded.select(upgraded.users).get()).single.username,
+        'lama',
+      );
+      expect(await upgraded.select(upgraded.products).get(), hasLength(20));
+      expect(
+        await upgraded.select(upgraded.paymentMethods).get(),
+        hasLength(4),
+      );
+      expect(await upgraded.select(upgraded.vouchers).get(), isEmpty);
+    });
+
+    test(
+      'v2 (skema asli) → v3: faktur lama tetap dan ditandai Tunai',
+      () async {
+        final schema = File('test/fixtures/schema_v2.sql').readAsStringSync();
+        final legacy = NativeDatabase.memory(
+          setup: (Database raw) {
+            for (final stmt in schema.split(';\n')) {
+              if (stmt.trim().isNotEmpty) raw.execute(stmt);
+            }
+            raw.execute(
+              "INSERT INTO users (username, full_name, password_hash, role) "
+              "VALUES ('kasir', 'Kasir', 'x', 'kasir')",
+            );
+            raw.execute(
+              "INSERT INTO sales (invoice_no, sale_date, user_id, item_count, "
+              "subtotal, discount, total, paid, change_amount, payment_method) "
+              "VALUES ('INV-20260930-0001', 1790000000, 1, 1, 3500, 0, 3500, "
+              "5000, 1500, 'tunai')",
+            );
+            raw.userVersion = 2;
+          },
         );
-        raw.userVersion = 1;
+        final upgraded = AppDatabase(legacy);
+        addTearDown(upgraded.close);
+
+        final sale = (await upgraded.select(upgraded.sales).get()).single;
+        expect(sale.invoiceNo, 'INV-20260930-0001');
+        expect(sale.paymentMethod, 'Tunai');
+        expect(sale.paymentMethodId, isNotNull);
+        expect(sale.voucherId, isNull);
+        expect(
+          await upgraded.select(upgraded.paymentMethods).get(),
+          hasLength(4),
+        );
       },
     );
-    final upgraded = AppDatabase(legacy);
-    addTearDown(upgraded.close);
-
-    final users = await upgraded.select(upgraded.users).get();
-    expect(users.single.username, 'lama');
-    expect(await upgraded.select(upgraded.products).get(), hasLength(20));
-    expect(await upgraded.select(upgraded.sales).get(), isEmpty);
   });
 }

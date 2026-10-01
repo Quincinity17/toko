@@ -5,11 +5,13 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/presentation/auth_controller.dart';
 import '../../features/auth/presentation/login_page.dart';
 import '../../features/dashboard/presentation/dashboard_page.dart';
+import '../../features/payments/presentation/payment_methods_page.dart';
 import '../../features/products/presentation/products_page.dart';
 import '../../features/reports/presentation/reports_page.dart';
 import '../../features/sales/presentation/pos_page.dart';
 import '../../features/settings/presentation/accounts/accounts_page.dart';
 import '../../features/settings/presentation/settings_page.dart';
+import '../../features/vouchers/presentation/vouchers_page.dart';
 import '../theme/app_theme.dart';
 import 'app_shell.dart';
 import 'routes.dart';
@@ -49,7 +51,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           _page(
             AppRoutes.pengaturan,
             const SettingsPage(),
-            routes: [_page('akun', const AccountsPage())],
+            routes: [
+              _page('akun', const AccountsPage()),
+              _page('voucher', const VouchersPage()),
+              _page('pembayaran', const PaymentMethodsPage()),
+            ],
           ),
         ],
       ),

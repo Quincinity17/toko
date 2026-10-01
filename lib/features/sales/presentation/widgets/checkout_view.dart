@@ -13,14 +13,15 @@ import '../../../products/domain/product.dart';
 import '../cart_controller.dart';
 import 'cart_summary_panel.dart';
 import 'cart_table.dart';
-import 'payment_sheet.dart';
+import 'payment_dialog.dart';
 import 'product_search_sheet.dart';
+import 'voucher_dialog.dart';
 
 /// Tab "Transaksi Baru": input barang, tabel keranjang, dan panel total.
 ///
 /// Kolom kode selalu kembali fokus supaya scanner barcode USB (yang mengetik
 /// seperti keyboard lalu menekan Enter) bisa langsung dipakai.
-/// Shortcut: F2 / End = bayar, F3 = cari barang.
+/// Shortcut: F2 / End = bayar, F3 = cari barang, F4 = voucher.
 class CheckoutView extends ConsumerStatefulWidget {
   const CheckoutView({super.key});
 
@@ -37,8 +38,6 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
   int? _selected;
   String? _codeError;
 
-  /// Naik setiap transaksi selesai/batal, untuk me-reset panel ringkasan.
-  int _session = 0;
   bool _busy = false;
 
   @override
@@ -119,14 +118,11 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
     final cart = ref.read(cartControllerProvider);
     if (cart.isEmpty || _busy) return;
     _busy = true;
-    final result = await showPaymentSheet(context, cart);
+    final result = await showPaymentDialog(context, cart);
     if (result != null && mounted) {
       _cart.clear();
-      setState(() {
-        _selected = null;
-        _session++;
-      });
-      await showCheckoutSuccessSheet(context, result);
+      setState(() => _selected = null);
+      await showCheckoutSuccessDialog(context, result);
     }
     _busy = false;
     focusEntry();
@@ -143,10 +139,7 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
     );
     if (ok) {
       _cart.clear();
-      setState(() {
-        _selected = null;
-        _session++;
-      });
+      setState(() => _selected = null);
     }
     focusEntry();
   }
@@ -165,17 +158,13 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
     focusEntry();
   }
 
-  Future<void> _editLineDiscount(int index) async {
-    final line = ref.read(cartControllerProvider).lines[index];
-    final pct = await AppDialogs.promptNumber(
-      context,
-      title: 'Potongan Barang',
-      message: line.product.name,
-      initial: line.discountPercent,
-      suffix: '%',
-      max: 100,
-    );
-    if (pct != null) _cart.setLineDiscount(index, pct);
+  Future<void> _applyVoucher() async {
+    final cart = ref.read(cartControllerProvider);
+    if (cart.isEmpty || _busy) return;
+    _busy = true;
+    final voucher = await showVoucherDialog(context);
+    _busy = false;
+    if (voucher != null) _cart.setVoucher(voucher);
     focusEntry();
   }
 
@@ -199,14 +188,16 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
         if (q <= 0) setState(() => _selected = null);
       },
       onEditQty: _editQty,
-      onEditDiscount: _editLineDiscount,
       onRemove: _remove,
     );
 
     final summary = CartSummaryPanel(
-      key: ValueKey(_session),
       cart: cart,
-      onDiscountChanged: (type, v) => _cart.setDiscount(type, v),
+      onApplyVoucher: _applyVoucher,
+      onRemoveVoucher: () {
+        _cart.setVoucher(null);
+        focusEntry();
+      },
       onPay: _pay,
       onClear: _confirmClear,
     );
@@ -216,6 +207,7 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
         const SingleActivator(LogicalKeyboardKey.f2): _pay,
         const SingleActivator(LogicalKeyboardKey.end): _pay,
         const SingleActivator(LogicalKeyboardKey.f3): () => _openSearch(),
+        const SingleActivator(LogicalKeyboardKey.f4): _applyVoucher,
       },
       child: Padding(
         padding: const EdgeInsets.fromLTRB(
