@@ -49,7 +49,10 @@ dari artifact `toko-windows` lalu dites di PC Windows.
 - Password: bcrypt cost 10 di `Isolate.run` (`PasswordHasher`). Tes memakai cost 4.
 - Akun seed: `admin / admin123`, `kasir / kasir123`. Tidak ditampilkan di
   aplikasi; harus diganti sebelum dipakai di toko.
-- Menu user di bawah sidebar: Ganti Password, Keluar.
+- Menu user di bawah sidebar: Ganti Password (admin saja), Keluar.
+- **Password hanya bisa diganti admin** (keputusan user): kasir tidak punya menu
+  ganti password dan `UserRepository.changeOwnPassword` menolak non-admin.
+  Kasir minta admin mereset lewat Kelola Akun › Reset password.
 
 ### Kelola akun (Pengaturan › Kelola Akun, `/pengaturan/akun`, khusus admin)
 

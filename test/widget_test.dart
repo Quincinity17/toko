@@ -133,6 +133,7 @@ void main() {
       ),
     );
     await settle(tester);
+    expect(find.text('Ganti Password'), findsNothing); // khusus admin
     await tester.tap(find.text('Keluar'));
     await settle(tester);
     expect(find.text('Masuk ke Toko'), findsOneWidget);

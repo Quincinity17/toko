@@ -179,9 +179,15 @@ class _UserFooter extends ConsumerWidget {
       context,
       title: user.fullName,
       message: 'Masuk sebagai ${user.role.label}',
-      options: const [
-        ActionSheetOption(label: 'Ganti Password', value: 'password'),
-        ActionSheetOption(label: 'Keluar', value: 'logout', destructive: true),
+      options: [
+        // Hanya admin yang boleh mengganti password (kebijakan toko).
+        if (user.isAdmin)
+          const ActionSheetOption(label: 'Ganti Password', value: 'password'),
+        const ActionSheetOption(
+          label: 'Keluar',
+          value: 'logout',
+          destructive: true,
+        ),
       ],
     );
     if (!context.mounted) return;

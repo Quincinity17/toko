@@ -199,10 +199,10 @@ void main() {
       );
     });
 
-    test('ganti password sendiri wajib benar password lama', () async {
+    test('admin ganti password sendiri wajib benar password lama', () async {
       expect(
         users.changeOwnPassword(
-          user: kasir,
+          user: admin,
           currentPassword: 'salah',
           newPassword: 'baru1234',
         ),
@@ -210,11 +210,23 @@ void main() {
       );
 
       await users.changeOwnPassword(
-        user: kasir,
-        currentPassword: 'kasir123',
+        user: admin,
+        currentPassword: 'admin123',
         newPassword: 'baru1234',
       );
-      expect((await auth.login('kasir', 'baru1234')).id, kasir.id);
+      expect((await auth.login('admin', 'baru1234')).id, admin.id);
+    });
+
+    test('kasir tidak bisa mengganti password sendiri', () async {
+      await expectLater(
+        users.changeOwnPassword(
+          user: kasir,
+          currentPassword: 'kasir123',
+          newPassword: 'baru1234',
+        ),
+        failsWith('Hanya admin'),
+      );
+      expect((await auth.login('kasir', 'kasir123')).id, kasir.id);
     });
   });
 }

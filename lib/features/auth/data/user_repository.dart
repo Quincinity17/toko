@@ -114,12 +114,15 @@ class UserRepository {
     await _setPassword(id, newPassword);
   }
 
-  /// User mengganti password sendiri; wajib benar password lamanya.
+  /// Admin mengganti password sendiri; wajib benar password lamanya.
   Future<void> changeOwnPassword({
     required AppUser user,
     required String currentPassword,
     required String newPassword,
   }) async {
+    // Kebijakan toko: password hanya diganti oleh admin. Kasir minta admin
+    // mereset lewat Kelola Akun.
+    _requireAdmin(user);
     _check(AccountRules.password(newPassword));
     final row = await _find(user.id);
     if (!await _hasher.verify(currentPassword, row.passwordHash)) {
