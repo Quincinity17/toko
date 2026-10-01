@@ -166,6 +166,31 @@ tab **Transaksi Baru** dan **Hari Ini**.
   `pickImportFileProvider` (di-override di tes).
 - macOS butuh entitlement `files.user-selected.read-write` (sudah ditambahkan).
 
+## Dashboard & laporan (admin)
+
+- Data dari `ReportsDao` (SQL agregat; tanggal/jam memakai waktu lokal via
+  `'unixepoch','localtime'`) → `ReportRepository` → model di
+  `reports/domain/report_models.dart`. Nilai SUM dibaca dari `row.data` sebagai
+  `num` (bisa INTEGER/REAL). Alias kolom kelompok = `grp` (hindari bentrok `name`).
+- Definisi: omzet bersih = Σ sales.total (setelah voucher); harga pokok =
+  Σ qty × purchase_price (snapshot di sale_items); laba kotor = omzet − pokok.
+  Per barang/kategori: sebelum potongan voucher transaksi.
+- Dashboard (`watch*`, otomatis terbarui): omzet hari ini vs kemarin, laba kotor
+  & margin, transaksi & rata-rata belanja, stok menipis, grafik omzet 7 hari,
+  terlaris hari ini, daftar stok menipis.
+- Laporan: satu filter rentang (Hari Ini/7/30 Hari/Bulan Ini/pilih tanggal) +
+  pembanding periode sebelumnya; bagian Ringkasan, Tren (harian omzet vs laba,
+  per jam, per hari), Produk (ABC Pareto berdasarkan laba), Kategori, Stok (nilai
+  persediaan, perkiraan habis = stok ÷ rata-rata 30 hari, tidak laku 30 hari),
+  Pembayaran & Voucher, Kasir & Terminal, Faktur. `ReportBundle` dimuat sekali
+  per rentang; data lama tampil samar saat memuat rentang baru.
+- Export Excel: satu file, satu sheet per bagian (`report_export.dart`).
+- Grafik mengikuti skill dataviz: garis 2px, area 10% hanya satu seri, batang
+  ≤ 24px ujung 4px, satu sumbu Y, kisi tipis, tooltip semua seri, legenda bila
+  ≥ 2 seri, tabel sebagai versi non-grafik. Warna seri: `accent` lalu
+  `chart2` (#D55181) — divalidasi `validate_palette.js` terang (#007AFF) dan
+  gelap (#0A84FF). Oranye/hijau/merah = status, jangan dipakai untuk seri.
+
 ## Voucher & metode pembayaran (admin, Pengaturan › Penjualan)
 
 - `/pengaturan/voucher`: daftar dikelompokkan Bisa dipakai / Terjadwal / Tidak
@@ -204,12 +229,16 @@ tab **Transaksi Baru** dan **Hari Ini**.
 | `AppSidebar` | Sidebar kaca yang bisa diciutkan |
 | `AppDialogs` | `alert`, `confirm`, `promptNumber`, `popup` (dialog tengah, Esc menutup), `pickDate`, `actionSheet`, `sheet` (bottom sheet dengan handle) |
 | `EmptyState`, `LoadingState`, `SkeletonBox`, `ErrorBanner` | State kosong/loading/error |
-| `StatCard` | Kartu angka ringkasan (dashboard, kasir) |
+| `StatCard` | Kartu angka ringkasan + perubahan vs periode lalu (panah + %) |
+| `TrendLineChart`, `ColumnChart`, `ChartLegend`, `ShareMeter` | Grafik garis/batang dan meter porsi (`charts.dart`) |
+| `DataTableCard` / `CellText` | Tabel ringkas dalam kartu (versi tabel untuk setiap grafik) |
 | `AppTextField` | Input dengan label, helper/error, mode password |
 | `Shake` | Animasi getar untuk input salah |
 | `showOptionPicker` | Popup pilih satu opsi dengan pencarian, opsi "buat baru" dan "tanpa …" |
 
-Format angka/tanggal: `Fmt` di `core/utils/formatters.dart` (`Fmt.rupiah(10000)` → `Rp 10.000`).
+Format angka/tanggal: `Fmt` di `core/utils/formatters.dart` (`Fmt.rupiah(10000)` → `Rp 10.000`,
+`Fmt.compact` → `1,25 jt`, `Fmt.percent`, `Fmt.dayShort`). Simpan file: `saveFileAs`
+di `core/utils/save_file.dart`.
 Input angka: `parseIdNumber` (`1.500` → 1500, `0,5` → 0.5) dan `RupiahInputFormatter`
 di `core/utils/number_input.dart`.
 
@@ -221,6 +250,10 @@ di `core/utils/number_input.dart`.
 - Tes yang memicu pesan voucher perlu `initializeDateFormatting('id_ID')`.
 - Kerja di isolate (baca file) butuh `tester.runAsync(() => Future.delayed(...))`.
 - Tombol di halaman panjang: pakai `tapVisible` (ensureVisible dulu).
+- Teks yang juga ada di sidebar (mis. "Produk"): batasi dengan
+  `find.descendant(of: find.byType(LargeTitlePage), ...)`.
+- Tampilan kosong di dalam kartu: pakai tinggi minimal (`BoxConstraints(minHeight)`),
+  bukan `SizedBox(height)`, agar tidak meluap.
 - `Override` Riverpod 3 diimpor dari `package:flutter_riverpod/misc.dart`.
 
 ### Shortcut keyboard
@@ -271,11 +304,13 @@ Uang = INTEGER Rupiah; stok = REAL (mendukung kg/liter).
 
 Rencana berikutnya: settings.
 
-## Default yang dipakai (belum dikonfirmasi user)
+## Keputusan bisnis yang dipakai
 
-- Diskon per transaksi: nominal (Rp) dan persen
-- Metode bayar: tunai saja
-- PPN: tidak dihitung
+- Potongan hanya lewat voucher (potongan manual dihapus, keputusan user).
+- Metode bayar diatur admin (bawaan: Tunai, QRIS, Transfer Bank, Kartu).
+- PPN: tidak dihitung (belum dikonfirmasi user).
+- Laba = laba kotor (omzet − harga beli saat terjual). Laba bersih butuh fitur
+  pengeluaran (belum ada).
 
 ## Progres
 
@@ -294,7 +329,7 @@ Rencana berikutnya: settings.
 - [x] Langkah 4 — Import barang (Excel/CSV, termasuk gaya iPOS) + Export + template
   (contoh file iPOS asli belum diberikan; pemetaan kolom berdasarkan nama kolom umum)
 - [ ] Langkah 6 — Struk 58 mm (PDF preview)
-- [ ] Langkah 7 — Dashboard + laporan
+- [x] Langkah 7 — Dashboard + laporan keuangan (8 bagian + export Excel)
 - [ ] Sinkron Tahap B/C/D — server, mesin sinkron & pairing, VPN (**ditunda ke paling akhir**, keputusan user 2026-10-01; fokus fitur dulu)
 
 ## Catatan

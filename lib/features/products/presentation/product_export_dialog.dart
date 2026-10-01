@@ -1,11 +1,11 @@
 import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/save_file.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_dialogs.dart';
 import '../../../core/widgets/inset_grouped_list.dart';
@@ -27,32 +27,16 @@ Future<void> showProductExportDialog(
   );
 }
 
-/// Simpan [bytes] lewat dialog "Simpan sebagai". Mengembalikan lokasi file,
-/// atau `null` jika dibatalkan.
 Future<String?> saveBytes(
   String fileName,
   Uint8List bytes,
   ProductFileFormat format,
-) async {
-  final uri = await FilePicker.saveFile(
-    fileName: fileName,
-    bytes: bytes,
-    dialogTitle: 'Simpan file',
-    type: FileType.custom,
-    allowedExtensions: [format.extension],
-    mimeType: format == ProductFileFormat.xlsx
-        ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        : 'text/csv',
-  );
-  if (uri == null) return null;
-  return uri.scheme == 'file' ? uri.toFilePath() : uri.toString();
-}
-
-String _stamp() {
-  final n = DateTime.now();
-  String two(int v) => v.toString().padLeft(2, '0');
-  return '${n.year}${two(n.month)}${two(n.day)}-${two(n.hour)}${two(n.minute)}';
-}
+) => saveFileAs(
+  fileName: fileName,
+  bytes: bytes,
+  extension: format.extension,
+  mimeType: format == ProductFileFormat.xlsx ? xlsxMime : 'text/csv',
+);
 
 /// Unduh template import kosong (dipakai di popup export dan halaman import).
 Future<void> downloadImportTemplate(BuildContext context) async {
@@ -107,7 +91,7 @@ class _ExportFormState extends ConsumerState<_ExportForm> {
           ? exportProductsXlsx(products)
           : exportProductsCsv(products);
       final path = await saveBytes(
-        'barang-${_stamp()}.${_format.extension}',
+        'barang-${fileStamp()}.${_format.extension}',
         bytes,
         _format,
       );

@@ -12,6 +12,12 @@ import 'package:toko/core/database/app_database.dart';
 import 'package:toko/core/security/password_hasher.dart';
 import 'package:toko/core/widgets/app_button.dart';
 import 'package:toko/core/widgets/app_sidebar.dart';
+import 'package:toko/core/widgets/large_title_page.dart';
+import 'package:toko/features/auth/data/auth_repository.dart';
+import 'package:toko/features/payments/data/payment_method_repository.dart';
+import 'package:toko/features/products/data/product_repository.dart';
+import 'package:toko/features/sales/data/checkout_service.dart';
+import 'package:toko/features/sales/domain/cart.dart';
 import 'package:toko/features/products/presentation/product_import_page.dart';
 import 'package:toko/features/vouchers/domain/voucher.dart';
 
@@ -445,6 +451,73 @@ void main() {
     expect(find.text('Margin 20,0%'), findsOneWidget);
     expect(find.text('Indomie Goreng 85g'), findsOneWidget); // terlaris
     expect(find.text('Belum ada penjualan'), findsNothing);
+
+    await unmount(tester);
+  });
+
+  testWidgets('Laporan: semua bagian tampil tanpa error', (tester) async {
+    final db = await pumpApp(tester);
+    // Satu transaksi supaya laporan tidak kosong.
+    await tester.runAsync(() async {
+      final kasir = await AuthRepository(
+        db,
+        testHasher,
+      ).login('kasir', 'kasir123');
+      final tunai = (await PaymentMethodRepository(db).watchAll().first).first;
+      final indomie = (await ProductRepository(db)
+          .findByCodeOrBarcode('BRG001'))!;
+      await CheckoutService(db).checkout(
+        cart: const Cart().add(indomie, qty: 3),
+        cashier: kasir,
+        paymentMethodId: tunai.id,
+        paid: 20000,
+      );
+    });
+    await login(tester, 'admin', 'admin123');
+    await tester.tap(find.text('Laporan'));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 200)),
+    );
+    await settle(tester);
+
+    expect(find.text('Omzet bersih'), findsOneWidget);
+    expect(find.text('Rp 10.500'), findsWidgets);
+
+    for (final section in [
+      'Tren',
+      'Produk',
+      'Kategori',
+      'Stok',
+      'Pembayaran & Voucher',
+      'Kasir & Terminal',
+      'Faktur',
+    ]) {
+      // Batasi ke halaman (bukan menu sidebar dengan nama sama, mis. Produk).
+      await tester.tap(
+        find.descendant(
+          of: find.byType(LargeTitlePage),
+          matching: find.text(section),
+        ),
+      );
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)),
+      );
+      await settle(tester);
+    }
+    expect(find.textContaining('INV-K01-'), findsOneWidget);
+
+    // Ganti rentang ke Hari Ini.
+    await tester.tap(
+      find.descendant(
+        of: find.byType(LargeTitlePage),
+        matching: find.text('Hari Ini'),
+      ),
+    );
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 200)),
+    );
+    await settle(tester);
+    expect(find.textContaining('INV-K01-'), findsOneWidget);
 
     await unmount(tester);
   });

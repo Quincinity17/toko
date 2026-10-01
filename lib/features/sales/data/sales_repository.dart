@@ -11,7 +11,11 @@ class SalesRepository {
   /// Transaksi pada tanggal [day] (jam diabaikan), terbaru dulu.
   Stream<List<SaleSummary>> watchDay(DateTime day) {
     final start = DateTime(day.year, day.month, day.day);
-    final end = start.add(const Duration(days: 1));
+    return watchBetween(start, DateTime(day.year, day.month, day.day + 1));
+  }
+
+  /// Transaksi dalam rentang [start, end), terbaru dulu.
+  Stream<List<SaleSummary>> watchBetween(DateTime start, DateTime end) {
     return _db.salesDao
         .watchSalesBetween(start, end)
         .map(

@@ -389,3 +389,51 @@ class ColumnChart extends StatelessWidget {
     );
   }
 }
+
+/// Meter porsi (0–1) dengan jalur dari warna yang sama tapi lebih muda,
+/// diikuti persentase. Untuk kolom "kontribusi" di tabel.
+class ShareMeter extends StatelessWidget {
+  const ShareMeter({super.key, required this.ratio, this.width = 120});
+
+  final double ratio;
+  final double width;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final r = ratio.clamp(0.0, 1.0);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: width,
+          height: 6,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: Stack(
+              children: [
+                Container(color: c.accentTint),
+                FractionallySizedBox(
+                  widthFactor: r,
+                  child: Container(color: c.accent),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: AppSpacing.xs),
+        SizedBox(
+          width: 44,
+          child: Text(
+            Fmt.percent(r, decimals: 0),
+            textAlign: TextAlign.right,
+            style: AppTypography.footnote.copyWith(
+              color: c.labelSecondary,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}

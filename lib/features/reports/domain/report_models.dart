@@ -328,3 +328,60 @@ class InventorySummary {
   /// Σ stok × harga jual (potensi omzet).
   final int retailValue;
 }
+
+/// Semua data laporan untuk satu rentang, dimuat sekaligus supaya setiap
+/// bagian halaman Laporan dan file export memakai angka yang sama.
+@immutable
+class ReportBundle {
+  const ReportBundle({
+    required this.range,
+    required this.summary,
+    required this.previous,
+    required this.daily,
+    required this.byHour,
+    required this.byWeekday,
+    required this.products,
+    required this.categories,
+    required this.payments,
+    required this.vouchers,
+    required this.cashiers,
+    required this.terminals,
+  });
+
+  final ReportRange range;
+  final SalesSummary summary;
+
+  /// Ringkasan periode sebelumnya dengan panjang sama.
+  final SalesSummary previous;
+  final List<DailyPoint> daily;
+  final List<BucketPoint> byHour;
+  final List<BucketPoint> byWeekday;
+  final List<ProductPerformance> products;
+  final List<GroupPerformance> categories;
+  final List<GroupPerformance> payments;
+  final List<GroupPerformance> vouchers;
+  final List<GroupPerformance> cashiers;
+  final List<GroupPerformance> terminals;
+
+  /// Jam dengan omzet terbesar, atau `null` jika belum ada penjualan.
+  BucketPoint? get busiestHour => _max(byHour);
+  BucketPoint? get busiestWeekday => _max(byWeekday);
+
+  static BucketPoint? _max(List<BucketPoint> list) {
+    BucketPoint? best;
+    for (final b in list) {
+      if (b.revenue > 0 && (best == null || b.revenue > best.revenue)) best = b;
+    }
+    return best;
+  }
+}
+
+const weekdayNames = [
+  'Minggu',
+  'Senin',
+  'Selasa',
+  'Rabu',
+  'Kamis',
+  'Jumat',
+  'Sabtu',
+];

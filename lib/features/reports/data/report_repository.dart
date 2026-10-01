@@ -152,6 +152,37 @@ class ReportRepository {
   Future<List<GroupPerformance>> terminals(ReportRange range) =>
       _groups(_dao.terminalSales(range.start, range.end));
 
+  /// Semua bagian laporan untuk [range] (dimuat paralel).
+  Future<ReportBundle> bundle(ReportRange range) async {
+    final results = await Future.wait<Object>([
+      summary(range),
+      summary(range.previous),
+      daily(range),
+      byHour(range),
+      byWeekday(range),
+      products(range),
+      categories(range),
+      payments(range),
+      vouchers(range),
+      cashiers(range),
+      terminals(range),
+    ]);
+    return ReportBundle(
+      range: range,
+      summary: results[0] as SalesSummary,
+      previous: results[1] as SalesSummary,
+      daily: results[2] as List<DailyPoint>,
+      byHour: results[3] as List<BucketPoint>,
+      byWeekday: results[4] as List<BucketPoint>,
+      products: results[5] as List<ProductPerformance>,
+      categories: results[6] as List<GroupPerformance>,
+      payments: results[7] as List<GroupPerformance>,
+      vouchers: results[8] as List<GroupPerformance>,
+      cashiers: results[9] as List<GroupPerformance>,
+      terminals: results[10] as List<GroupPerformance>,
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // Stok
   // ---------------------------------------------------------------------------

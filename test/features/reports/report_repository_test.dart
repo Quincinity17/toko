@@ -1,3 +1,4 @@
+import 'package:excel/excel.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:toko/core/database/app_database.dart';
@@ -6,9 +7,11 @@ import 'package:toko/features/auth/domain/app_user.dart';
 import 'package:toko/features/payments/data/payment_method_repository.dart';
 import 'package:toko/features/payments/domain/payment_method.dart';
 import 'package:toko/features/products/data/product_repository.dart';
+import 'package:toko/features/reports/data/report_export.dart';
 import 'package:toko/features/reports/data/report_repository.dart';
 import 'package:toko/features/reports/domain/report_models.dart';
 import 'package:toko/features/sales/data/checkout_service.dart';
+import 'package:toko/features/sales/data/sales_repository.dart';
 import 'package:toko/features/sales/domain/cart.dart';
 import 'package:toko/features/vouchers/data/voucher_repository.dart';
 import 'package:toko/features/vouchers/domain/voucher.dart';
@@ -249,5 +252,41 @@ void main() {
         {'A': AbcClass.a, 'B': AbcClass.b, 'C': AbcClass.c},
       );
     });
+  });
+
+  test('export Excel berisi semua sheet dengan angka yang sama', () async {
+    await seedSales();
+    final r = repo();
+    final week = ReportRange.preset(RangePreset.last7, at(0, 20));
+    final bytes = exportReportXlsx(
+      bundle: await r.bundle(week),
+      inventory: await r.inventory(),
+      stock: await r.stockStatus(),
+      invoices: await SalesRepository(db)
+          .watchBetween(week.start, week.end)
+          .first,
+    );
+    final book = Excel.decodeBytes(bytes);
+    expect(book.tables.keys, [
+      'Ringkasan',
+      'Harian',
+      'Per Jam',
+      'Per Hari',
+      'Produk',
+      'Kategori',
+      'Pembayaran',
+      'Voucher',
+      'Kasir',
+      'Terminal',
+      'Stok',
+      'Faktur',
+    ]);
+    String cell(String sheet, int row, int col) =>
+        book.tables[sheet]!.rows[row][col]?.value.toString() ?? '';
+    expect(cell('Ringkasan', 4, 0), 'Omzet bersih');
+    expect(cell('Ringkasan', 4, 1), '25500'); // 7.000 + 18.500
+    expect(cell('Voucher', 1, 0), 'HEMAT1K');
+    expect(book.tables['Faktur']!.rows, hasLength(4)); // judul + 3 faktur
+    expect(book.tables['Harian']!.rows, hasLength(8)); // judul + 7 hari
   });
 }
