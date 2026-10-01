@@ -1,5 +1,6 @@
 import 'package:bcrypt/bcrypt.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -7,6 +8,7 @@ import 'package:toko/app.dart';
 import 'package:toko/core/database/app_database.dart';
 import 'package:toko/core/security/password_hasher.dart';
 import 'package:toko/core/widgets/app_button.dart';
+import 'package:toko/core/widgets/app_sidebar.dart';
 
 import 'helpers/test_app.dart';
 
@@ -44,7 +46,7 @@ Future<void> login(
   await settle(tester);
 }
 
-Future<void> pumpApp(WidgetTester tester) async {
+Future<AppDatabase> pumpApp(WidgetTester tester) async {
   tester.view.physicalSize = const Size(1440, 1000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -62,6 +64,14 @@ Future<void> pumpApp(WidgetTester tester) async {
     ),
   );
   await settle(tester);
+  return db;
+}
+
+/// Membongkar aplikasi di akhir tes supaya stream drift sempat ditutup
+/// dan tidak ada timer yang tertinggal.
+Future<void> unmount(WidgetTester tester) async {
+  await tester.pumpWidget(const SizedBox());
+  await tester.pump(const Duration(seconds: 1));
 }
 
 /// Mengisi AppTextField berdasarkan labelnya.
@@ -94,12 +104,17 @@ void main() {
 
     // Kasir masuk ke layar kasir; menu admin tidak tampil.
     await login(tester, 'kasir', 'kasir123');
-    expect(find.text('Layar kasir belum tersedia'), findsOneWidget);
+    expect(find.text('Belum ada barang'), findsOneWidget);
     expect(find.text('Produk'), findsNothing);
     expect(find.text('Pengaturan'), findsNothing);
 
     // Keluar lewat menu user di sidebar.
-    await tester.tap(find.text('Kasir Satu'));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AppSidebar),
+        matching: find.text('Kasir Satu'),
+      ),
+    );
     await settle(tester);
     await tester.tap(find.text('Keluar'));
     await settle(tester);
@@ -110,6 +125,8 @@ void main() {
     expect(find.text('Omzet Hari Ini'), findsOneWidget);
     expect(find.text('Produk'), findsOneWidget);
     expect(find.text('Pengaturan'), findsOneWidget);
+
+    await unmount(tester);
   });
 
   testWidgets('Admin menambah akun kasir lalu akun itu bisa login', (
@@ -143,6 +160,68 @@ void main() {
     await tester.tap(find.text('Keluar'));
     await settle(tester);
     await login(tester, 'siti', 'rahasia1');
-    expect(find.text('Layar kasir belum tersedia'), findsOneWidget);
+    expect(find.text('Belum ada barang'), findsOneWidget);
+
+    await unmount(tester);
+  });
+
+  testWidgets('Kasir scan barang, bayar, dan faktur muncul di Hari Ini', (
+    tester,
+  ) async {
+    final db = await pumpApp(tester);
+    await login(tester, 'kasir', 'kasir123');
+
+    Future<void> scan(String code) async {
+      await fill(tester, 'Kode / Barcode', code);
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await settle(tester);
+    }
+
+    // Scan kode dan barcode; barang yang sama digabung.
+    await scan('BRG001');
+    await scan('brg001');
+    final barcodeAqua = (await tester.runAsync(
+      () => (db.select(
+        db.products,
+      )..where((p) => p.code.equals('BRG009'))).getSingle(),
+    ))!.barcode!;
+    await scan(barcodeAqua);
+
+    expect(find.text('Indomie Goreng 85g'), findsOneWidget);
+    expect(find.text('Aqua Botol 600ml'), findsOneWidget);
+    // 2 × 3.500 + 3.500 = 10.500
+    expect(find.text('Rp 10.500'), findsWidgets);
+
+    // F2 membuka pembayaran.
+    await tester.sendKeyEvent(LogicalKeyboardKey.f2);
+    await settle(tester);
+    expect(find.text('Pembayaran'), findsOneWidget);
+    await tester.enterText(find.byType(EditableText).last, '20000');
+    await settle(tester);
+    expect(find.text('Rp 9.500'), findsOneWidget); // kembalian
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await settle(tester);
+
+    expect(find.text('Transaksi Berhasil'), findsOneWidget);
+    expect(find.textContaining('INV-'), findsOneWidget);
+    await tester.tap(find.textContaining('Transaksi Baru  (Enter)'));
+    await settle(tester);
+    expect(find.text('Belum ada barang'), findsOneWidget);
+
+    // Tab Hari Ini menampilkan faktur.
+    await tester.tap(find.text('Hari Ini (1)'));
+    await settle(tester);
+    expect(find.textContaining('INV-'), findsOneWidget);
+    expect(find.text('Kasir Satu'), findsWidgets);
+
+    // Stok berkurang.
+    final indomie = (await tester.runAsync(
+      () => (db.select(
+        db.products,
+      )..where((p) => p.code.equals('BRG001'))).getSingle(),
+    ))!;
+    expect(indomie.stock, 118);
+
+    await unmount(tester);
   });
 }

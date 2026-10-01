@@ -5,7 +5,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/large_title_page.dart';
 import '../../../core/widgets/state_views.dart';
-import 'widgets/stat_card.dart';
+import '../../../core/widgets/stat_card.dart';
 
 /// Kerangka dashboard. Angka masih nol; diisi dari data penjualan di Langkah 7.
 class DashboardPage extends StatelessWidget {

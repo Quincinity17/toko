@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widgets/app_card.dart';
+import '../theme/app_theme.dart';
+import 'app_card.dart';
 
 /// Kartu ringkasan angka di dashboard.
 class StatCard extends StatelessWidget {

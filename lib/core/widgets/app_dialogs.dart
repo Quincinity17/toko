@@ -2,6 +2,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import '../utils/formatters.dart';
+import '../utils/number_input.dart';
 
 /// Kumpulan helper dialog bergaya iOS agar semua fitur memakai pola yang sama.
 class AppDialogs {
@@ -59,6 +61,71 @@ class AppDialogs {
       ),
     );
     return result ?? false;
+  }
+
+  /// Meminta satu angka (qty, persen, dll.) dengan alert iOS berisi field.
+  /// Mengembalikan `null` jika dibatalkan atau isian tidak valid.
+  static Future<double?> promptNumber(
+    BuildContext context, {
+    required String title,
+    String? message,
+    required double initial,
+    String? suffix,
+    double min = 0,
+    double? max,
+  }) {
+    final controller = TextEditingController(text: Fmt.number(initial));
+    controller.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: controller.text.length,
+    );
+
+    return showCupertinoDialog<double>(
+      context: context,
+      builder: (ctx) {
+        void submit() {
+          final v = parseIdNumber(controller.text);
+          if (v == null || v < min || (max != null && v > max)) return;
+          Navigator.pop(ctx, v);
+        }
+
+        return CupertinoAlertDialog(
+          title: Text(title),
+          content: Column(
+            children: [
+              if (message != null) Text(message),
+              const SizedBox(height: AppSpacing.sm),
+              CupertinoTextField(
+                controller: controller,
+                autofocus: true,
+                textAlign: TextAlign.center,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                suffix: suffix == null
+                    ? null
+                    : Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: Text(suffix),
+                      ),
+                onSubmitted: (_) => submit(),
+              ),
+            ],
+          ),
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Batal'),
+            ),
+            CupertinoDialogAction(
+              isDefaultAction: true,
+              onPressed: submit,
+              child: const Text('Simpan'),
+            ),
+          ],
+        );
+      },
+    ).whenComplete(controller.dispose);
   }
 
   /// Action sheet iOS. Mengembalikan nilai dari opsi yang dipilih, atau `null`

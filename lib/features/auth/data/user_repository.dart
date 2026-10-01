@@ -136,8 +136,13 @@ class UserRepository {
     if (id == actor.id) {
       throw const AccountFailure('Anda tidak bisa menghapus akun sendiri.');
     }
-    // TODO(Langkah 5): tolak hapus jika user sudah punya transaksi penjualan;
-    // sarankan nonaktifkan agar riwayat faktur tetap utuh.
+    // Faktur menyimpan id kasir; menghapusnya akan merusak riwayat penjualan.
+    if (await _db.salesDao.countByUser(id) > 0) {
+      throw const AccountFailure(
+        'Akun ini sudah punya transaksi penjualan sehingga tidak bisa dihapus. '
+        'Nonaktifkan saja agar riwayat faktur tetap utuh.',
+      );
+    }
     await _db.transaction(() async {
       final current = await _find(id);
       if (_isActiveAdmin(current)) await _ensureAnotherActiveAdmin();

@@ -62,7 +62,29 @@ dari artifact `toko-windows` lalu dites di PC Windows.
 - Validasi isian di `AccountRules` (dipakai form dan repository): username
   3–32 karakter `[a-z0-9._]`, disimpan huruf kecil; password minimal 6.
 - Akun nonaktif tidak bisa login.
-- TODO Langkah 5: tolak hapus user yang sudah punya transaksi (sarankan nonaktifkan).
+- User yang sudah punya transaksi tidak bisa dihapus (harus dinonaktifkan).
+
+## Kasir (`features/sales`)
+
+Tata letak mengikuti layar iPOS yang diminta user, dengan gaya iOS:
+tab **Transaksi Baru** dan **Hari Ini**.
+
+- Transaksi Baru: kolom Jumlah + Kode/Barcode (selalu fokus kembali untuk
+  scanner USB; Enter = cari persis kode/barcode, jika tidak ketemu → sheet cari),
+  tabel keranjang (No, Kode, Nama, Jumlah ±, Satuan, Harga, Pot.% per barang,
+  Total), panel kanan: total besar, subtotal, potongan transaksi (% atau Rp), Bayar.
+- Bayar → sheet pembayaran tunai (chip Uang Pas & pecahan, kembalian langsung)
+  → `CheckoutService` menyimpan semuanya dalam satu transaction → sheet sukses.
+- Hari Ini: ringkasan (jumlah, omzet, rata-rata) + tabel faktur; klik = rincian.
+- Shortcut: F2 / End = bayar, F3 = cari barang, ↑↓ + Enter di sheet cari.
+- Logika di domain murni (`cart.dart`, `invoice_number.dart`, `cash_suggestions.dart`)
+  dan `CheckoutService`; widget hanya memanggil `cartControllerProvider`.
+- Pembulatan: total baris = round(qty × harga × (100 − pot%)/100); potongan
+  transaksi tidak pernah melebihi subtotal.
+- Stok boleh minus (penjualan tidak diblokir); baris diberi tanda bila qty > stok tercatat.
+- Keranjang tetap ada saat pindah halaman, kosong otomatis saat ganti user.
+- Belum ada (di luar tahap 1): pelanggan, sales, PPN, biaya lain, pending,
+  buka laci, metode bayar selain tunai, cetak struk (Langkah 6).
 
 ## Design system (gaya Apple / iOS)
 
@@ -89,18 +111,27 @@ dari artifact `toko-windows` lalu dites di PC Windows.
 | `InsetGroupedSection` / `InsetGroupedTile` / `TileIcon` | List bergaya Pengaturan iOS |
 | `LargeTitlePage` | Halaman dengan large title + toolbar kaca saat digulir; `backLabel`/`onBack` untuk sub-halaman |
 | `AppSidebar` | Sidebar kaca yang bisa diciutkan |
-| `AppDialogs` | `alert`, `confirm`, `actionSheet`, `sheet` (bottom sheet dengan handle) |
+| `AppDialogs` | `alert`, `confirm`, `promptNumber`, `actionSheet`, `sheet` (bottom sheet dengan handle) |
 | `EmptyState`, `LoadingState`, `SkeletonBox`, `ErrorBanner` | State kosong/loading/error |
+| `StatCard` | Kartu angka ringkasan (dashboard, kasir) |
 | `AppTextField` | Input dengan label, helper/error, mode password |
 | `Shake` | Animasi getar untuk input salah |
 
 Format angka/tanggal: `Fmt` di `core/utils/formatters.dart` (`Fmt.rupiah(10000)` → `Rp 10.000`).
+Input angka: `parseIdNumber` (`1.500` → 1500, `0,5` → 0.5) dan `RupiahInputFormatter`
+di `core/utils/number_input.dart`.
+
+## Catatan tes widget
+
+- Isolate (bcrypt) tidak jalan di fake async → tes memakai `_SyncHasher`.
+- Kursor berkedip → pakai `settle()` bukan `pumpAndSettle()`.
+- Akhiri setiap `testWidgets` dengan `unmount(tester)` agar stream drift tertutup.
 
 ### Shortcut keyboard
 
 - Ctrl+1..5: pindah halaman (Dashboard, Kasir, Produk, Laporan, Pengaturan)
 - Ctrl+\\: ciutkan/tampilkan sidebar
-- (Langkah 5) F2 bayar, F3 cari barang
+- Kasir: F2 / End bayar, F3 cari barang
 
 ## Skema database
 
@@ -108,9 +139,21 @@ Uang = INTEGER Rupiah; stok = REAL (mendukung kg/liter).
 
 - v1 `users`: id, username (unik, huruf kecil), full_name, password_hash (bcrypt),
   role (`admin`|`kasir`, textEnum), is_active, created_at, last_login_at
+- v2 (migrasi `from < 2` + 20 barang contoh, sekali saja):
+  - `categories` (id, name unik), `units` (id, name unik)
+  - `products`: code (unik), barcode (unik, null), name, category_id, unit_id,
+    purchase_price, selling_price, stock (REAL), min_stock, is_active, created/updated_at
+  - `sales`: invoice_no (unik), sale_date, user_id, item_count, subtotal,
+    discount_percent (null), discount, total, paid, change_amount, payment_method
+  - `sale_items`: snapshot product_code/name/unit_name, qty, price,
+    discount_percent, purchase_price, subtotal
+  - `stock_movements`: product_id, type (sale|import|adjust), qty_change (negatif
+    = keluar), ref_id, note
+- Tes migrasi: `checkout_service_test.dart` membuat DB v1 manual lalu membuka v2.
+- Data contoh (`sample_products.dart`) dimasukkan di onCreate/onUpgrade, bukan di
+  seeder start-up, supaya tidak muncul lagi jika user menghapusnya.
 
-Rencana berikutnya: categories, units, products, sales, sale_items (snapshot
-nama/harga/satuan), stock_movements, settings.
+Rencana berikutnya: settings.
 
 ## Default yang dipakai (belum dikonfirmasi user)
 
@@ -124,10 +167,10 @@ nama/harga/satuan), stock_movements, settings.
 - [x] Langkah 1 — Design system + app shell (sidebar, halaman kosong) — menunggu review tampilan
 - [x] Langkah 2a — Database (drift) + tabel users, seed admin/kasir, login + role
 - [x] Kelola akun + ganti password (permintaan tambahan)
-- [ ] Langkah 2b — Seed 20 barang contoh (bersama tabel produk di Langkah 3)
+- [x] Langkah 2b — 20 barang contoh (migrasi v2)
+- [x] Langkah 5 — Transaksi penjualan + daftar transaksi hari ini (dikerjakan lebih dulu atas permintaan user)
 - [ ] Langkah 3 — Master barang
 - [ ] Langkah 4 — Import iPOS (butuh `sample_data/ipos_export.xlsx`)
-- [ ] Langkah 5 — Transaksi penjualan
 - [ ] Langkah 6 — Struk 58 mm (PDF preview)
 - [ ] Langkah 7 — Dashboard + laporan
 
