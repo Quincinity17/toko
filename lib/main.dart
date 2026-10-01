@@ -4,10 +4,22 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
 
 import 'app.dart';
+import 'core/database/app_database.dart';
+import 'core/database/seed.dart';
+import 'core/security/password_hasher.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   Intl.defaultLocale = 'id_ID';
   await initializeDateFormatting('id_ID');
-  runApp(const ProviderScope(child: TokoApp()));
+
+  final db = AppDatabase();
+  await DatabaseSeeder(db, const PasswordHasher()).seed();
+
+  runApp(
+    ProviderScope(
+      overrides: [appDatabaseProvider.overrideWithValue(db)],
+      child: const TokoApp(),
+    ),
+  );
 }

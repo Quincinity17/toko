@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/auth/presentation/auth_controller.dart';
+import '../../features/auth/presentation/login_page.dart';
 import '../../features/dashboard/presentation/dashboard_page.dart';
 import '../../features/products/presentation/products_page.dart';
 import '../../features/reports/presentation/reports_page.dart';
@@ -12,9 +14,29 @@ import 'app_shell.dart';
 import 'routes.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
+  // Router dibuat sekali; perubahan sesi hanya memicu evaluasi ulang redirect.
+  final authChanged = ValueNotifier(0);
+  ref.listen(authControllerProvider, (_, _) => authChanged.value++);
+  ref.onDispose(authChanged.dispose);
+
   return GoRouter(
-    initialLocation: AppRoutes.dashboard,
+    initialLocation: AppRoutes.login,
+    refreshListenable: authChanged,
+    redirect: (context, state) {
+      final user = ref.read(authControllerProvider);
+      final path = state.matchedLocation;
+      final atLogin = path == AppRoutes.login;
+
+      if (user == null) return atLogin ? null : AppRoutes.login;
+      if (atLogin || !user.role.canAccess(path)) return user.role.homePath;
+      return null;
+    },
     routes: [
+      GoRoute(
+        path: AppRoutes.login,
+        pageBuilder: (context, state) =>
+            SpringFadePage(key: state.pageKey, child: const LoginPage()),
+      ),
       ShellRoute(
         builder: (context, state, child) =>
             AppShell(location: state.uri.path, child: child),

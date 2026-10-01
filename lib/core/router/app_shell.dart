@@ -4,7 +4,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/auth/domain/app_user.dart';
+import '../../features/auth/presentation/auth_controller.dart';
+import '../../features/auth/presentation/widgets/user_avatar.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_dialogs.dart';
+import '../widgets/pressable_scale.dart';
 import '../widgets/app_sidebar.dart';
 import 'routes.dart';
 
@@ -63,6 +68,8 @@ const _digitKeys = [
 
 /// Kerangka utama: sidebar di kiri, halaman aktif di kanan.
 ///
+/// Menu sidebar disaring sesuai peran user yang login.
+///
 /// Shortcut: Ctrl+1..5 pindah halaman, Ctrl+\ ciutkan sidebar.
 class AppShell extends ConsumerWidget {
   const AppShell({super.key, required this.location, required this.child});
@@ -74,15 +81,23 @@ class AppShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.colors;
     final collapsed = ref.watch(sidebarCollapsedProvider);
-    final selected = appDestinations.indexWhere(
+    final user = ref.watch(authControllerProvider);
+    // Saat logout, shell masih dirender sesaat sebelum router pindah ke login.
+    if (user == null) return ColoredBox(color: c.background);
+
+    final destinations = [
+      for (final d in appDestinations)
+        if (user.role.canAccess(d.path)) d,
+    ];
+    final selected = destinations.indexWhere(
       (d) => location.startsWith(d.path),
     );
 
-    void go(int i) => context.go(appDestinations[i].path);
+    void go(int i) => context.go(destinations[i].path);
 
     return CallbackShortcuts(
       bindings: {
-        for (var i = 0; i < appDestinations.length; i++)
+        for (var i = 0; i < destinations.length; i++)
           SingleActivator(_digitKeys[i], control: true): () => go(i),
         const SingleActivator(
           LogicalKeyboardKey.backslash,
@@ -97,14 +112,14 @@ class AppShell extends ConsumerWidget {
           body: Row(
             children: [
               AppSidebar(
-                destinations: appDestinations,
+                destinations: destinations,
                 selectedIndex: selected,
                 onSelected: go,
                 collapsed: collapsed,
                 onToggleCollapsed: () =>
                     ref.read(sidebarCollapsedProvider.notifier).toggle(),
                 header: const _StoreHeader(),
-                footer: _UserFooter(collapsed: collapsed),
+                footer: _UserFooter(user: user, collapsed: collapsed),
               ),
               Expanded(child: ClipRect(child: child)),
             ],
@@ -151,53 +166,70 @@ class _StoreHeader extends StatelessWidget {
   }
 }
 
-/// Info user yang login. Masih data statis sampai fitur login (Langkah 2).
-class _UserFooter extends StatelessWidget {
-  const _UserFooter({required this.collapsed});
+/// User yang login. Diklik untuk keluar.
+class _UserFooter extends ConsumerWidget {
+  const _UserFooter({required this.user, required this.collapsed});
 
+  final AppUser user;
   final bool collapsed;
 
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final avatar = CircleAvatar(
-      radius: 18,
-      backgroundColor: c.fill,
-      child: Text(
-        'A',
-        style: AppTypography.headline.copyWith(color: c.labelSecondary),
-      ),
+  Future<void> _showMenu(BuildContext context, WidgetRef ref) async {
+    final action = await AppDialogs.actionSheet<String>(
+      context,
+      title: user.fullName,
+      message: 'Masuk sebagai ${user.role.label}',
+      options: const [
+        ActionSheetOption(label: 'Keluar', value: 'logout', destructive: true),
+      ],
     );
-    if (collapsed) return Center(child: avatar);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
-      child: Row(
-        children: [
-          avatar,
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Administrator',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.subheadline.copyWith(
-                    color: c.label,
-                    fontWeight: FontWeight.w600,
-                  ),
+    if (action == 'logout') ref.read(authControllerProvider.notifier).logout();
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.colors;
+    final avatar = UserAvatar(user: user);
+
+    return Tooltip(
+      message: collapsed ? '${user.fullName} (${user.role.label})' : '',
+      child: PressableScale(
+        onPressed: () => _showMenu(context, ref),
+        pressedScale: 0.97,
+        borderRadius: AppRadius.mdAll,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.xs),
+          child: collapsed
+              ? Center(child: avatar)
+              : Row(
+                  children: [
+                    avatar,
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            user.fullName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.subheadline.copyWith(
+                              color: c.label,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          RoleBadge(role: user.role),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      CupertinoIcons.ellipsis_circle,
+                      size: 20,
+                      color: c.labelSecondary,
+                    ),
+                  ],
                 ),
-                Text(
-                  'Admin',
-                  style: AppTypography.caption.copyWith(
-                    color: c.labelSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

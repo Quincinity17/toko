@@ -22,12 +22,32 @@ dari artifact `toko-windows` lalu dites di PC Windows.
 - Feature-first: `lib/features/<fitur>/{data,domain,presentation}`.
   Fitur: auth, dashboard, products, import, sales, reports, settings.
 - `lib/core/`: `theme/`, `widgets/` (komponen reusable), `router/`, `utils/`,
-  `database/` (drift, mulai Langkah 2).
+  `database/` (drift: tabel, DAO, seed), `security/` (bcrypt).
 - Aturan: logika bisnis di repository/service (`data`/`domain`), bukan di widget.
   Widget hanya membaca provider Riverpod.
 - State: Riverpod 3 (`Notifier`/`NotifierProvider`).
 - Routing: go_router. `ShellRoute` + `AppShell` (sidebar) membungkus semua halaman
   utama; path di `core/router/routes.dart`.
+- Database: drift, satu `AppDatabase` dibuat di `main()` lalu di-seed dan
+  disuntikkan lewat `appDatabaseProvider.overrideWithValue`. File:
+  `toko.sqlite` di `getApplicationSupportDirectory()` (Windows: `%APPDATA%\id.toko\toko`).
+  Setelah mengubah tabel/DAO: `fvm dart run build_runner build`.
+  Perubahan skema = naikkan `schemaVersion` + langkah di `onUpgrade`.
+
+## Login & peran
+
+- `UserRole` (`features/auth/domain/user_role.dart`) adalah sumber tunggal hak
+  akses: `canAccess(path)` dan `homePath`. Router (`redirect`) dan sidebar
+  sama-sama memakainya.
+- Admin: semua halaman, mulai di Dashboard. Kasir: hanya Kasir + Dashboard,
+  mulai di Kasir. URL terlarang dialihkan ke halaman awal peran.
+- Sesi hanya di memori (`authControllerProvider`); aplikasi dibuka = login lagi.
+- Layar login: pilih kartu akun (admin biru, kasir hijau), isi password, Enter.
+  Pesan gagal sama untuk user tidak ada / password salah.
+- Password: bcrypt cost 10 di `Isolate.run` (`PasswordHasher`). Tes memakai cost 4.
+- Akun seed: `admin / admin123`, `kasir / kasir123` (ditampilkan di layar login
+  hanya saat `kDebugMode`). Perlu fitur ganti password sebelum dipakai sungguhan.
+- Keluar: klik user di bawah sidebar → action sheet → Keluar.
 
 ## Design system (gaya Apple / iOS)
 
@@ -65,24 +85,28 @@ Format angka/tanggal: `Fmt` di `core/utils/formatters.dart` (`Fmt.rupiah(10000)`
 - Ctrl+\\: ciutkan/tampilkan sidebar
 - (Langkah 5) F2 bayar, F3 cari barang
 
-## Rencana skema database (Langkah 2)
+## Skema database
 
 Uang = INTEGER Rupiah; stok = REAL (mendukung kg/liter).
-users, categories, units, products, sales, sale_items (snapshot nama/harga/satuan),
-stock_movements, settings. Detail lengkap ditulis saat tabel dibuat.
+
+- v1 `users`: id, username (unik, huruf kecil), full_name, password_hash (bcrypt),
+  role (`admin`|`kasir`, textEnum), is_active, created_at, last_login_at
+
+Rencana berikutnya: categories, units, products, sales, sale_items (snapshot
+nama/harga/satuan), stock_movements, settings.
 
 ## Default yang dipakai (belum dikonfirmasi user)
 
 - Diskon per transaksi: nominal (Rp) dan persen
 - Metode bayar: tunai saja
 - PPN: tidak dihitung
-- Kasir hanya akses Kasir + Dashboard; Produk/Import/Laporan/Pengaturan khusus Admin
 
 ## Progres
 
 - [x] Langkah 0 — Setup project, fvm, CI build Windows
-- [x] Langkah 1 — Design system + app shell (sidebar, halaman kosong) — **menunggu review tampilan**
-- [ ] Langkah 2 — Database (drift), seed, login + role
+- [x] Langkah 1 — Design system + app shell (sidebar, halaman kosong) — menunggu review tampilan
+- [x] Langkah 2a — Database (drift) + tabel users, seed admin/kasir, login + role
+- [ ] Langkah 2b — Seed 20 barang contoh (bersama tabel produk di Langkah 3)
 - [ ] Langkah 3 — Master barang
 - [ ] Langkah 4 — Import iPOS (butuh `sample_data/ipos_export.xlsx`)
 - [ ] Langkah 5 — Transaksi penjualan
