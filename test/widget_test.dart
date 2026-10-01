@@ -265,4 +265,32 @@ void main() {
 
     await unmount(tester);
   });
+
+  testWidgets('Nama salah ketik di kasir menampilkan saran yang mendekati', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await login(tester, 'kasir', 'kasir123');
+
+    // Ketik nama (bukan kode) dengan salah ketik di kolom kode, lalu Enter.
+    await fill(tester, 'Kode / Barcode', 'chitatoo');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await settle(tester);
+
+    expect(find.text('Cari Barang'), findsOneWidget);
+    expect(
+      find.textContaining('Mungkin maksud Anda', findRichText: true),
+      findsOneWidget,
+    );
+    expect(find.text('Chitato Sapi Panggang 68g'), findsOneWidget);
+
+    // Enter memilih saran teratas dan memasukkannya ke keranjang.
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await settle(tester);
+    expect(find.text('Cari Barang'), findsNothing);
+    expect(find.text('Chitato Sapi Panggang 68g'), findsOneWidget);
+    expect(find.text('Belum ada barang'), findsNothing);
+
+    await unmount(tester);
+  });
 }

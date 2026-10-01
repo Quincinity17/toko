@@ -81,6 +81,12 @@ tab **Transaksi Baru** dan **Hari Ini**.
   Non-tunai: dibayar pas + no. referensi opsional. `CheckoutService` menyimpan
   faktur, item, pemakaian voucher (`tryConsume` atomik terhadap kuota), stok,
   dan riwayat stok dalam satu transaction → popup sukses.
+- Cari barang (F3 / kode tidak ketemu): pencarian per kata (urutan bebas; nama
+  mengandung kata, atau kode/barcode diawali kata; `%`/`_` di-escape). Jika
+  kosong → saran nama mirip (`FuzzyMatch` di `products/domain/fuzzy_match.dart`:
+  jarak edit Damerau per kata, awalan kata, tanpa spasi; skor ≥ 0,7; maks 8)
+  dengan keterangan "Mungkin maksud Anda:". Saran dihitung di Dart dari
+  id+nama semua barang aktif.
 - Hari Ini: hanya tabel faktur hari ini (tanpa kartu ringkasan/angka di label
   tab, permintaan user); klik = rincian.
 - Shortcut: F2 / End = bayar, F3 = cari barang, F4 = voucher, ↑↓ + Enter di

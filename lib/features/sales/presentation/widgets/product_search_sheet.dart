@@ -40,6 +40,10 @@ class _ProductSearchState extends ConsumerState<_ProductSearch> {
   late final _query = TextEditingController(text: widget.initialQuery);
   Timer? _debounce;
   List<Product>? _results;
+
+  /// `true` jika [_results] berisi saran nama yang mendekati, bukan hasil
+  /// pencarian yang cocok.
+  bool _suggested = false;
   int _highlight = 0;
 
   @override
@@ -62,10 +66,17 @@ class _ProductSearchState extends ConsumerState<_ProductSearch> {
 
   Future<void> _search() async {
     final text = _query.text;
-    final results = await ref.read(productRepositoryProvider).search(text);
+    final repo = ref.read(productRepositoryProvider);
+    var results = await repo.search(text);
+    var suggested = false;
+    if (results.isEmpty && text.trim().isNotEmpty) {
+      results = await repo.suggest(text);
+      suggested = results.isNotEmpty;
+    }
     if (!mounted || text != _query.text) return;
     setState(() {
       _results = results;
+      _suggested = suggested;
       _highlight = 0;
     });
   }
@@ -122,26 +133,80 @@ class _ProductSearchState extends ConsumerState<_ProductSearch> {
                       title: 'Barang tidak ditemukan',
                       message: _query.text.isEmpty
                           ? null
-                          : 'Tidak ada barang yang cocok dengan '
-                                '"${_query.text}".',
+                          : 'Tidak ada barang yang cocok atau mirip dengan '
+                                '"${_query.text}". Periksa ejaan, atau cari '
+                                'dengan kode/barcode.',
                     )
-                  : ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.md,
-                        0,
-                        AppSpacing.md,
-                        AppSpacing.md,
-                      ),
-                      itemCount: results.length,
-                      itemBuilder: (context, i) => _ResultTile(
-                        product: results[i],
-                        highlighted: i == _highlight,
-                        onTap: () => _pick(results[i]),
-                      ),
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (_suggested) _SuggestionHeader(query: _query.text),
+                        Expanded(
+                          child: ListView.builder(
+                            padding: const EdgeInsets.fromLTRB(
+                              AppSpacing.md,
+                              0,
+                              AppSpacing.md,
+                              AppSpacing.md,
+                            ),
+                            itemCount: results.length,
+                            itemBuilder: (context, i) => _ResultTile(
+                              product: results[i],
+                              highlighted: i == _highlight,
+                              onTap: () => _pick(results[i]),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Keterangan di atas daftar saran saat tidak ada yang cocok persis.
+class _SuggestionHeader extends StatelessWidget {
+  const _SuggestionHeader({required this.query});
+
+  final String query;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.xl,
+        AppSpacing.xs,
+        AppSpacing.xl,
+        AppSpacing.sm,
+      ),
+      child: Row(
+        children: [
+          Icon(CupertinoIcons.lightbulb_fill, size: 16, color: c.warning),
+          const SizedBox(width: AppSpacing.xs),
+          Expanded(
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(text: 'Tidak ada yang cocok dengan "$query". '),
+                  TextSpan(
+                    text: 'Mungkin maksud Anda:',
+                    style: TextStyle(
+                      color: c.label,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              style: AppTypography.subheadline.copyWith(
+                color: c.labelSecondary,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

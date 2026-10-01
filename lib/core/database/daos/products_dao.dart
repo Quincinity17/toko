@@ -49,20 +49,50 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
     return row == null ? null : _read(row);
   }
 
-  /// Pencarian nama (mengandung kata), kode, atau barcode (diawali kata).
+  /// Pencarian per kata: setiap kata harus ada di nama, atau menjadi awalan
+  /// kode/barcode. Urutan kata bebas ("goreng indomie" = "indomie goreng").
   Future<List<Product>> searchActive(String text, {int limit = 50}) {
-    final q = text.trim().toLowerCase();
+    final words = text
+        .trim()
+        .toLowerCase()
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty);
     final query = _joined()
       ..where(products.isActive.equals(true))
       ..orderBy([OrderingTerm.asc(products.name)])
       ..limit(limit);
-    if (q.isNotEmpty) {
+    for (final w in words) {
+      final e = _escapeLike(w);
       query.where(
-        products.name.lower().like('%$q%') |
-            products.code.lower().like('$q%') |
-            products.barcode.like('$q%'),
+        products.name.lower().like('%$e%', escapeChar: r'\') |
+            products.code.lower().like('$e%', escapeChar: r'\') |
+            products.barcode.like('$e%', escapeChar: r'\'),
       );
     }
     return query.map(_read).get();
   }
+
+  /// Id dan nama semua barang aktif, bahan untuk saran nama yang mendekati.
+  Future<List<(int, String)>> activeNames() {
+    final query = selectOnly(products)
+      ..addColumns([products.id, products.name])
+      ..where(products.isActive.equals(true));
+    return query
+        .map((r) => (r.read(products.id)!, r.read(products.name)!))
+        .get();
+  }
+
+  /// Barang berdasarkan id, mengikuti urutan [ids].
+  Future<List<Product>> byIds(List<int> ids) async {
+    if (ids.isEmpty) return const [];
+    final rows = await (_joined()..where(products.id.isIn(ids)))
+        .map(_read)
+        .get();
+    final byId = {for (final p in rows) p.id: p};
+    return [for (final id in ids) ?byId[id]];
+  }
+
+  /// `%` dan `_` yang diketik user diperlakukan sebagai huruf biasa.
+  static String _escapeLike(String s) =>
+      s.replaceAll(r'\', r'\\').replaceAll('%', r'\%').replaceAll('_', r'\_');
 }
