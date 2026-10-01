@@ -16,10 +16,10 @@ enum UserRole {
     UserRole.kasir => AppRoutes.kasir,
   };
 
-  /// Halaman yang boleh dibuka. Admin bebas; kasir hanya Kasir dan Dashboard.
+  /// Halaman yang boleh dibuka. Admin bebas; kasir hanya halaman Kasir
+  /// (transaksi baru dan daftar pembayaran hari ini).
   bool canAccess(String path) => switch (this) {
     UserRole.admin => true,
-    UserRole.kasir =>
-      path.startsWith(AppRoutes.kasir) || path.startsWith(AppRoutes.dashboard),
+    UserRole.kasir => path.startsWith(AppRoutes.kasir),
   };
 }

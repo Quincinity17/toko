@@ -39,8 +39,8 @@ dari artifact `toko-windows` lalu dites di PC Windows.
 - `UserRole` (`features/auth/domain/user_role.dart`) adalah sumber tunggal hak
   akses: `canAccess(path)` dan `homePath`. Router (`redirect`) dan sidebar
   sama-sama memakainya.
-- Admin: semua halaman, mulai di Dashboard. Kasir: hanya Kasir + Dashboard,
-  mulai di Kasir. URL terlarang dialihkan ke halaman awal peran.
+- Admin: semua halaman, mulai di Dashboard. Kasir: hanya halaman Kasir
+  (tanpa Dashboard, permintaan user). URL terlarang dialihkan ke halaman awal peran.
 - Sesi hanya di memori (`authControllerProvider`); aplikasi dibuka = login lagi.
 - Layar login: ketik username + password (Enter pindah/masuk). Sengaja tidak
   menampilkan daftar akun atau petunjuk akun. Pesan gagal sama untuk user tidak
@@ -81,7 +81,8 @@ tab **Transaksi Baru** dan **Hari Ini**.
   Non-tunai: dibayar pas + no. referensi opsional. `CheckoutService` menyimpan
   faktur, item, pemakaian voucher (`tryConsume` atomik terhadap kuota), stok,
   dan riwayat stok dalam satu transaction → popup sukses.
-- Hari Ini: ringkasan (jumlah, omzet, rata-rata) + tabel faktur; klik = rincian.
+- Hari Ini: hanya tabel faktur hari ini (tanpa kartu ringkasan/angka di label
+  tab, permintaan user); klik = rincian.
 - Shortcut: F2 / End = bayar, F3 = cari barang, F4 = voucher, ↑↓ + Enter di
   sheet cari, Esc menutup popup.
 - Logika di domain murni (`cart.dart`, `invoice_number.dart`, `cash_suggestions.dart`,

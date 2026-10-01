@@ -72,9 +72,9 @@ void main() {
     expect(() => repo.login('kasir', 'kasir123'), throwsA(isA<AuthFailure>()));
   });
 
-  test('hak akses: kasir hanya Kasir dan Dashboard', () {
+  test('hak akses: kasir hanya halaman Kasir', () {
     expect(UserRole.kasir.canAccess('/kasir'), isTrue);
-    expect(UserRole.kasir.canAccess('/dashboard'), isTrue);
+    expect(UserRole.kasir.canAccess('/dashboard'), isFalse);
     expect(UserRole.kasir.canAccess('/produk'), isFalse);
     expect(UserRole.kasir.canAccess('/pengaturan'), isFalse);
     expect(UserRole.admin.canAccess('/pengaturan'), isTrue);

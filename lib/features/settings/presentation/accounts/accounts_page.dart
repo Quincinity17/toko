@@ -94,7 +94,7 @@ class _AccountGroups extends StatelessWidget {
         cashiers,
         cashiers.isEmpty
             ? 'Belum ada kasir. Tekan "Tambah Akun" untuk membuat.'
-            : 'Kasir hanya bisa membuka layar Kasir dan Dashboard.',
+            : 'Kasir hanya bisa membuka layar Kasir (transaksi dan daftar pembayaran hari ini).',
       ),
       if (inactive.isNotEmpty)
         _section(

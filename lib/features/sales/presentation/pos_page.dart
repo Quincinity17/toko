@@ -35,7 +35,6 @@ class _PosPageState extends ConsumerState<PosPage> {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final todayCount = ref.watch(todaySalesProvider).value?.length;
 
     return ColoredBox(
       color: c.background,
@@ -62,13 +61,9 @@ class _PosPageState extends ConsumerState<PosPage> {
                   onValueChanged: (t) {
                     if (t != null) _setTab(t);
                   },
-                  children: {
-                    _PosTab.checkout: const _Seg('Transaksi Baru'),
-                    _PosTab.today: _Seg(
-                      todayCount == null || todayCount == 0
-                          ? 'Hari Ini'
-                          : 'Hari Ini ($todayCount)',
-                    ),
+                  children: const {
+                    _PosTab.checkout: _Seg('Transaksi Baru'),
+                    _PosTab.today: _Seg('Hari Ini'),
                   },
                 ),
                 const SizedBox(width: AppSpacing.md),

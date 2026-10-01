@@ -277,7 +277,8 @@ class _RolePicker extends StatelessWidget {
   static const _descriptions = {
     UserRole.admin:
         'Akses semua menu, termasuk produk, laporan, dan pengaturan.',
-    UserRole.kasir: 'Hanya layar Kasir dan Dashboard.',
+    UserRole.kasir:
+        'Hanya layar Kasir: transaksi dan daftar pembayaran hari ini.',
   };
 
   @override

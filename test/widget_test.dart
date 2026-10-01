@@ -106,6 +106,7 @@ void main() {
     // Kasir masuk ke layar kasir; menu admin tidak tampil.
     await login(tester, 'kasir', 'kasir123');
     expect(find.text('Belum ada barang'), findsOneWidget);
+    expect(find.text('Dashboard'), findsNothing);
     expect(find.text('Produk'), findsNothing);
     expect(find.text('Pengaturan'), findsNothing);
 
@@ -245,13 +246,14 @@ void main() {
     await tester.tap(find.textContaining('Transaksi Baru  (Enter)'));
     await settle(tester);
 
-    // Tab Hari Ini menampilkan kedua faktur beserta voucher dan metode.
-    await tester.tap(find.text('Hari Ini (2)'));
+    // Tab Hari Ini hanya berisi daftar (tanpa kartu ringkasan omzet).
+    await tester.tap(find.text('Hari Ini'));
     await settle(tester);
     expect(find.textContaining('INV-'), findsNWidgets(2));
     expect(find.textContaining('HEMAT1K'), findsOneWidget);
     expect(find.text('QRIS'), findsOneWidget);
     expect(find.text('Tunai'), findsOneWidget);
+    expect(find.text('Omzet Hari Ini'), findsNothing);
 
     // Stok berkurang.
     final indomie = (await tester.runAsync(

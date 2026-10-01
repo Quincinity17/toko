@@ -6,7 +6,6 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/widgets/app_card.dart';
 import '../../../../core/widgets/pressable_scale.dart';
-import '../../../../core/widgets/stat_card.dart';
 import '../../../../core/widgets/state_views.dart';
 import '../../data/sales_repository.dart';
 import '../../domain/sale.dart';
@@ -28,7 +27,7 @@ const _cols = <(String, double?, TextAlign)>[
   ('', 32, TextAlign.right),
 ];
 
-/// Tab "Hari Ini": ringkasan dan daftar faktur hari ini.
+/// Tab "Hari Ini": daftar faktur hari ini (tanpa ringkasan angka).
 class TodaySalesView extends ConsumerWidget {
   const TodaySalesView({super.key});
 
@@ -47,54 +46,9 @@ class TodaySalesView extends ConsumerWidget {
         error: (e, _) => ErrorBanner(message: 'Gagal memuat transaksi: $e'),
         data: (list) => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _Summary(sales: list),
-            const SizedBox(height: AppSpacing.md),
-            Expanded(child: _SalesTable(sales: list)),
-          ],
+          children: [Expanded(child: _SalesTable(sales: list))],
         ),
       ),
-    );
-  }
-}
-
-class _Summary extends StatelessWidget {
-  const _Summary({required this.sales});
-
-  final List<SaleSummary> sales;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final omzet = sales.fold<int>(0, (s, e) => s + e.total);
-    final average = sales.isEmpty ? 0 : (omzet / sales.length).round();
-    final cards = [
-      StatCard(
-        label: 'Transaksi',
-        value: Fmt.number(sales.length),
-        icon: CupertinoIcons.doc_text_fill,
-        color: c.accent,
-      ),
-      StatCard(
-        label: 'Omzet Hari Ini',
-        value: Fmt.rupiah(omzet),
-        icon: CupertinoIcons.money_dollar_circle_fill,
-        color: c.success,
-      ),
-      StatCard(
-        label: 'Rata-rata per Transaksi',
-        value: Fmt.rupiah(average),
-        icon: CupertinoIcons.chart_bar_fill,
-        color: c.warning,
-      ),
-    ];
-    return Row(
-      children: [
-        for (var i = 0; i < cards.length; i++) ...[
-          if (i > 0) const SizedBox(width: AppSpacing.md),
-          Expanded(child: cards[i]),
-        ],
-      ],
     );
   }
 }
