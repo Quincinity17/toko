@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../core/router/routes.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/app_button.dart';
@@ -13,15 +15,13 @@ import '../../../core/widgets/option_picker.dart';
 import '../../../core/widgets/pressable_scale.dart';
 import '../../../core/widgets/state_views.dart';
 import '../domain/product.dart';
+import 'product_export_dialog.dart';
 import 'product_form_sheet.dart';
 import 'product_providers.dart';
 
 /// Master barang (khusus admin): cari, filter, urutkan, tambah, ubah, hapus.
 class ProductsPage extends ConsumerStatefulWidget {
-  const ProductsPage({super.key, this.actions = const []});
-
-  /// Tombol tambahan di kanan judul (Import/Export).
-  final List<Widget> actions;
+  const ProductsPage({super.key});
 
   @override
   ConsumerState<ProductsPage> createState() => _ProductsPageState();
@@ -98,7 +98,19 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
       title: 'Produk',
       subtitle: count == null ? null : '${Fmt.number(count)} barang',
       actions: [
-        ...widget.actions,
+        AppButton(
+          label: 'Import',
+          icon: CupertinoIcons.arrow_down_doc,
+          variant: AppButtonVariant.gray,
+          onPressed: () => context.go(AppRoutes.importProduk),
+        ),
+        AppButton(
+          label: 'Export',
+          icon: CupertinoIcons.square_arrow_up,
+          variant: AppButtonVariant.gray,
+          onPressed: () =>
+              showProductExportDialog(context, currentFilter: _filter),
+        ),
         AppButton(
           label: 'Tambah',
           icon: CupertinoIcons.add,

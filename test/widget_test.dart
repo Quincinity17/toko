@@ -1,7 +1,10 @@
+import 'dart:convert';
+
 import 'package:bcrypt/bcrypt.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:toko/app.dart';
@@ -9,6 +12,7 @@ import 'package:toko/core/database/app_database.dart';
 import 'package:toko/core/security/password_hasher.dart';
 import 'package:toko/core/widgets/app_button.dart';
 import 'package:toko/core/widgets/app_sidebar.dart';
+import 'package:toko/features/products/presentation/product_import_page.dart';
 import 'package:toko/features/vouchers/domain/voucher.dart';
 
 import 'helpers/test_app.dart';
@@ -47,7 +51,10 @@ Future<void> login(
   await settle(tester);
 }
 
-Future<AppDatabase> pumpApp(WidgetTester tester) async {
+Future<AppDatabase> pumpApp(
+  WidgetTester tester, {
+  List<Override> overrides = const [],
+}) async {
   tester.view.physicalSize = const Size(1440, 1000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -60,6 +67,7 @@ Future<AppDatabase> pumpApp(WidgetTester tester) async {
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         passwordHasherProvider.overrideWithValue(const _SyncHasher()),
+        ...overrides,
       ],
       child: const TokoApp(),
     ),
@@ -73,6 +81,13 @@ Future<AppDatabase> pumpApp(WidgetTester tester) async {
 Future<void> unmount(WidgetTester tester) async {
   await tester.pumpWidget(const SizedBox());
   await tester.pump(const Duration(seconds: 1));
+}
+
+/// Gulir sampai [finder] terlihat, lalu ketuk.
+Future<void> tapVisible(WidgetTester tester, Finder finder) async {
+  await tester.ensureVisible(finder);
+  await tester.pump();
+  await tester.tap(finder);
 }
 
 /// Mengisi AppTextField berdasarkan labelnya.
@@ -338,6 +353,57 @@ void main() {
     await settle(tester);
     expect(find.text('Kecap Bango 220ml'), findsOneWidget);
     expect(find.text('4 barang'), findsOneWidget);
+
+    await unmount(tester);
+  });
+
+  testWidgets('Admin import barang dari file gaya iPOS', (tester) async {
+    const csv =
+        'Kode Item,Nama Item,Jenis,Satuan,Harga Pokok,Harga Jual 1,Stok\n'
+        'BRG001,Indomie Goreng,Makanan,PCS,2900,3700,150\n'
+        'IPOS1,Kopi Kenangan,Minuman,BTL,8000,10000,24\n'
+        'IPOS2,Roti Aoka,Roti,PCS,1500,,10\n';
+    await pumpApp(
+      tester,
+      overrides: [
+        pickImportFileProvider.overrideWithValue(
+          () async => (Uint8List.fromList(utf8.encode(csv)), 'ipos.csv'),
+        ),
+      ],
+    );
+    await login(tester, 'admin', 'admin123');
+    await tester.tap(find.text('Produk'));
+    await settle(tester);
+    await tester.tap(find.widgetWithText(AppButton, 'Import'));
+    await settle(tester);
+    expect(find.text('Import Barang'), findsWidgets);
+
+    // Pilih file (pembacaan file berjalan di isolate → butuh waktu nyata).
+    await tester.tap(find.widgetWithText(AppButton, 'Pilih File'));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 500)),
+    );
+    await settle(tester);
+    expect(find.text('COCOKKAN KOLOM'), findsOneWidget);
+    expect(find.text('Kode Item'), findsOneWidget); // tebakan otomatis
+    expect(find.text('Harga Jual 1'), findsOneWidget);
+
+    await tapVisible(tester, find.widgetWithText(AppButton, 'Periksa Data'));
+    await settle(tester);
+    expect(find.text('Barang baru'), findsOneWidget);
+    expect(find.text('Baris 4'), findsOneWidget); // harga jual kosong
+
+    await tapVisible(tester, find.text('Update stok & harga saja'));
+    await settle(tester);
+    await tapVisible(tester, find.widgetWithText(AppButton, 'Import 2 barang'));
+    await settle(tester);
+    expect(find.text('Import selesai'), findsOneWidget);
+    expect(find.text('2 barang tersimpan'), findsOneWidget);
+
+    await tapVisible(tester, find.widgetWithText(AppButton, 'Lihat Produk'));
+    await settle(tester);
+    expect(find.text('21 barang'), findsOneWidget);
+    expect(find.text('Kopi Kenangan'), findsOneWidget);
 
     await unmount(tester);
   });

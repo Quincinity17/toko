@@ -138,6 +138,31 @@ tab **Transaksi Baru** dan **Hari Ini**.
 - Hapus: belum pernah terjual → hapus permanen (+ riwayat stoknya); sudah
   terjual → dinonaktifkan (hilang dari kasir, faktur lama utuh).
 
+## Import & export barang
+
+- Kolom file = `ProductField` (label: Kode, Barcode, Nama, Kategori, Satuan,
+  Harga Beli, Harga Jual, Stok, Stok Minimum, Aktif). Export dan template memakai
+  label ini → hasil export bisa langsung di-import ulang.
+- `product_file_io.dart`: baca .xlsx/.csv (di `Isolate.run`; baris judul = baris
+  pertama dengan ≥ 2 kolom terisi; delimiter CSV dideteksi otomatis), tulis
+  .xlsx/.csv (BOM), template .xlsx (sheet Barang + Petunjuk). .xls lama tidak
+  didukung (minta simpan ulang sebagai .xlsx).
+- `guessMapping`: cocokkan judul kolom dengan sinonim (termasuk istilah iPOS:
+  Kode Item, Nama Item, Jenis, Harga Pokok, Harga Jual 1, Stok Min). Bisa diubah
+  manual di layar.
+- `validateImport`: wajib kode/nama/harga jual, format angka Indonesia, kode &
+  barcode duplikat di file, barcode milik barang lain. Baris error dilewati dan
+  dilaporkan dengan nomor baris Excel.
+- Kode yang sudah ada: Lewati / Timpa semua data (hanya kolom yang terisi di
+  file) / Update stok & harga saja.
+- `ProductImportService.run`: satu transaction, progress tiap 100 baris,
+  kategori/satuan baru dibuat otomatis, perubahan stok → `stock_movements` jenis
+  `import`. ±430 ms untuk 3.000 baris di tes (DB memori).
+- UI: Produk › Export (popup: format, semua/sesuai filter, unduh template),
+  Produk › Import (`/produk/import`, wizard 4 langkah). Pemilih file lewat
+  `pickImportFileProvider` (di-override di tes).
+- macOS butuh entitlement `files.user-selected.read-write` (sudah ditambahkan).
+
 ## Voucher & metode pembayaran (admin, Pengaturan › Penjualan)
 
 - `/pengaturan/voucher`: daftar dikelompokkan Bisa dipakai / Terjadwal / Tidak
@@ -191,6 +216,9 @@ di `core/utils/number_input.dart`.
 - Kursor berkedip → pakai `settle()` bukan `pumpAndSettle()`.
 - Akhiri setiap `testWidgets` dengan `unmount(tester)` agar stream drift tertutup.
 - Tes yang memicu pesan voucher perlu `initializeDateFormatting('id_ID')`.
+- Kerja di isolate (baca file) butuh `tester.runAsync(() => Future.delayed(...))`.
+- Tombol di halaman panjang: pakai `tapVisible` (ensureVisible dulu).
+- `Override` Riverpod 3 diimpor dari `package:flutter_riverpod/misc.dart`.
 
 ### Shortcut keyboard
 
@@ -260,7 +288,8 @@ Rencana berikutnya: settings.
 - [x] Sinkron Tahap A — fondasi lokal (terminal, uuid, outbox, nomor faktur per terminal); kuota voucher dihapus
 
 - [x] Langkah 3 — Master barang (daftar, filter, form, hapus/nonaktif)
-- [ ] Langkah 4 — Import iPOS (butuh `sample_data/ipos_export.xlsx`)
+- [x] Langkah 4 — Import barang (Excel/CSV, termasuk gaya iPOS) + Export + template
+  (contoh file iPOS asli belum diberikan; pemetaan kolom berdasarkan nama kolom umum)
 - [ ] Langkah 6 — Struk 58 mm (PDF preview)
 - [ ] Langkah 7 — Dashboard + laporan
 - [ ] Sinkron Tahap B/C/D — server, mesin sinkron & pairing, VPN (**ditunda ke paling akhir**, keputusan user 2026-10-01; fokus fitur dulu)

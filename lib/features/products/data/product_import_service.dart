@@ -1,0 +1,198 @@
+import 'package:drift/drift.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/database/app_database.dart';
+import '../../../core/database/tables/sales.dart';
+import '../../auth/domain/app_user.dart';
+import '../domain/product.dart';
+import '../domain/product_import.dart';
+import 'product_repository.dart';
+
+/// Menjalankan import barang dari baris yang sudah diperiksa
+/// ([validateImport]). Semua perubahan dalam satu database transaction:
+/// jika ada kegagalan tak terduga, tidak ada yang tersimpan sebagian.
+class ProductImportService {
+  ProductImportService(this._db, {DateTime Function()? clock})
+    : _clock = clock ?? DateTime.now;
+
+  final AppDatabase _db;
+  final DateTime Function() _clock;
+
+  /// Kode dan barcode yang sudah ada, untuk pemeriksaan sebelum import.
+  Future<ExistingIndex> existingIndex() async {
+    final rows =
+        await (_db.selectOnly(_db.products)..addColumns([
+              _db.products.id,
+              _db.products.code,
+              _db.products.barcode,
+            ]))
+            .get();
+    final byCode = <String, int>{};
+    final byBarcode = <String, int>{};
+    for (final r in rows) {
+      final id = r.read(_db.products.id)!;
+      byCode[r.read(_db.products.code)!.toLowerCase()] = id;
+      final b = r.read(_db.products.barcode);
+      if (b != null) byBarcode[b] = id;
+    }
+    return ExistingIndex(idByCode: byCode, idByBarcode: byBarcode);
+  }
+
+  Future<ImportResult> run({
+    required AppUser actor,
+    required List<ImportRow> rows,
+    required ExistingProductAction existingAction,
+    void Function(int done, int total)? onProgress,
+  }) async {
+    if (!actor.isAdmin) {
+      throw const ProductFailure('Hanya admin yang bisa import barang.');
+    }
+    final valid = rows.where((r) => r.isValid).toList();
+    final failed = rows.where((r) => !r.isValid).toList();
+
+    return _db.transaction(() async {
+      final categories = {
+        for (final c in await _db.select(_db.categories).get())
+          c.name.toLowerCase(): c.id,
+      };
+      final units = {
+        for (final u in await _db.select(_db.units).get())
+          u.name.toUpperCase(): u.id,
+      };
+      var newCategories = 0, newUnits = 0;
+
+      Future<int?> categoryId(String? name) async {
+        final n = name?.trim() ?? '';
+        if (n.isEmpty) return null;
+        final key = n.toLowerCase();
+        if (categories[key] case final id?) return id;
+        newCategories++;
+        return categories[key] = await _db
+            .into(_db.categories)
+            .insert(CategoriesCompanion.insert(name: n));
+      }
+
+      Future<int?> unitId(String? name) async {
+        final n = name?.trim().toUpperCase() ?? '';
+        if (n.isEmpty) return null;
+        if (units[n] case final id?) return id;
+        newUnits++;
+        return units[n] = await _db
+            .into(_db.units)
+            .insert(UnitsCompanion.insert(name: n));
+      }
+
+      final dao = _db.productsDao;
+      final now = _clock();
+      var inserted = 0, updated = 0, skipped = 0;
+
+      for (var i = 0; i < valid.length; i++) {
+        final row = valid[i];
+        final d = row.draft!;
+        final has = row.provided.contains;
+
+        if (row.existingId == null) {
+          final id = await dao.insertProduct(
+            ProductsCompanion.insert(
+              code: d.code,
+              name: d.name,
+              barcode: Value(d.barcode),
+              categoryId: Value(await categoryId(d.categoryName)),
+              unitId: Value(await unitId(d.unitName)),
+              purchasePrice: Value(d.purchasePrice),
+              sellingPrice: Value(d.sellingPrice),
+              stock: Value(d.stock),
+              minStock: Value(d.minStock),
+              isActive: Value(d.isActive),
+              updatedAt: Value(now),
+            ),
+          );
+          if (d.stock != 0) {
+            await dao.addStockMovement(
+              productId: id,
+              type: StockMovementType.import,
+              qtyChange: d.stock,
+              note: 'Import (stok awal)',
+            );
+          }
+          inserted++;
+        } else if (existingAction == ExistingProductAction.skip) {
+          skipped++;
+        } else {
+          final id = row.existingId!;
+          final current = (await dao.findById(id))!;
+          final overwrite = existingAction == ExistingProductAction.overwrite;
+          // Hanya kolom yang terisi di file yang mengganti data lama.
+          await dao.updateProduct(
+            id,
+            ProductsCompanion(
+              name: overwrite ? Value(d.name) : const Value.absent(),
+              barcode: overwrite && has(ProductField.barcode)
+                  ? Value(d.barcode)
+                  : const Value.absent(),
+              categoryId: overwrite && has(ProductField.category)
+                  ? Value(await categoryId(d.categoryName))
+                  : const Value.absent(),
+              unitId: overwrite && has(ProductField.unit)
+                  ? Value(await unitId(d.unitName))
+                  : const Value.absent(),
+              minStock: overwrite && has(ProductField.minStock)
+                  ? Value(d.minStock)
+                  : const Value.absent(),
+              isActive: overwrite && has(ProductField.isActive)
+                  ? Value(d.isActive)
+                  : const Value.absent(),
+              purchasePrice: has(ProductField.purchasePrice)
+                  ? Value(d.purchasePrice)
+                  : const Value.absent(),
+              sellingPrice: Value(d.sellingPrice),
+              stock: has(ProductField.stock)
+                  ? Value(d.stock)
+                  : const Value.absent(),
+              updatedAt: Value(now),
+            ),
+          );
+          final double change = has(ProductField.stock)
+              ? d.stock - current.stock
+              : 0;
+          if (change != 0) {
+            await dao.addStockMovement(
+              productId: id,
+              type: StockMovementType.import,
+              qtyChange: change,
+              note: 'Import (update stok)',
+            );
+          }
+          updated++;
+        }
+
+        if (i % 100 == 99 || i == valid.length - 1) {
+          onProgress?.call(i + 1, valid.length);
+          // Beri kesempatan UI menggambar progress bar.
+          await Future<void>.delayed(Duration.zero);
+        }
+      }
+
+      return ImportResult(
+        inserted: inserted,
+        updated: updated,
+        skipped: skipped,
+        failed: failed,
+        newCategories: newCategories,
+        newUnits: newUnits,
+      );
+    });
+  }
+}
+
+final productImportServiceProvider = Provider<ProductImportService>(
+  (ref) => ProductImportService(ref.watch(appDatabaseProvider)),
+);
+
+/// Dipakai export: barang sesuai filter halaman Produk, atau semua.
+Future<List<Product>> productsForExport(
+  ProductRepository repo,
+  ProductFilter? filter,
+) => repo.allMatching(
+  filter ?? const ProductFilter(status: ProductStatusFilter.all),
+);
