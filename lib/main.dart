@@ -7,6 +7,7 @@ import 'app.dart';
 import 'core/database/app_database.dart';
 import 'core/database/seed.dart';
 import 'core/security/password_hasher.dart';
+import 'features/backup/data/backup_service.dart';
 import 'features/sales/data/held_cart_repository.dart';
 import 'features/sync/data/terminal_repository.dart';
 
@@ -20,6 +21,8 @@ Future<void> main() async {
   await TerminalRepository(db).ensureInitialized();
   // Transaksi tertahan hanya berlaku hari itu.
   await HeldCartRepository(db).purgeExpired();
+  // Backup database + Excel barang seminggu sekali (2 terbaru disimpan).
+  BackupScheduler(BackupService(db)).start();
 
   runApp(
     ProviderScope(

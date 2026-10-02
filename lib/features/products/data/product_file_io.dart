@@ -142,27 +142,51 @@ List<Object> _rowOf(Product p) => [
 
 /// Export barang ke Excel. Judul kolom = [ProductField.label], sehingga file
 /// ini bisa di-import kembali tanpa mengatur kolom.
-Uint8List exportProductsXlsx(List<Product> products) {
+Uint8List exportProductsXlsx(List<Product> products) =>
+    exportProductsWorkbook([('Barang', products)]);
+
+/// Export beberapa daftar barang ke satu file Excel, satu sheet per daftar
+/// (mis. satu sheet per toko untuk backup). Nama sheet dirapikan sesuai
+/// aturan Excel (maks. 31 huruf, tanpa `[]:*?/\`, tidak kembar).
+Uint8List exportProductsWorkbook(List<(String, List<Product>)> sheets) {
   final book = Excel.createExcel();
-  final sheet = book[_renameDefault(book, 'Barang')];
-  sheet.appendRow([
-    for (final f in ProductField.values) TextCellValue(f.label),
-  ]);
-  for (final p in products) {
+  final used = <String>{};
+  for (final (i, (title, products)) in sheets.indexed) {
+    final name = _sheetName(title, used);
+    final sheet = book[i == 0 ? _renameDefault(book, name) : name];
     sheet.appendRow([
-      for (final v in _rowOf(p))
-        switch (v) {
-          int() => IntCellValue(v),
-          double() =>
-            v == v.roundToDouble()
-                ? IntCellValue(v.round())
-                : DoubleCellValue(v),
-          _ => TextCellValue('$v'),
-        },
+      for (final f in ProductField.values) TextCellValue(f.label),
     ]);
+    for (final p in products) {
+      sheet.appendRow([
+        for (final v in _rowOf(p))
+          switch (v) {
+            int() => IntCellValue(v),
+            double() =>
+              v == v.roundToDouble()
+                  ? IntCellValue(v.round())
+                  : DoubleCellValue(v),
+            _ => TextCellValue('$v'),
+          },
+      ]);
+    }
+    _setWidths(sheet);
   }
-  _setWidths(sheet);
   return Uint8List.fromList(book.encode()!);
+}
+
+String _sheetName(String title, Set<String> used) {
+  var base = title.replaceAll(RegExp(r'[\[\]:*?/\\]'), ' ').trim();
+  if (base.isEmpty) base = 'Sheet';
+  if (base.length > 31) base = base.substring(0, 31).trim();
+  var name = base;
+  for (var n = 2; used.contains(name.toLowerCase()); n++) {
+    final suffix = ' ($n)';
+    name =
+        '${base.length + suffix.length > 31 ? base.substring(0, 31 - suffix.length) : base}$suffix';
+  }
+  used.add(name.toLowerCase());
+  return name;
 }
 
 /// Export barang ke CSV (UTF-8 dengan BOM agar terbaca benar di Excel).

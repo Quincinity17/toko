@@ -21,7 +21,8 @@ dari artifact `toko-windows` lalu dites di PC Windows.
 
 - Feature-first: `lib/features/<fitur>/{data,domain,presentation}`.
   Fitur: auth, dashboard, products, import, sales, reports, settings,
-  stores (toko & cakupan toko), stock (halaman Stok), receipt (struk & printer).
+  stores (toko & cakupan toko), stock (halaman Stok), receipt (struk & printer),
+  backup.
 - `lib/core/`: `theme/`, `widgets/` (komponen reusable), `router/`, `utils/`,
   `database/` (drift: tabel, DAO, seed), `security/` (bcrypt).
 - Aturan: logika bisnis di repository/service (`data`/`domain`), bukan di widget.
@@ -199,6 +200,24 @@ tab **Transaksi Baru** dan **Hari Ini**.
 - Tes: `FakeTransport` + `FakeRasterizer` (`test/helpers/fake_printer.dart`);
   render sungguhan hanya di `render_preview_test.dart` (`runAsync`, memuat font
   Inter dulu karena font tes lebih lebar → flex meluap).
+
+## Backup (`features/backup`, Pengaturan › Backup, admin)
+
+- **Otomatis tiap minggu, simpan 2 terbaru per jenis** (permintaan user): backup
+  baru menggantikan yang paling lama (`BackupPolicy`, nama file memuat waktu
+  `yyyyMMdd-HHmmss` → urutan nama = urutan waktu).
+- Isi: `toko-database-*.sqlite` (salinan lengkap lewat `VACUUM INTO`, aman saat
+  aplikasi dipakai) + `toko-barang-*.xlsx` (`exportProductsWorkbook`: satu sheet
+  per toko, stok & harga toko itu, kolom sama dengan export → bisa di-import).
+- `BackupScheduler` dimulai di `main()`: cek 30 detik setelah buka lalu tiap
+  jam; jalan bila aktif dan backup terakhir ≥ 7 hari. Gagal (mis. flashdisk
+  dicabut) dicatat di `backup.last_error` dan tampil di Pengaturan.
+- Settings: `backup.dir` (kosong = `Documents/Toko Backup`), `backup.enabled`,
+  `backup.last_at`. Per komputer. Tombol Backup Sekarang & Buka Folder.
+- Excel < 1.000 baris ditulis langsung; lebih besar lewat `Isolate.run`.
+- Belum ada: pulihkan (restore) dari aplikasi.
+- Tes widget: `pumpApp` mengarahkan backup ke folder sementara; status/backup
+  memakai I/O sungguhan → tunggu dengan `runAsync` + `pump` bergantian.
 
 ## Arsitektur online/offline (disepakati, bertahap)
 

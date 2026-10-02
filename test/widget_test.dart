@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:bcrypt/bcrypt.dart';
 import 'package:flutter/cupertino.dart';
@@ -16,6 +17,7 @@ import 'package:toko/core/widgets/large_title_page.dart';
 import 'package:toko/features/auth/data/auth_repository.dart';
 import 'package:toko/features/auth/data/user_repository.dart';
 import 'package:toko/features/auth/domain/user_role.dart';
+import 'package:toko/features/backup/data/backup_service.dart';
 import 'package:toko/features/payments/data/payment_method_repository.dart';
 import 'package:toko/features/receipt/data/printer_transport.dart';
 import 'package:toko/features/receipt/data/receipt_renderer.dart';
@@ -73,12 +75,20 @@ Future<AppDatabase> pumpApp(
 
   final db = (await tester.runAsync(createSeededDb))!;
   addTearDown(db.close);
+  // Backup ke folder sementara (path_provider tidak ada di tes).
+  final backupDir = (await tester.runAsync(
+    () => Directory.systemTemp.createTemp('toko-backup-'),
+  ))!;
+  addTearDown(() => backupDir.deleteSync(recursive: true));
 
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         passwordHasherProvider.overrideWithValue(const _SyncHasher()),
+        backupServiceProvider.overrideWithValue(
+          BackupService(db, defaultFolder: () async => backupDir),
+        ),
         ...overrides,
       ],
       child: const TokoApp(),
@@ -824,6 +834,39 @@ void main() {
     expect(saved.paperWidth, PaperWidth.mm80);
     expect(saved.connection, PrinterConnection.serial);
     expect(saved.serialPort, 'COM5');
+
+    await unmount(tester);
+  });
+
+  testWidgets('Admin membuat backup dari Pengaturan', (tester) async {
+    /// Status backup membaca folder (I/O sungguhan): pompa waktu nyata
+    /// sampai [finder] muncul.
+    Future<void> waitFor(Finder finder) async {
+      for (var i = 0; i < 50 && finder.evaluate().isEmpty; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 100)),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    await pumpApp(tester);
+    await login(tester, 'admin', 'admin123');
+    await tester.tap(find.text('Pengaturan'));
+    await settle(tester);
+    await waitFor(find.text('Backup otomatis tiap minggu'));
+    expect(find.text('Backup otomatis tiap minggu'), findsOneWidget);
+    expect(find.text('Belum pernah'), findsOneWidget);
+
+    await tapCentered(tester, find.text('Backup Sekarang'));
+    await waitFor(find.text('Backup selesai'));
+    expect(find.text('Backup selesai'), findsOneWidget);
+    expect(find.textContaining('toko-database-'), findsWidgets);
+    await tester.tap(find.text('OK'));
+    await settle(tester);
+    await waitFor(find.textContaining('toko-barang-'));
+    expect(find.text('Belum pernah'), findsNothing);
+    expect(find.textContaining('toko-barang-'), findsOneWidget);
 
     await unmount(tester);
   });
