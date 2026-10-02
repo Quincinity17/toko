@@ -883,4 +883,63 @@ void main() {
 
     await unmount(tester);
   });
+
+  testWidgets('Admin membuat tag, memasangnya di barang, lalu memfilter', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await login(tester, 'admin', 'admin123');
+
+    // Pengaturan › Kelola Tag › Tambah Tag.
+    await tester.tap(find.text('Pengaturan'));
+    await settle(tester);
+    await tapCentered(tester, find.text('Kelola Tag'));
+    await settle(tester);
+    expect(find.text('Belum ada tag'), findsOneWidget);
+    await tester.tap(find.widgetWithText(AppButton, 'Tambah Tag').first);
+    await settle(tester);
+    await fill(tester, 'Nama tag', 'Mainan');
+    await tester.tap(find.widgetWithText(AppButton, 'Tambah Tag').last);
+    await settle(tester);
+    expect(find.text('Mainan'), findsOneWidget);
+    expect(find.text('0 barang'), findsOneWidget);
+
+    // Produk › Indomie › Tag: pilih Mainan + buat "Promo" dari pemilih.
+    await tester.tap(find.text('Produk'));
+    await settle(tester);
+    await tester.tap(find.text('Indomie Goreng 85g'));
+    await settle(tester);
+    await tapCentered(tester, find.text('Tanpa tag'));
+    await settle(tester);
+    expect(find.text('Tag Barang'), findsOneWidget);
+    await tester.tap(find.text('Mainan'));
+    await settle(tester);
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(CupertinoSearchTextField).last,
+        matching: find.byType(EditableText),
+      ),
+      'Promo',
+    );
+    await settle(tester);
+    expect(find.text('Buat tag "Promo"'), findsOneWidget);
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await settle(tester);
+    await tester.tap(find.text('Selesai (2 tag)'));
+    await settle(tester);
+    await tapCentered(tester, find.widgetWithText(AppButton, 'Simpan'));
+    await settle(tester);
+
+    // Chip tag tampil di daftar; filter per tag.
+    expect(find.text('Mainan'), findsOneWidget);
+    expect(find.text('Promo'), findsOneWidget);
+    await tester.tap(find.text('Semua tag'));
+    await settle(tester);
+    await tester.tap(find.text('Promo').last);
+    await settle(tester);
+    expect(find.textContaining('1 barang · '), findsOneWidget);
+    expect(find.text('Indomie Goreng 85g'), findsOneWidget);
+
+    await unmount(tester);
+  });
 }

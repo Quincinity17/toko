@@ -186,6 +186,9 @@ Uint8List exportReportXlsx({
     'Kategori',
     ...groupHeaders,
   ], groupRows(bundle.categories));
+  if (bundle.tags.isNotEmpty) {
+    sheet('Tag', ['Tag', ...groupHeaders], groupRows(bundle.tags));
+  }
   sheet('Pembayaran', ['Metode', ...groupHeaders], groupRows(bundle.payments));
   if (bundle.stores.length > 1) {
     sheet('Toko', ['Toko', ...groupHeaders], groupRows(bundle.stores));

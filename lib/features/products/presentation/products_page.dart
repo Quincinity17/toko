@@ -14,7 +14,10 @@ import '../../../core/widgets/large_title_page.dart';
 import '../../../core/widgets/option_picker.dart';
 import '../../../core/widgets/pressable_scale.dart';
 import '../../../core/widgets/state_views.dart';
+import '../data/tag_repository.dart';
 import '../domain/product.dart';
+import '../domain/tag.dart';
+import 'tag_chip.dart';
 import 'product_export_dialog.dart';
 import 'product_form_sheet.dart';
 import 'product_providers.dart';
@@ -69,6 +72,21 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
     _setFilter(_filter.copyWith(categoryId: () => id));
   }
 
+  Future<void> _pickTag() async {
+    final tags = ref.read(tagsProvider).value ?? const <Tag>[];
+    final current = tags.where((t) => t.id == _filter.tagId).firstOrNull;
+    final pick = await showOptionPicker(
+      context,
+      title: 'Filter tag',
+      options: [for (final t in tags) t.name],
+      selected: current?.name,
+      clearLabel: 'Semua tag',
+    );
+    if (pick == null) return;
+    final id = tags.where((t) => t.name == pick.value).firstOrNull?.id;
+    _setFilter(_filter.copyWith(tagId: () => id));
+  }
+
   Future<void> _pickSort() async {
     final sort = await AppDialogs.actionSheet<ProductSort>(
       context,
@@ -98,6 +116,8 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
         .where((x) => x.$1 == _filter.categoryId)
         .firstOrNull
         ?.$2;
+    final tags = ref.watch(tagsProvider).value ?? const <Tag>[];
+    final tag = tags.where((t) => t.id == _filter.tagId).firstOrNull;
 
     return LargeTitlePage(
       title: 'Produk',
@@ -166,6 +186,14 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
                 active: categoryName != null,
                 onTap: _pickCategory,
               ),
+              if (tags.isNotEmpty || tag != null)
+                _FilterChip(
+                  icon: CupertinoIcons.tag,
+                  label: tag?.name ?? 'Semua tag',
+                  active: tag != null,
+                  activeColor: tag?.color.color,
+                  onTap: _pickTag,
+                ),
               _FilterChip(
                 icon: CupertinoIcons.exclamationmark_triangle,
                 label: 'Stok menipis',
@@ -293,6 +321,7 @@ class _ProductTile extends StatelessWidget {
       ),
       title: p.name,
       subtitle: sub,
+      below: p.tags.isEmpty ? null : TagChips(tags: p.tags),
       trailing: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         mainAxisSize: MainAxisSize.min,

@@ -8,6 +8,7 @@ import '../../features/dashboard/presentation/dashboard_page.dart';
 import '../../features/payments/presentation/payment_methods_page.dart';
 import '../../features/products/presentation/product_import_page.dart';
 import '../../features/products/presentation/products_page.dart';
+import '../../features/products/presentation/tags_page.dart';
 import '../../features/receipt/presentation/receipt_settings_page.dart';
 import '../../features/reports/presentation/reports_page.dart';
 import '../../features/sales/presentation/pos_page.dart';
@@ -64,6 +65,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               _page('pembayaran', const PaymentMethodsPage()),
               _page('toko', const StoresPage()),
               _page('struk', const ReceiptSettingsPage()),
+              _page('tag', const TagsPage()),
             ],
           ),
         ],

@@ -4,6 +4,7 @@ import '../app_database.dart';
 import '../tables/products.dart';
 import '../tables/sales.dart';
 import '../tables/stores.dart';
+import '../tables/tags.dart';
 import '../tables/users.dart';
 
 part 'reports_dao.g.dart';
@@ -24,6 +25,8 @@ part 'reports_dao.g.dart';
     Users,
     Stores,
     StoreProducts,
+    Tags,
+    ProductTags,
   ],
 )
 class ReportsDao extends DatabaseAccessor<AppDatabase> with _$ReportsDaoMixin {
@@ -160,6 +163,26 @@ class ReportsDao extends DatabaseAccessor<AppDatabase> with _$ReportsDaoMixin {
     variables: _range(start, end, storeId),
     readsFrom: {sales, saleItems, products, categories},
   );
+
+  /// Per tag barang (tag saat ini). Barang dengan beberapa tag dihitung di
+  /// setiap tagnya; barang tanpa tag tidak muncul.
+  Selectable<QueryRow> tagSales(DateTime start, DateTime end, {int? storeId}) =>
+      customSelect(
+        '''
+        SELECT t.name AS grp, t.color AS color,
+               COUNT(DISTINCT si.sale_id) AS tx, SUM(si.qty) AS qty,
+               SUM(si.subtotal) AS revenue,
+               SUM(si.qty * si.purchase_price) AS cost
+        FROM sale_items si
+        JOIN sales s ON s.id = si.sale_id
+        JOIN product_tags pt ON pt.product_id = si.product_id
+        JOIN tags t ON t.id = pt.tag_id
+        WHERE s.sale_date >= ?1 AND s.sale_date < ?2 AND ${_store('s')}
+        GROUP BY t.id ORDER BY revenue DESC
+        ''',
+        variables: _range(start, end, storeId),
+        readsFrom: {sales, saleItems, productTags, tags},
+      );
 
   /// Dikelompokkan per [groupExpr] milik tabel sales (alias `s`), mis.
   /// metode bayar, kasir, terminal. Biaya per faktur dihitung dari

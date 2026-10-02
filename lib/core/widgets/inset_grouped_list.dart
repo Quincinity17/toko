@@ -95,10 +95,14 @@ class InsetGroupedTile extends StatelessWidget {
     this.onPressed,
     this.showChevron,
     this.destructive = false,
+    this.below,
   });
 
   final String title;
   final String? subtitle;
+
+  /// Isi tambahan di bawah judul/subtitle, mis. chip tag.
+  final Widget? below;
 
   /// Biasanya [TileIcon].
   final Widget? leading;
@@ -154,6 +158,11 @@ class InsetGroupedTile extends StatelessWidget {
                           color: c.labelSecondary,
                         ),
                       ),
+                    ),
+                  if (below != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: AppSpacing.xs),
+                      child: below,
                     ),
                 ],
               ),

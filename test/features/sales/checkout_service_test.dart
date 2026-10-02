@@ -588,5 +588,35 @@ void main() {
       );
       expect((await repo.templateFor(store.id)).html, '<p>baru</p>');
     });
+
+    test(
+      'v7 (skema asli) → v8: tabel tag dibuat, barang lama tanpa tag',
+      () async {
+        final schema = File('test/fixtures/schema_v7.sql').readAsStringSync();
+        final legacy = NativeDatabase.memory(
+          setup: (Database raw) {
+            for (final stmt in schema.split(';\n')) {
+              if (stmt.trim().isNotEmpty) raw.execute(stmt);
+            }
+            raw.execute(
+              "INSERT INTO products (code, name, selling_price, uuid) "
+              "VALUES ('A1', 'Barang A', 5000, 'p-1')",
+            );
+            raw.userVersion = 7;
+          },
+        );
+        final db = AppDatabase(legacy);
+        addTearDown(db.close);
+
+        final p = (await ProductRepository(db).findByCodeOrBarcode('A1'))!;
+        expect(p.tags, isEmpty);
+        final ids = await db.tagsDao.idsForNames(['Mainan']);
+        await db.tagsDao.setProductTags(p.id, ids);
+        final again = (await ProductRepository(db).findByCodeOrBarcode('A1'))!;
+        expect(again.tags.single.name, 'Mainan');
+        final tag = await db.select(db.tags).getSingle();
+        expect(tag.uuid, isNotNull);
+      },
+    );
   });
 }

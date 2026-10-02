@@ -539,6 +539,44 @@ class CategoriesSection extends StatelessWidget {
           ],
           footer: 'Kategori mengikuti data barang saat ini.',
         ),
+        if (bundle.tags.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.xl),
+          const SectionTitle(
+            'Per tag',
+            subtitle: 'Jenis barang mana yang paling laku.',
+          ),
+          DataTableCard(
+            columns: const [
+              TableColumnSpec('Tag', flex: 2),
+              TableColumnSpec('Porsi dari omzet', width: 180),
+              TableColumnSpec.number('Terjual', width: 90),
+              TableColumnSpec.number('Omzet', width: 130),
+              TableColumnSpec.number('Laba kotor', width: 130),
+              TableColumnSpec.number('Margin', width: 80),
+            ],
+            rows: [
+              for (final g in bundle.tags)
+                TableRowData([
+                  CellText(g.name),
+                  // Porsi terhadap omzet total (bukan jumlah semua tag),
+                  // karena satu barang bisa punya beberapa tag.
+                  ShareMeter(
+                    ratio: bundle.summary.revenue == 0
+                        ? 0
+                        : g.revenue / bundle.summary.revenue,
+                  ),
+                  CellText(Fmt.number(g.quantity), number: true),
+                  CellText(Fmt.rupiah(g.revenue), number: true),
+                  CellText(Fmt.rupiah(g.grossProfit), number: true),
+                  CellText(_pct(g.margin), number: true, muted: true),
+                ]),
+            ],
+            footer:
+                'Tag mengikuti data barang saat ini. Barang dengan beberapa '
+                'tag dihitung di setiap tagnya, jadi jumlahnya bisa melebihi '
+                'omzet total.',
+          ),
+        ],
       ],
     );
   }

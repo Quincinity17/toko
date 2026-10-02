@@ -114,6 +114,12 @@ class ProductImportService {
               updatedAt: Value(now),
             ),
           );
+          if (d.tagNames case final names? when names.isNotEmpty) {
+            await _db.tagsDao.setProductTags(
+              id,
+              await _db.tagsDao.idsForNames(names),
+            );
+          }
           if (row.stock != 0 && stockStoreId != null) {
             await storesDao.changeStock(
               storeId: stockStoreId,
@@ -157,6 +163,12 @@ class ProductImportService {
               updatedAt: Value(now),
             ),
           );
+          if (overwrite && d.tagNames != null) {
+            await _db.tagsDao.setProductTags(
+              id,
+              await _db.tagsDao.idsForNames(d.tagNames!),
+            );
+          }
           if (has(ProductField.stock) && stockStoreId != null) {
             final entry = await storesDao.entry(stockStoreId, id);
             final change = row.stock - (entry?.stock ?? 0);

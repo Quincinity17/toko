@@ -259,10 +259,33 @@ tab **Transaksi Baru** dan **Hari Ini**.
 - Hapus: belum pernah terjual → hapus permanen (+ riwayat stoknya); sudah
   terjual → dinonaktifkan (hilang dari kasir, faktur lama utuh).
 
+## Tag jenis barang (`products`: `tag.dart`, `TagRepository`, `/pengaturan/tag`)
+
+- **Tag bisa lebih dari satu per barang** (keputusan user; Kategori tetap ada,
+  satu per barang). Contoh: Mainan, Boneka, Alat Tulis.
+- Tabel v8: `tags` (nama unik tanpa peduli huruf besar, `color` = nama
+  `TagColor`, uuid) dan `product_tags` (PK product+tag, uuid, cascade).
+  `TagsDao`: daftar + jumlah barang, `setProductTags` (ganti semua),
+  `idsForNames` (buat yang belum ada).
+- `Product.tags` diisi subquery `group_concat` (pemisah char 30/31) di
+  `ProductsDao._tagList` + `watchedTables`, jadi daftar barang ikut terbarui
+  saat tag diubah. Filter `ProductFilter.tagId` (EXISTS).
+- `ProductDraft.tagNames`: `null` = tag tidak diubah, `[]` = lepas semua.
+  `TagRules`: nama 1–30 huruf, tanpa koma; `split` memecah "A, B; C".
+- Kelola Tag (admin): tambah/ubah nama & warna/hapus (tag dilepas, barang
+  tetap). Form barang: baris Tag (chip + ×) → `showTagPicker` (pilih banyak,
+  cari, Enter/"Buat tag" membuat tag baru dengan warna bergiliran). Daftar
+  barang: chip tag di bawah nama (`InsetGroupedTile.below`) + filter "Semua tag".
+- Import/export: kolom terakhir **Tag** ("Mainan, Boneka"). Import: tag baru
+  dibuat; mode Timpa mengganti tag bila kolom terisi; Update stok & harga tidak
+  menyentuh tag.
+- Laporan › Kategori: tabel "Per tag" (`ReportsDao.tagSales`; barang bertag
+  banyak dihitung di setiap tag, porsi terhadap omzet total) + sheet "Tag".
+
 ## Import & export barang
 
 - Kolom file = `ProductField` (label: Kode, Barcode, Nama, Kategori, Satuan,
-  Harga Beli, Harga Jual, Stok, Stok Minimum, Aktif). Export dan template memakai
+  Harga Beli, Harga Jual, Stok, Stok Minimum, Aktif, Tag). Export dan template memakai
   label ini → hasil export bisa langsung di-import ulang.
 - `product_file_io.dart`: baca .xlsx/.csv (di `Isolate.run`; baris judul = baris
   pertama dengan ≥ 2 kolom terisi; delimiter CSV dideteksi otomatis), tulis
@@ -423,13 +446,14 @@ Uang = INTEGER Rupiah; stok = REAL (mendukung kg/liter).
   `_assignDefaultStore()` (onCreate & upgrade): buat "Toko Utama", isi
   store_id yang kosong, pindahkan `products.stock` ke store_products.
 - v7: `stores.receipt_template` (TEXT null, JSON bentuk struk toko).
+- v8: `tags`, `product_tags` (tag jenis barang, banyak-ke-banyak).
 - Langkah `from < 4` idempoten (`_ensureColumn` cek `PRAGMA table_info`) karena
   bisa dicapai dari v1/v2/v3 yang tabelnya berbeda-beda.
 - PENTING migrasi: `createTable` memakai definisi TERBARU, jadi cabang `from < 2`
   membuat semua tabel baru sekaligus dan cabang `else if (from < 3)` hanya
   menambah yang belum ada. Pola ini harus dijaga untuk v4 dst.
 - Tes migrasi (`checkout_service_test.dart`): v1 manual, v2–v6 dari
-  `test/fixtures/schema_v{2,3,4,5,6}.sql` (skema asli DB user) → versi terbaru.
+  `test/fixtures/schema_v{2,3,4,5,6,7}.sql` (skema asli DB user) → versi terbaru.
   Saat menaikkan versi lagi: simpan skema DB sekarang sebagai fixture baru dulu.
 - Data contoh (`sample_products.dart`) dimasukkan di onCreate/onUpgrade, bukan di
   seeder start-up, supaya tidak muncul lagi jika user menghapusnya.

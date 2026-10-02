@@ -12,6 +12,7 @@ import 'package:toko/features/products/data/product_import_service.dart';
 import 'package:toko/features/products/data/product_repository.dart';
 import 'package:toko/features/products/domain/product.dart';
 import 'package:toko/features/products/domain/product_import.dart';
+import 'package:toko/features/products/domain/tag.dart';
 
 import '../../helpers/test_app.dart';
 
@@ -129,6 +130,10 @@ void main() {
         sellingPrice: 3500,
         stock: 120,
         minStock: 24,
+        tags: [
+          Tag(id: 1, name: 'Makanan Ringan'),
+          Tag(id: 2, name: 'Promo'),
+        ],
       ),
       const Product(
         id: 2,
@@ -163,6 +168,8 @@ void main() {
         expect(rows[1].stock, 12.5);
         expect(b.barcode, isNull);
         expect(b.isActive, isFalse);
+        expect(a.tagNames, ['Makanan Ringan', 'Promo']);
+        expect(b.tagNames, isNull); // kolom Tag kosong = tag tidak diubah
       });
     }
 
@@ -289,6 +296,45 @@ void main() {
         db.stockMovements,
       )..where((m) => m.productId.equals(p.id))).get();
       expect(moves.single.qtyChange, 30); // 120 → 150
+    });
+
+    test('kolom Tag: tag baru dibuat; timpa mengganti tag; update stok & '
+        'harga tidak menyentuh tag', () async {
+      const tagged =
+          'Kode,Nama,Harga Jual,Tag\n'
+          'BRG001,Indomie Goreng 85g,3500,"Mie, Promo"\n'
+          'BRG600,Boneka Beruang,45000,Mainan; Boneka\n'
+          'BRG601,Pensil 2B,3000,"Bad,"\n';
+      final rows = await rowsOf(tagged);
+      expect(rows.every((r) => r.isValid), isTrue);
+      await service.run(
+        actor: admin,
+        rows: rows,
+        existingAction: ExistingProductAction.overwrite,
+        stockStoreId: await mainStoreId(db),
+      );
+      final repo = ProductRepository(db);
+      Future<List<String>> tagsOf(String code) async => [
+        for (final t in (await repo.findByCodeOrBarcode(code))!.tags) t.name,
+      ];
+      expect(await tagsOf('BRG001'), ['Mie', 'Promo']);
+      expect(await tagsOf('BRG600'), ['Boneka', 'Mainan']);
+      expect(await tagsOf('BRG601'), ['Bad']);
+
+      // Update stok & harga saja: tag tetap.
+      await service.run(
+        actor: admin,
+        rows: await rowsOf('Kode,Nama,Harga Jual,Tag\nBRG001,X,3600,Lain\n'),
+        existingAction: ExistingProductAction.updateStockPrice,
+        stockStoreId: await mainStoreId(db),
+      );
+      expect(await tagsOf('BRG001'), ['Mie', 'Promo']);
+
+      // Nama tag terlalu panjang = baris error.
+      final bad = await rowsOf(
+        'Kode,Nama,Harga Jual,Tag\nBRG700,A,1,${'x' * 31}\n',
+      );
+      expect(bad.single.errors.single, contains('maksimal 30'));
     });
 
     test('ribuan baris dalam satu transaksi', () async {

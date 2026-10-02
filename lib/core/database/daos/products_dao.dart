@@ -1,10 +1,12 @@
 import 'package:drift/drift.dart';
 
 import '../../../features/products/domain/product.dart';
+import '../../../features/products/domain/tag.dart';
 import '../app_database.dart';
 import '../tables/products.dart';
 import '../tables/sales.dart';
 import '../tables/stores.dart';
+import '../tables/tags.dart';
 
 part 'products_dao.g.dart';
 
@@ -45,6 +47,8 @@ class _StoreCols {
     SaleItems,
     StockMovements,
     StoreProducts,
+    Tags,
+    ProductTags,
   ],
 )
 class ProductsDao extends DatabaseAccessor<AppDatabase>
@@ -54,11 +58,31 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
   _StoreCols _cols(int? storeId) =>
       _StoreCols(storeId, storeProducts, products);
 
+  /// Tag barang dalam satu teks: `id␞nama␞warna` dipisah `␟` (karakter
+  /// kontrol yang tidak mungkin ada di nama tag).
+  late final _tagList = CustomExpression<String>(
+    '(SELECT group_concat(t.id || char(30) || t.name || char(30) || t.color, '
+    'char(31)) FROM product_tags pt JOIN tags t ON t.id = pt.tag_id '
+    'WHERE pt.product_id = products.id)',
+    watchedTables: [productTags, tags],
+  );
+
   JoinedSelectStatement<HasResultSet, dynamic> _joined(_StoreCols cols) {
     return select(products).join([
       leftOuterJoin(categories, categories.id.equalsExp(products.categoryId)),
       leftOuterJoin(units, units.id.equalsExp(products.unitId)),
-    ])..addColumns([cols.stock, cols.price]);
+    ])..addColumns([cols.stock, cols.price, _tagList]);
+  }
+
+  static List<Tag> _parseTags(String? raw) {
+    if (raw == null || raw.isEmpty) return const [];
+    final out = <Tag>[
+      for (final item in raw.split('\u001f'))
+        if (item.split('\u001e') case [final id, final name, final color])
+          Tag(id: int.parse(id), name: name, color: TagColor.of(color)),
+    ];
+    return out
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
   }
 
   Product _read(TypedResult r, _StoreCols cols) {
@@ -78,6 +102,7 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
       stock: r.read(cols.stock) ?? 0,
       minStock: p.minStock,
       isActive: p.isActive,
+      tags: _parseTags(r.read(_tagList)),
     );
   }
 
@@ -170,6 +195,15 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
       ProductStatusFilter.all => e,
     };
     if (f.categoryId != null) e = e & products.categoryId.equals(f.categoryId!);
+    if (f.tagId != null) {
+      e =
+          e &
+          CustomExpression<bool>(
+            'EXISTS (SELECT 1 FROM product_tags pt WHERE '
+            'pt.product_id = products.id AND pt.tag_id = ${f.tagId})',
+            watchedTables: [productTags],
+          );
+    }
     if (f.lowStockOnly) {
       e = e & cols.stock.isSmallerOrEqual(products.minStock);
     }
@@ -264,6 +298,7 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
   Future<void> deleteProduct(int id) async {
     await (delete(stockMovements)..where((m) => m.productId.equals(id))).go();
     await (delete(storeProducts)..where((p) => p.productId.equals(id))).go();
+    await (delete(productTags)..where((p) => p.productId.equals(id))).go();
     await (delete(products)..where((p) => p.id.equals(id))).go();
   }
 

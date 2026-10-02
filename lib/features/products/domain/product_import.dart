@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/utils/number_input.dart';
 import 'product.dart';
+import 'tag.dart';
 
 /// Kolom data barang di file import/export. [label] juga menjadi judul kolom
 /// file export dan template, sehingga hasil export bisa langsung di-import.
@@ -116,7 +117,11 @@ enum ProductField {
       'min stock',
     ],
   ),
-  isActive('Aktif', synonyms: ['aktif', 'status', 'active']);
+  isActive('Aktif', synonyms: ['aktif', 'status', 'active']),
+
+  /// Beberapa tag dipisah koma, mis. "Mainan, Boneka". Kolom terakhir agar
+  /// file lama tetap cocok.
+  tags('Tag', synonyms: ['tag', 'tags', 'label', 'tag barang']);
 
   const ProductField(
     this.label, {
@@ -329,6 +334,12 @@ List<ImportRow> validateImport(
       }
     }
 
+    final tagNames = TagRules.split(cell(ProductField.tags));
+    for (final t in tagNames) {
+      final tagError = TagRules.name(t);
+      if (tagError != null) errors.add('Tag "$t": $tagError');
+    }
+
     final active = cell(ProductField.isActive).toLowerCase();
     final isActive = ![
       '0',
@@ -358,6 +369,10 @@ List<ImportRow> validateImport(
                 sellingPrice: sell!.toInt(),
                 minStock: (minStock ?? 0).toDouble(),
                 isActive: isActive,
+                // Kolom Tag tidak dipetakan = tag barang tidak diubah.
+                tagNames: provided.contains(ProductField.tags)
+                    ? tagNames
+                    : null,
               ),
       ),
     );

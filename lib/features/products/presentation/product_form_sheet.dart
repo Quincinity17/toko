@@ -14,7 +14,11 @@ import '../../auth/presentation/auth_controller.dart';
 import '../../stores/data/store_repository.dart';
 import '../../stores/domain/store.dart';
 import '../data/product_repository.dart';
+import '../data/tag_repository.dart';
 import '../domain/product.dart';
+import '../domain/tag.dart';
+import 'tag_chip.dart';
+import 'tag_picker.dart';
 import 'product_providers.dart';
 
 /// Form tambah (`existing == null`) atau ubah barang.
@@ -60,6 +64,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
   );
 
   late String? _category = _p?.categoryName;
+  late List<String> _tags = [for (final t in _p?.tags ?? const <Tag>[]) t.name];
   late String? _unit = _p?.unitName ?? 'PCS';
   late bool _active = _p?.isActive ?? true;
 
@@ -180,6 +185,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
               sellingPrice: _money(_sell)!,
               minStock: _qty(_minStock) ?? 0,
               isActive: _active,
+              tagNames: _tags,
             ),
             stores: [
               for (final id in _storeStock.keys)
@@ -246,6 +252,11 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
     if (pick != null) setState(() => _category = pick.value);
   }
 
+  Future<void> _pickTags() async {
+    final picked = await showTagPicker(context, selected: _tags);
+    if (picked != null) setState(() => _tags = picked);
+  }
+
   Future<void> _pickUnit() async {
     final units = ref.read(unitNamesProvider).value ?? const [];
     final pick = await showOptionPicker(
@@ -257,6 +268,39 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
       clearLabel: 'Tanpa satuan',
     );
     if (pick != null) setState(() => _unit = pick.value?.toUpperCase());
+  }
+
+  /// Baris Tag: chip tag terpilih (bisa dilepas) + ketuk untuk memilih.
+  Widget _tagTile() {
+    final colors = {
+      for (final t in ref.watch(tagsProvider).value ?? const <Tag>[])
+        t.name.toLowerCase(): t.color,
+    };
+    return InsetGroupedTile(
+      title: 'Tag',
+      value: _tags.isEmpty ? 'Tanpa tag' : null,
+      onPressed: _pickTags,
+      showChevron: true,
+      below: _tags.isEmpty
+          ? null
+          : Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final name in _tags)
+                  TagChip(
+                    name: name,
+                    color: colors[name.toLowerCase()] ?? TagColor.blue,
+                    onRemove: () => setState(
+                      () => _tags = [
+                        for (final t in _tags)
+                          if (t != name) t,
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+    );
   }
 
   @override
@@ -332,6 +376,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
                 value: _unit ?? 'Tanpa satuan',
                 onPressed: _pickUnit,
               ),
+              _tagTile(),
             ],
           ),
           const SizedBox(height: AppSpacing.lg),

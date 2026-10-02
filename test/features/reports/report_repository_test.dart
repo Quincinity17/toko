@@ -7,6 +7,7 @@ import 'package:toko/features/auth/domain/app_user.dart';
 import 'package:toko/features/payments/data/payment_method_repository.dart';
 import 'package:toko/features/payments/domain/payment_method.dart';
 import 'package:toko/features/products/data/product_repository.dart';
+import 'package:toko/features/products/domain/product.dart';
 import 'package:toko/features/reports/data/report_export.dart';
 import 'package:toko/features/reports/data/report_repository.dart';
 import 'package:toko/features/reports/domain/report_models.dart';
@@ -136,6 +137,42 @@ void main() {
     final cats = await r.categories(week);
     expect(cats.map((c) => c.name), ['Makanan', 'Minuman']);
     expect(cats.first.revenue, 17500);
+  });
+
+  test('per tag: barang dengan beberapa tag dihitung di setiap tag', () async {
+    final admin = await AuthRepository(
+      db,
+      testHasher,
+    ).login('admin', 'admin123');
+    Future<void> tag(String code, List<String> names) async {
+      final p = (await products.findByCodeOrBarcode(code))!;
+      await products.save(
+        actor: admin,
+        id: p.id,
+        draft: ProductDraft(
+          code: p.code,
+          name: p.name,
+          sellingPrice: p.defaultSellingPrice,
+          purchasePrice: p.purchasePrice,
+          categoryName: p.categoryName,
+          unitName: p.unitName,
+          minStock: p.minStock,
+          tagNames: names,
+        ),
+      );
+    }
+
+    await tag('BRG001', ['Mie', 'Promo']);
+    await tag('BRG010', ['Promo']);
+    await seedSales();
+    final week = ReportRange.preset(RangePreset.last7, at(0, 20));
+    final byTag = {for (final g in await repo().tags(week)) g.name: g};
+    expect(byTag.keys, ['Promo', 'Mie']); // urut omzet
+    expect(byTag['Mie']!.revenue, 17500);
+    expect(byTag['Promo']!.revenue, 17500 + 5500);
+    expect(byTag['Promo']!.transactions, 3);
+    final bundle = await repo().bundle(week);
+    expect(bundle.tags, hasLength(2));
   });
 
   test('metode bayar, kasir, terminal', () async {

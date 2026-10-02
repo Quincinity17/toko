@@ -13,6 +13,7 @@ import 'daos/reports_dao.dart';
 import 'daos/sales_dao.dart';
 import 'daos/settings_dao.dart';
 import 'daos/stores_dao.dart';
+import 'daos/tags_dao.dart';
 import 'daos/users_dao.dart';
 import 'sample_products.dart';
 import 'uuid.dart';
@@ -22,6 +23,7 @@ import 'tables/products.dart';
 import 'tables/sales.dart';
 import 'tables/stores.dart';
 import 'tables/sync.dart';
+import 'tables/tags.dart';
 import 'tables/users.dart';
 import 'tables/vouchers.dart';
 
@@ -58,6 +60,8 @@ part 'app_database.g.dart';
     HeldCarts,
     Stores,
     StoreProducts,
+    Tags,
+    ProductTags,
   ],
   daos: [
     UsersDao,
@@ -68,6 +72,7 @@ part 'app_database.g.dart';
     OutboxDao,
     ReportsDao,
     HeldCartsDao,
+    TagsDao,
     StoresDao,
   ],
 )
@@ -75,7 +80,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openDefault());
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -162,6 +167,14 @@ class AppDatabase extends _$AppDatabase {
       if (from < 7) {
         // Idempoten: tabel stores dari cabang v6 di atas sudah punya kolomnya.
         await _ensureColumn(m, stores, stores.receiptTemplate);
+      }
+      if (from < 8) {
+        // Tidak dibuat di cabang mana pun di atas, jadi aman dibuat di sini.
+        await m.createTable(tags);
+        await m.createIndex(idxTagsUuid);
+        await m.createTable(productTags);
+        await m.createIndex(idxProductTagsUuid);
+        await m.createIndex(idxProductTagsTag);
       }
     },
     beforeOpen: (details) async {

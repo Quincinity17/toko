@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import 'tag.dart';
+
 /// Barang beserta nama kategori dan satuannya (hasil join).
 @immutable
 class Product {
@@ -18,6 +20,7 @@ class Product {
     required this.stock,
     required this.minStock,
     this.isActive = true,
+    this.tags = const [],
   }) : defaultSellingPrice = defaultSellingPrice ?? sellingPrice;
 
   final int id;
@@ -41,6 +44,9 @@ class Product {
   final double stock;
   final double minStock;
   final bool isActive;
+
+  /// Tag jenis barang, urut nama.
+  final List<Tag> tags;
 
   bool get isLowStock => stock <= minStock;
 
@@ -71,6 +77,7 @@ class ProductDraft {
     required this.sellingPrice,
     this.minStock = 0,
     this.isActive = true,
+    this.tagNames,
   });
 
   final String code;
@@ -84,6 +91,10 @@ class ProductDraft {
   final int sellingPrice;
   final double minStock;
   final bool isActive;
+
+  /// Nama tag (yang belum ada dibuat otomatis). `null` = tag tidak diubah
+  /// (mis. kolom Tag tidak ada di file import).
+  final List<String>? tagNames;
 }
 
 /// Stok dan harga khusus satu toko, diisi di form barang admin.
@@ -176,6 +187,7 @@ class ProductFilter {
   const ProductFilter({
     this.text = '',
     this.categoryId,
+    this.tagId,
     this.lowStockOnly = false,
     this.status = ProductStatusFilter.active,
     this.sort = ProductSort.name,
@@ -188,6 +200,9 @@ class ProductFilter {
 
   final String text;
   final int? categoryId;
+
+  /// Hanya barang yang punya tag ini.
+  final int? tagId;
   final bool lowStockOnly;
   final ProductStatusFilter status;
   final ProductSort sort;
@@ -195,6 +210,7 @@ class ProductFilter {
   ProductFilter copyWith({
     String? text,
     int? Function()? categoryId,
+    int? Function()? tagId,
     bool? lowStockOnly,
     ProductStatusFilter? status,
     ProductSort? sort,
@@ -202,6 +218,7 @@ class ProductFilter {
   }) => ProductFilter(
     text: text ?? this.text,
     categoryId: categoryId != null ? categoryId() : this.categoryId,
+    tagId: tagId != null ? tagId() : this.tagId,
     lowStockOnly: lowStockOnly ?? this.lowStockOnly,
     status: status ?? this.status,
     sort: sort ?? this.sort,
@@ -213,6 +230,7 @@ class ProductFilter {
       other is ProductFilter &&
       other.text == text &&
       other.categoryId == categoryId &&
+      other.tagId == tagId &&
       other.lowStockOnly == lowStockOnly &&
       other.status == status &&
       other.sort == sort &&
@@ -220,5 +238,5 @@ class ProductFilter {
 
   @override
   int get hashCode =>
-      Object.hash(text, categoryId, lowStockOnly, status, sort, storeId);
+      Object.hash(text, categoryId, tagId, lowStockOnly, status, sort, storeId);
 }

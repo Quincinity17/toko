@@ -6,6 +6,7 @@ import '../../../core/database/tables/sales.dart';
 import '../../auth/domain/app_user.dart';
 import '../domain/fuzzy_match.dart';
 import '../domain/product.dart';
+import '../domain/tag.dart';
 
 class ProductFailure implements Exception {
   const ProductFailure(this.message);
@@ -118,6 +119,9 @@ class ProductRepository {
     _check(ProductRules.price(draft.purchasePrice, label: 'Harga beli'));
     _check(ProductRules.price(draft.sellingPrice, label: 'Harga jual'));
     _check(ProductRules.minStock(draft.minStock));
+    for (final t in draft.tagNames ?? const <String>[]) {
+      _check(TagRules.name(t));
+    }
     for (final v in stores) {
       if (v.price != null) {
         _check(ProductRules.price(v.price, label: 'Harga jual toko'));
@@ -185,6 +189,14 @@ class ProductRepository {
             note: current == null ? 'Stok awal' : 'Penyesuaian manual',
           );
         }
+      }
+      // Tag baru (nama belum ada) dibuat otomatis, seperti kategori.
+      final tagNames = draft.tagNames;
+      if (tagNames != null) {
+        await _db.tagsDao.setProductTags(
+          savedId,
+          await _db.tagsDao.idsForNames(tagNames),
+        );
       }
       return (await dao.findById(savedId))!;
     });

@@ -12,6 +12,7 @@ import '../../../core/widgets/inset_grouped_list.dart';
 import '../../../core/widgets/large_title_page.dart';
 import '../../auth/presentation/password_sheet.dart';
 import '../../backup/presentation/backup_section.dart';
+import '../../products/data/tag_repository.dart';
 import '../../receipt/data/receipt_settings_repository.dart';
 import '../../sync/presentation/terminal_section.dart';
 
@@ -55,6 +56,26 @@ class SettingsPage extends ConsumerWidget {
                         ),
                         title: 'Ganti Password Saya',
                         onPressed: () => showChangeOwnPasswordSheet(context),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+                  InsetGroupedSection(
+                    header: 'Barang',
+                    dividerIndent: 58,
+                    children: [
+                      InsetGroupedTile(
+                        leading: TileIcon(
+                          icon: CupertinoIcons.tag_fill,
+                          color: c.purple,
+                        ),
+                        title: 'Kelola Tag',
+                        subtitle: 'Jenis barang: Mainan, Boneka, Alat Tulis, …',
+                        value: switch (ref.watch(tagsProvider).value?.length) {
+                          null || 0 => null,
+                          final n => '$n tag',
+                        },
+                        onPressed: () => context.go(AppRoutes.kelolaTag),
                       ),
                     ],
                   ),
