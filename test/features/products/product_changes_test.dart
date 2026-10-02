@@ -12,7 +12,6 @@ void main() {
     id: 1,
     code: 'BRG001',
     name: 'Indomie Goreng 85g',
-    categoryName: 'Makanan',
     unitName: 'PCS',
     purchasePrice: 2800,
     sellingPrice: 3500,
@@ -26,7 +25,6 @@ void main() {
   const same = ProductDraft(
     code: 'BRG001',
     name: 'Indomie Goreng 85g',
-    categoryName: 'Makanan',
     unitName: 'pcs',
     purchasePrice: 2800,
     sellingPrice: 3500,
@@ -59,7 +57,6 @@ void main() {
         code: 'BRG001',
         name: 'Indomie Goreng Jumbo',
         barcode: '899',
-        categoryName: null,
         unitName: 'PCS',
         purchasePrice: 2800,
         sellingPrice: 3700,
@@ -75,21 +72,19 @@ void main() {
     expect(changes.map((c) => c.toString()), [
       'Nama: Indomie Goreng 85g → Indomie Goreng Jumbo',
       'Barcode: – → 899',
-      'Kategori: Makanan → Tanpa kategori',
       'Harga jual: Rp 3.500 → Rp 3.700',
       'Status: Aktif → Nonaktif',
-      'Tag: Laris, Sarapan → Laris',
+      'Kategori: Laris, Sarapan → Laris',
       'Stok Toko Utama: 120 PCS → 100 PCS',
       // Harga khusus = harga default baru → disimpan sebagai harga default.
       'Harga Toko B: Rp 4.000 → Harga default',
     ]);
   });
 
-  test('tagNames null = tag tidak dibandingkan', () {
+  test('tagNames null = kategori tidak dibandingkan', () {
     const draft = ProductDraft(
       code: 'BRG001',
       name: 'Indomie Goreng 85g',
-      categoryName: 'Makanan',
       unitName: 'PCS',
       purchasePrice: 2800,
       sellingPrice: 3500,

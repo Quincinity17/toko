@@ -620,15 +620,58 @@ void main() {
       },
     );
 
-    test('database baru: barang contoh sudah bertag dengan warna', () async {
+    test('database baru: barang contoh punya kategori berwarna (kategori '
+        'lama + contoh)', () async {
       final db = await createSeededDb();
       addTearDown(db.close);
       final tags = await db.select(db.tags).get();
-      expect(tags, hasLength(7));
+      expect(tags, hasLength(7 + 6)); // 7 contoh + 6 kategori lama
       final indomie = (await ProductRepository(db)
           .findByCodeOrBarcode('BRG001'))!;
-      expect(indomie.tags.map((t) => t.name), ['Laris', 'Sarapan']);
+      expect(indomie.tags.map((t) => t.name), ['Laris', 'Makanan', 'Sarapan']);
       expect(indomie.tags.first.color, TagColor.red);
+    });
+
+    test('v9 → v10: kategori lama menjadi kategori-tag; nama yang sudah ada '
+        'dipakai ulang', () async {
+      final schema = File('test/fixtures/schema_v9.sql').readAsStringSync();
+      final db = AppDatabase(
+        NativeDatabase.memory(
+          setup: (Database raw) {
+            for (final stmt in schema.split(';\n')) {
+              if (stmt.trim().isNotEmpty) raw.execute(stmt);
+            }
+            raw.execute(
+              "INSERT INTO categories (name, uuid) VALUES ('Mainan', 'c-1'), "
+              "('Boneka', 'c-2')",
+            );
+            raw.execute(
+              "INSERT INTO tags (name, color, uuid) "
+              "VALUES ('mainan', 'pink', 't-1')",
+            );
+            raw.execute(
+              "INSERT INTO products (code, name, selling_price, category_id, "
+              "uuid) VALUES ('M1', 'Mobil-mobilan', 50000, 1, 'p-1'), "
+              "('B1', 'Boneka Beruang', 45000, 2, 'p-2'), "
+              "('X1', 'Tanpa Kategori', 1000, NULL, 'p-3')",
+            );
+            raw.execute(
+              "INSERT INTO product_tags (product_id, tag_id, uuid) "
+              "VALUES (1, 1, 'pt-1')",
+            );
+            raw.userVersion = 9;
+          },
+        ),
+      );
+      addTearDown(db.close);
+      final repo = ProductRepository(db);
+      final mobil = (await repo.findByCodeOrBarcode('M1'))!;
+      expect(mobil.tags.map((t) => t.name), ['mainan']); // dipakai ulang
+      expect(mobil.tags.single.color, TagColor.pink);
+      final boneka = (await repo.findByCodeOrBarcode('B1'))!;
+      expect(boneka.tags.map((t) => t.name), ['Boneka']);
+      expect((await repo.findByCodeOrBarcode('X1'))!.tags, isEmpty);
+      expect(await db.select(db.tags).get(), hasLength(2));
     });
 
     Future<AppDatabase> fromV8({required bool withTag}) async {

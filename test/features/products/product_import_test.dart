@@ -124,7 +124,6 @@ void main() {
         code: 'BRG001',
         barcode: '8991234000015',
         name: 'Indomie, "Goreng" 85g',
-        categoryName: 'Makanan',
         unitName: 'PCS',
         purchasePrice: 2800,
         sellingPrice: 3500,
@@ -163,13 +162,12 @@ void main() {
         final a = rows[0].draft!, b = rows[1].draft!;
         expect(a.name, 'Indomie, "Goreng" 85g');
         expect(a.barcode, '8991234000015');
-        expect(a.categoryName, 'Makanan');
         expect(a.sellingPrice, 3500);
         expect(rows[1].stock, 12.5);
         expect(b.barcode, isNull);
         expect(b.isActive, isFalse);
         expect(a.tagNames, ['Makanan Ringan', 'Promo']);
-        expect(b.tagNames, isNull); // kolom Tag kosong = tag tidak diubah
+        expect(b.tagNames, isNull); // kolom Kategori kosong = tidak diubah
       });
     }
 
@@ -253,7 +251,7 @@ void main() {
 
         final repo = ProductRepository(db);
         final kecap = (await repo.findByCodeOrBarcode('BRG500'))!;
-        expect(kecap.categoryName, 'Bumbu');
+        expect(kecap.tags.map((t) => t.name), ['Bumbu']);
         final indomie = (await repo.findByCodeOrBarcode('BRG001'))!;
         expect(indomie.name, 'Indomie Goreng 85g'); // dilewati, tidak berubah
         final moves = await (db.select(
@@ -272,7 +270,7 @@ void main() {
       );
       final p = (await ProductRepository(db).findByCodeOrBarcode('BRG001'))!;
       expect(p.name, 'Indomie Goreng Baru');
-      expect(p.categoryName, 'Mie Instan');
+      expect(p.tags.map((t) => t.name), ['Mie Instan']); // diganti
       expect(p.sellingPrice, 3700);
       expect(p.stock, 150);
       expect(p.barcode, '8991234000015'); // tidak ada di file → tetap
@@ -288,7 +286,7 @@ void main() {
       expect(result.updated, 1);
       final p = (await ProductRepository(db).findByCodeOrBarcode('BRG001'))!;
       expect(p.name, 'Indomie Goreng 85g'); // nama tetap
-      expect(p.categoryName, 'Makanan'); // kategori tetap
+      expect(p.tags.map((t) => t.name), contains('Makanan')); // tetap
       expect(p.purchasePrice, 2900);
       expect(p.sellingPrice, 3700);
       expect(p.stock, 150);

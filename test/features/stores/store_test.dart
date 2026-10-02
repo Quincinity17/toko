@@ -155,7 +155,6 @@ void main() {
           code: indomie.code,
           barcode: indomie.barcode,
           name: indomie.name,
-          categoryName: indomie.categoryName,
           unitName: indomie.unitName,
           purchasePrice: indomie.purchasePrice,
           sellingPrice: 3500,

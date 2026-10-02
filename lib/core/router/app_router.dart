@@ -65,7 +65,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               _page('pembayaran', const PaymentMethodsPage()),
               _page('toko', const StoresPage()),
               _page('struk', const ReceiptSettingsPage()),
-              _page('tag', const TagsPage()),
+              _page('kategori', const TagsPage()),
             ],
           ),
         ],

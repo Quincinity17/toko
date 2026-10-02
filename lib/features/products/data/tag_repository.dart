@@ -48,7 +48,7 @@ class TagRepository {
     return _db.transaction(() async {
       final same = await dao.findByName(n);
       if (same != null && same.id != id) {
-        throw TagFailure('Tag "${same.name}" sudah ada.');
+        throw TagFailure('Kategori "${same.name}" sudah ada.');
       }
       final data = TagsCompanion(name: Value(n), color: Value(color.name));
       if (id == null) {
@@ -56,7 +56,7 @@ class TagRepository {
         return Tag(id: newId, name: n, color: color);
       }
       if (await dao.findById(id) == null) {
-        throw const TagFailure('Tag tidak ditemukan.');
+        throw const TagFailure('Kategori tidak ditemukan.');
       }
       await dao.updateTag(id, data);
       return Tag(id: id, name: n, color: color);
@@ -71,7 +71,7 @@ class TagRepository {
 
   void _requireAdmin(AppUser actor) {
     if (!actor.isAdmin) {
-      throw const TagFailure('Hanya admin yang bisa mengelola tag.');
+      throw const TagFailure('Hanya admin yang bisa mengelola kategori.');
     }
   }
 }

@@ -894,13 +894,13 @@ void main() {
     // Pengaturan › Kelola Tag › Tambah Tag.
     await tester.tap(find.text('Pengaturan'));
     await settle(tester);
-    await tapCentered(tester, find.text('Kelola Tag'));
+    await tapCentered(tester, find.text('Kelola Kategori'));
     await settle(tester);
-    expect(find.text('Belum ada tag'), findsOneWidget);
-    await tester.tap(find.widgetWithText(AppButton, 'Tambah Tag').first);
+    expect(find.text('Belum ada kategori'), findsOneWidget);
+    await tester.tap(find.widgetWithText(AppButton, 'Tambah Kategori').first);
     await settle(tester);
-    await fill(tester, 'Nama tag', 'Mainan');
-    await tester.tap(find.widgetWithText(AppButton, 'Tambah Tag').last);
+    await fill(tester, 'Nama kategori', 'Mainan');
+    await tester.tap(find.widgetWithText(AppButton, 'Tambah Kategori').last);
     await settle(tester);
     expect(find.text('Mainan'), findsOneWidget);
     expect(find.text('0 barang'), findsOneWidget);
@@ -910,9 +910,9 @@ void main() {
     await settle(tester);
     await tester.tap(find.text('Indomie Goreng 85g'));
     await settle(tester);
-    await tapCentered(tester, find.text('Tanpa tag'));
+    await tapCentered(tester, find.text('Tanpa kategori'));
     await settle(tester);
-    expect(find.text('Tag Barang'), findsOneWidget);
+    expect(find.text('Kategori Barang'), findsOneWidget);
     await tester.tap(find.text('Mainan'));
     await settle(tester);
     await tester.enterText(
@@ -923,23 +923,26 @@ void main() {
       'Promo',
     );
     await settle(tester);
-    expect(find.text('Buat tag "Promo"'), findsOneWidget);
+    expect(find.text('Buat kategori "Promo"'), findsOneWidget);
     await tester.testTextInput.receiveAction(TextInputAction.search);
     await settle(tester);
-    await tester.tap(find.text('Selesai (2 tag)'));
+    await tester.tap(find.text('Selesai (2 kategori)'));
     await settle(tester);
     await tapCentered(tester, find.widgetWithText(AppButton, 'Simpan'));
     await settle(tester);
     // Konfirmasi perubahan: tag kosong → Mainan, Promo.
     expect(find.text('Simpan perubahan?'), findsOneWidget);
-    expect(find.textContaining('Tanpa tag', findRichText: true), findsWidgets);
+    expect(
+      find.textContaining('Tanpa kategori', findRichText: true),
+      findsWidgets,
+    );
     await tester.tap(find.widgetWithText(AppButton, 'Simpan').last);
     await settle(tester);
 
     // Chip tag tampil di daftar; filter per tag.
     expect(find.text('Mainan'), findsOneWidget);
     expect(find.text('Promo'), findsOneWidget);
-    await tester.tap(find.text('Semua tag'));
+    await tester.tap(find.text('Semua kategori'));
     await settle(tester);
     await tester.tap(find.text('Promo').last);
     await settle(tester);
@@ -1004,15 +1007,15 @@ void main() {
     await login(tester, 'admin', 'admin123');
     await tester.tap(find.text('Pengaturan'));
     await settle(tester);
-    await tapCentered(tester, find.text('Kelola Tag'));
+    await tapCentered(tester, find.text('Kelola Kategori'));
     await settle(tester);
-    await tester.tap(find.widgetWithText(AppButton, 'Tambah Tag').first);
+    await tester.tap(find.widgetWithText(AppButton, 'Tambah Kategori').first);
     await settle(tester);
-    await fill(tester, 'Nama tag', 'Boneka');
+    await fill(tester, 'Nama kategori', 'Boneka');
 
     await tester.tap(find.byKey(const ValueKey('custom-color')));
     await settle(tester);
-    expect(find.text('Warna Tag'), findsOneWidget);
+    expect(find.text('Warna Kategori'), findsOneWidget);
     // Geser di roda warna lalu ketik kode hex.
     await tester.tap(find.byKey(const ValueKey('color-wheel')));
     await settle(tester);
@@ -1028,7 +1031,7 @@ void main() {
     await settle(tester);
     expect(find.text('Warna kustom #FF8800'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(AppButton, 'Tambah Tag').last);
+    await tester.tap(find.widgetWithText(AppButton, 'Tambah Kategori').last);
     await settle(tester);
     final tag = (await tester.runAsync(
       () => (db.select(

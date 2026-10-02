@@ -64,7 +64,6 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
     text: _p == null || _p!.minStock == 0 ? '' : Fmt.number(_p!.minStock),
   );
 
-  late String? _category = _p?.categoryName;
   late List<String> _tags = [for (final t in _p?.tags ?? const <Tag>[]) t.name];
   late String? _unit = _p?.unitName ?? 'PCS';
   late bool _active = _p?.isActive ?? true;
@@ -171,7 +170,6 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
     code: _code.text,
     barcode: _barcode.text,
     name: _name.text,
-    categoryName: _category,
     unitName: _unit,
     purchasePrice: _money(_buy) ?? 0,
     sellingPrice: _money(_sell)!,
@@ -267,19 +265,6 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
     }
   }
 
-  Future<void> _pickCategory() async {
-    final cats = ref.read(categoriesProvider).value ?? const [];
-    final pick = await showOptionPicker(
-      context,
-      title: 'Kategori',
-      options: [for (final (_, name) in cats) name],
-      selected: _category,
-      allowCreate: true,
-      clearLabel: 'Tanpa kategori',
-    );
-    if (pick != null) setState(() => _category = pick.value);
-  }
-
   Future<void> _pickTags() async {
     final picked = await showTagPicker(context, selected: _tags);
     if (picked != null) setState(() => _tags = picked);
@@ -298,15 +283,16 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
     if (pick != null) setState(() => _unit = pick.value?.toUpperCase());
   }
 
-  /// Baris Tag: chip tag terpilih (bisa dilepas) + ketuk untuk memilih.
+  /// Baris Kategori: chip kategori terpilih (bisa dilepas) + ketuk untuk
+  /// memilih (boleh lebih dari satu).
   Widget _tagTile() {
     final colors = {
       for (final t in ref.watch(tagsProvider).value ?? const <Tag>[])
         t.name.toLowerCase(): t.color,
     };
     return InsetGroupedTile(
-      title: 'Tag',
-      value: _tags.isEmpty ? 'Tanpa tag' : null,
+      title: 'Kategori',
+      value: _tags.isEmpty ? 'Tanpa kategori' : null,
       onPressed: _pickTags,
       showChevron: true,
       below: _tags.isEmpty
@@ -335,7 +321,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
   Widget build(BuildContext context) {
     final c = context.colors;
     // Muat daftar kategori & satuan lebih awal untuk picker.
-    ref.watch(categoriesProvider);
+    ref.watch(tagsProvider);
     ref.watch(unitNamesProvider);
     final stores = (ref.watch(storesProvider).value ?? const <Store>[])
         .where((s) => s.isActive)
@@ -394,11 +380,6 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
           const SizedBox(height: AppSpacing.lg),
           InsetGroupedSection(
             children: [
-              InsetGroupedTile(
-                title: 'Kategori',
-                value: _category ?? 'Tanpa kategori',
-                onPressed: _pickCategory,
-              ),
               InsetGroupedTile(
                 title: 'Satuan',
                 value: _unit ?? 'Tanpa satuan',

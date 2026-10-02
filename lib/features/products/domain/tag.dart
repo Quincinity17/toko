@@ -90,8 +90,8 @@ class TagColor {
   String toString() => 'TagColor($name)';
 }
 
-/// Tag jenis barang (mis. Mainan, Boneka, Alat Tulis). Satu barang bisa
-/// punya banyak tag.
+/// Kategori barang (mis. Mainan, Boneka, Alat Tulis); di kode dan database
+/// disebut "tag". Satu barang bisa punya banyak kategori.
 @immutable
 class Tag {
   const Tag({
@@ -128,13 +128,16 @@ class TagRules {
 
   static String? name(String v) {
     final n = v.trim();
-    if (n.isEmpty) return 'Nama tag wajib diisi.';
-    if (n.length > maxLength) return 'Nama tag maksimal $maxLength karakter.';
-    if (n.contains(',')) return 'Nama tag tidak boleh berisi koma.';
+    if (n.isEmpty) return 'Nama kategori wajib diisi.';
+    if (n.length > maxLength) {
+      return 'Nama kategori maksimal $maxLength karakter.';
+    }
+    if (n.contains(',')) return 'Nama kategori tidak boleh berisi koma.';
     return null;
   }
 
-  /// Memecah teks "Mainan, Boneka" (kolom Tag di file import) menjadi nama.
+  /// Memecah teks "Mainan, Boneka" (kolom Kategori di file import) menjadi
+  /// nama.
   static List<String> split(String text) => [
     for (final t in text.split(RegExp(r'[,;]')))
       if (t.trim().isNotEmpty) t.trim(),

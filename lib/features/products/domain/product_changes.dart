@@ -52,7 +52,7 @@ List<FieldChange> productChanges({
   String tags(Iterable<String> names) {
     final list = names.map((n) => n.trim()).where((n) => n.isNotEmpty).toList()
       ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-    return list.isEmpty ? 'Tanpa tag' : list.join(', ');
+    return list.isEmpty ? 'Tanpa kategori' : list.join(', ');
   }
 
   final unitAfter = after.unitName?.trim().toUpperCase();
@@ -61,11 +61,6 @@ List<FieldChange> productChanges({
   add('Nama', before.name, after.name.trim());
   add('Kode', before.code, after.code.trim());
   add('Barcode', text(before.barcode, '–'), text(after.barcode, '–'));
-  add(
-    'Kategori',
-    text(before.categoryName, 'Tanpa kategori'),
-    text(after.categoryName, 'Tanpa kategori'),
-  );
   add(
     'Satuan',
     text(before.unitName, 'Tanpa satuan'),
@@ -88,11 +83,11 @@ List<FieldChange> productChanges({
     after.isActive ? 'Aktif' : 'Nonaktif',
   );
   if (after.tagNames != null) {
-    // Tag dicocokkan tanpa peduli huruf besar (seperti saat disimpan).
+    // Kategori dicocokkan tanpa peduli huruf besar (seperti saat disimpan).
     final from = tags(before.tags.map((t) => t.name));
     final to = tags(after.tagNames!);
     if (from.toLowerCase() != to.toLowerCase()) {
-      out.add(FieldChange('Tag', from, to));
+      out.add(FieldChange('Kategori', from, to));
     }
   }
 

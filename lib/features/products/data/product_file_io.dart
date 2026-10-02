@@ -131,14 +131,13 @@ List<Object> _rowOf(Product p) => [
   p.code,
   p.barcode ?? '',
   p.name,
-  p.categoryName ?? '',
+  p.tags.map((t) => t.name).join(', '),
   p.unitName ?? '',
   p.purchasePrice,
   p.sellingPrice,
   p.stock,
   p.minStock,
   p.isActive ? 'Ya' : 'Tidak',
-  p.tags.map((t) => t.name).join(', '),
 ];
 
 /// Export barang ke Excel. Judul kolom = [ProductField.label], sehingga file
@@ -216,7 +215,9 @@ Uint8List productTemplateXlsx() {
     ProductField.code: 'Wajib. Kode unik barang, mis. BRG001.',
     ProductField.barcode: 'Opsional. Angka barcode tanpa spasi.',
     ProductField.name: 'Wajib. Nama barang.',
-    ProductField.category: 'Opsional. Dibuat otomatis jika belum ada.',
+    ProductField.category:
+        'Opsional. Boleh lebih dari satu, dipisah koma, mis. '
+        '"Mainan, Boneka". Kategori baru dibuat otomatis.',
     ProductField.unit: 'Opsional. Mis. PCS, BTL, KG. Dibuat otomatis.',
     ProductField.purchasePrice: 'Opsional. Angka tanpa "Rp", mis. 2800.',
     ProductField.sellingPrice: 'Wajib. Angka tanpa "Rp", mis. 3500.',
@@ -224,9 +225,6 @@ Uint8List productTemplateXlsx() {
         'Opsional. Boleh desimal untuk barang timbangan, mis. 12,5.',
     ProductField.minStock: 'Opsional. Batas "stok menipis".',
     ProductField.isActive: 'Opsional. "Tidak" untuk menyembunyikan dari kasir.',
-    ProductField.tags:
-        'Opsional. Beberapa tag dipisah koma, mis. "Mainan, Boneka". '
-        'Tag baru dibuat otomatis.',
   };
   help.appendRow([TextCellValue('Kolom'), TextCellValue('Keterangan')]);
   for (final f in ProductField.values) {
@@ -247,7 +245,7 @@ String _renameDefault(Excel book, String name) {
 
 void _setWidths(Sheet sheet) {
   const widths = [
-    12.0, 16.0, 36.0, 18.0, 10.0, 14.0, 14.0, 10.0, 14.0, 8.0, 28.0, //
+    12.0, 16.0, 36.0, 26.0, 10.0, 14.0, 14.0, 10.0, 14.0, 8.0, //
   ];
   for (var i = 0; i < widths.length; i++) {
     sheet.setColumnWidth(i, widths[i]);

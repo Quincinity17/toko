@@ -42,7 +42,7 @@ void main() {
     code: code,
     barcode: barcode,
     name: name,
-    categoryName: category,
+    tagNames: category == null ? null : [category],
     unitName: unit,
     purchasePrice: buy,
     sellingPrice: sell,
@@ -56,7 +56,7 @@ void main() {
 
   test('tambah barang: kategori baru dibuat, satuan dipakai ulang', () async {
     final p = await repo.save(actor: admin, draft: draft(), stores: at(12));
-    expect(p.categoryName, 'Bumbu');
+    expect(p.tags.single.name, 'Bumbu');
     expect(p.unitName, 'BTL'); // "btl" → satuan BTL yang sudah ada
     final units = await db.select(db.units).get();
     expect(units.where((u) => u.name == 'BTL'), hasLength(1));
@@ -177,9 +177,11 @@ void main() {
         await codes(const ProductFilter(lowStockOnly: true)),
         unorderedEquals(['BRG007', 'BRG012', 'BRG018']),
       );
-      final cats = await repo.watchCategories().first;
-      final minuman = cats.firstWhere((c) => c.$2 == 'Minuman').$1;
-      expect(await codes(ProductFilter(categoryId: minuman)), hasLength(4));
+      // Kategori lama "Minuman" sudah menjadi kategori-tag (migrasi v10).
+      final minuman = (await (db.select(
+        db.tags,
+      )..where((t) => t.name.equals('Minuman'))).getSingle()).id;
+      expect(await codes(ProductFilter(tagId: minuman)), hasLength(4));
     });
 
     test('urutan dan halaman', () async {

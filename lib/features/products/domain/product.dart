@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import 'tag.dart';
 
-/// Barang beserta nama kategori dan satuannya (hasil join).
+/// Barang beserta satuan dan kategorinya (hasil join).
 @immutable
 class Product {
   const Product({
@@ -10,8 +10,6 @@ class Product {
     required this.code,
     required this.name,
     this.barcode,
-    this.categoryId,
-    this.categoryName,
     this.unitId,
     this.unitName,
     required this.purchasePrice,
@@ -27,8 +25,6 @@ class Product {
   final String code;
   final String? barcode;
   final String name;
-  final int? categoryId;
-  final String? categoryName;
   final int? unitId;
   final String? unitName;
   final int purchasePrice;
@@ -45,7 +41,8 @@ class Product {
   final double minStock;
   final bool isActive;
 
-  /// Tag jenis barang, urut nama.
+  /// Kategori barang (bisa lebih dari satu, berwarna), urut nama. Di kode
+  /// dan database disebut "tag"; di layar disebut "Kategori".
   final List<Tag> tags;
 
   bool get isLowStock => stock <= minStock;
@@ -63,15 +60,14 @@ class Product {
   int get hashCode => id.hashCode;
 }
 
-/// Isian form/import barang. Kategori dan satuan berupa nama; yang belum ada
-/// dibuat otomatis saat disimpan.
+/// Isian form/import barang. Kategori ([tagNames]) dan satuan berupa nama;
+/// yang belum ada dibuat otomatis saat disimpan.
 @immutable
 class ProductDraft {
   const ProductDraft({
     required this.code,
     this.barcode,
     required this.name,
-    this.categoryName,
     this.unitName,
     this.purchasePrice = 0,
     required this.sellingPrice,
@@ -83,7 +79,6 @@ class ProductDraft {
   final String code;
   final String? barcode;
   final String name;
-  final String? categoryName;
   final String? unitName;
   final int purchasePrice;
 
@@ -92,8 +87,8 @@ class ProductDraft {
   final double minStock;
   final bool isActive;
 
-  /// Nama tag (yang belum ada dibuat otomatis). `null` = tag tidak diubah
-  /// (mis. kolom Tag tidak ada di file import).
+  /// Nama kategori (yang belum ada dibuat otomatis). `null` = kategori tidak
+  /// diubah (mis. kolom Kategori tidak ada di file import).
   final List<String>? tagNames;
 }
 
@@ -186,7 +181,6 @@ enum ProductStatusFilter {
 class ProductFilter {
   const ProductFilter({
     this.text = '',
-    this.categoryId,
     this.tagId,
     this.lowStockOnly = false,
     this.status = ProductStatusFilter.active,
@@ -199,9 +193,8 @@ class ProductFilter {
   final int? storeId;
 
   final String text;
-  final int? categoryId;
 
-  /// Hanya barang yang punya tag ini.
+  /// Hanya barang yang punya kategori (tag) ini.
   final int? tagId;
   final bool lowStockOnly;
   final ProductStatusFilter status;
@@ -209,7 +202,6 @@ class ProductFilter {
 
   ProductFilter copyWith({
     String? text,
-    int? Function()? categoryId,
     int? Function()? tagId,
     bool? lowStockOnly,
     ProductStatusFilter? status,
@@ -217,7 +209,6 @@ class ProductFilter {
     int? Function()? storeId,
   }) => ProductFilter(
     text: text ?? this.text,
-    categoryId: categoryId != null ? categoryId() : this.categoryId,
     tagId: tagId != null ? tagId() : this.tagId,
     lowStockOnly: lowStockOnly ?? this.lowStockOnly,
     status: status ?? this.status,
@@ -229,7 +220,6 @@ class ProductFilter {
   bool operator ==(Object other) =>
       other is ProductFilter &&
       other.text == text &&
-      other.categoryId == categoryId &&
       other.tagId == tagId &&
       other.lowStockOnly == lowStockOnly &&
       other.status == status &&
@@ -238,5 +228,5 @@ class ProductFilter {
 
   @override
   int get hashCode =>
-      Object.hash(text, categoryId, tagId, lowStockOnly, status, sort, storeId);
+      Object.hash(text, tagId, lowStockOnly, status, sort, storeId);
 }

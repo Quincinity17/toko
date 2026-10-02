@@ -21,7 +21,6 @@ part 'reports_dao.g.dart';
     Sales,
     SaleItems,
     Products,
-    Categories,
     Users,
     Stores,
     StoreProducts,
@@ -116,7 +115,8 @@ class ReportsDao extends DatabaseAccessor<AppDatabase> with _$ReportsDaoMixin {
     readsFrom: {sales},
   );
 
-  /// Per barang: kode/nama dari faktur, kategori & satuan terkini.
+  /// Per barang: kode/nama dari faktur, kategori (tag, dipisah koma) &
+  /// satuan terkini.
   Selectable<QueryRow> productSales(
     DateTime start,
     DateTime end, {
@@ -126,63 +126,45 @@ class ReportsDao extends DatabaseAccessor<AppDatabase> with _$ReportsDaoMixin {
     '''
     SELECT si.product_id, MAX(si.product_code) AS code,
            MAX(si.product_name) AS name, MAX(si.unit_name) AS unit,
-           c.name AS category,
+           (SELECT group_concat(t.name, ', ') FROM product_tags pt
+            JOIN tags t ON t.id = pt.tag_id
+            WHERE pt.product_id = si.product_id) AS category,
            SUM(si.qty) AS qty, SUM(si.subtotal) AS revenue,
            SUM(si.qty * si.purchase_price) AS cost,
            COUNT(DISTINCT si.sale_id) AS tx
     FROM sale_items si
     JOIN sales s ON s.id = si.sale_id
-    LEFT JOIN products p ON p.id = si.product_id
-    LEFT JOIN categories c ON c.id = p.category_id
     WHERE s.sale_date >= ?1 AND s.sale_date < ?2 AND ${_store('s')}
     GROUP BY si.product_id
     ORDER BY qty DESC, revenue DESC
     ${limit == null ? '' : 'LIMIT $limit'}
     ''',
     variables: _range(start, end, storeId),
-    readsFrom: {sales, saleItems, products, categories},
+    readsFrom: {sales, saleItems, productTags, tags},
   );
 
+  /// Per kategori (tag, kategori saat ini). Barang dengan beberapa kategori
+  /// dihitung di setiap kategorinya; barang tanpa kategori = "Tanpa kategori".
   Selectable<QueryRow> categorySales(
     DateTime start,
     DateTime end, {
     int? storeId,
   }) => customSelect(
     '''
-        SELECT COALESCE(c.name, 'Tanpa kategori') AS grp,
+        SELECT COALESCE(t.name, 'Tanpa kategori') AS grp,
                COUNT(DISTINCT si.sale_id) AS tx, SUM(si.qty) AS qty,
                SUM(si.subtotal) AS revenue,
                SUM(si.qty * si.purchase_price) AS cost
         FROM sale_items si
         JOIN sales s ON s.id = si.sale_id
-        LEFT JOIN products p ON p.id = si.product_id
-        LEFT JOIN categories c ON c.id = p.category_id
+        LEFT JOIN product_tags pt ON pt.product_id = si.product_id
+        LEFT JOIN tags t ON t.id = pt.tag_id
         WHERE s.sale_date >= ?1 AND s.sale_date < ?2 AND ${_store('s')}
         GROUP BY grp ORDER BY revenue DESC
         ''',
     variables: _range(start, end, storeId),
-    readsFrom: {sales, saleItems, products, categories},
+    readsFrom: {sales, saleItems, productTags, tags},
   );
-
-  /// Per tag barang (tag saat ini). Barang dengan beberapa tag dihitung di
-  /// setiap tagnya; barang tanpa tag tidak muncul.
-  Selectable<QueryRow> tagSales(DateTime start, DateTime end, {int? storeId}) =>
-      customSelect(
-        '''
-        SELECT t.name AS grp, t.color AS color,
-               COUNT(DISTINCT si.sale_id) AS tx, SUM(si.qty) AS qty,
-               SUM(si.subtotal) AS revenue,
-               SUM(si.qty * si.purchase_price) AS cost
-        FROM sale_items si
-        JOIN sales s ON s.id = si.sale_id
-        JOIN product_tags pt ON pt.product_id = si.product_id
-        JOIN tags t ON t.id = pt.tag_id
-        WHERE s.sale_date >= ?1 AND s.sale_date < ?2 AND ${_store('s')}
-        GROUP BY t.id ORDER BY revenue DESC
-        ''',
-        variables: _range(start, end, storeId),
-        readsFrom: {sales, saleItems, productTags, tags},
-      );
 
   /// Dikelompokkan per [groupExpr] milik tabel sales (alias `s`), mis.
   /// metode bayar, kasir, terminal. Biaya per faktur dihitung dari

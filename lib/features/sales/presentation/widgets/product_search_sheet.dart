@@ -259,7 +259,7 @@ class _ResultTile extends StatelessWidget {
                     [
                       p.code,
                       if (p.barcode != null) p.barcode!,
-                      if (p.categoryName != null) p.categoryName!,
+                      ...p.tags.map((t) => t.name),
                     ].join(' · '),
                     style: AppTypography.footnote.copyWith(
                       color: c.labelSecondary,

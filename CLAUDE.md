@@ -249,12 +249,12 @@ tab **Transaksi Baru** dan **Hari Ini**.
 - Daftar: cari per kata (+ saran nama mirip bila kosong), filter status
   (Aktif/Nonaktif/Semua), kategori, stok menipis (stok ≤ stok minimum), urutan
   (nama, kode, stok terkecil, harga tertinggi, terakhir diubah), 50 per halaman.
-- Form (sheet): nama, kode, barcode, kategori & satuan (`showOptionPicker`, bisa
-  buat baru; satuan disimpan huruf besar), harga beli/jual (+ info untung atau
-  peringatan rugi), stok, stok minimum, aktif.
+- Form (sheet): nama, kode, barcode, satuan (`showOptionPicker`, bisa buat
+  baru; disimpan huruf besar), kategori (banyak, lihat "Kategori barang"),
+  harga beli/jual (+ info untung atau peringatan rugi), stok, stok minimum, aktif.
 - Aturan di `ProductRepository.save` (`ProductRules`): kode & barcode unik (kode
-  tanpa peduli huruf besar), barcode tanpa spasi, harga ≥ 0. Kategori/satuan
-  dibuat otomatis berdasarkan nama. Selisih stok → `stock_movements` jenis
+  tanpa peduli huruf besar), barcode tanpa spasi, harga ≥ 0. Kategori (tag) &
+  satuan dibuat otomatis berdasarkan nama. Selisih stok → `stock_movements` jenis
   `adjust` ("Stok awal" / "Penyesuaian manual").
 - **Ubah barang → konfirmasi perubahan** (permintaan user): `productChanges`
   (`products/domain/product_changes.dart`, fungsi murni) membandingkan barang
@@ -265,10 +265,18 @@ tab **Transaksi Baru** dan **Hari Ini**.
 - Hapus: belum pernah terjual → hapus permanen (+ riwayat stoknya); sudah
   terjual → dinonaktifkan (hilang dari kasir, faktur lama utuh).
 
-## Tag jenis barang (`products`: `tag.dart`, `TagRepository`, `/pengaturan/tag`)
+## Kategori barang (= "tag" di kode; `products`: `tag.dart`, `TagRepository`, `/pengaturan/kategori`)
 
-- **Tag bisa lebih dari satu per barang** (keputusan user; Kategori tetap ada,
-  satu per barang). Contoh: Mainan, Boneka, Alat Tulis.
+- **Kategori dan tag adalah SATU konsep, di layar bernama "Kategori"**
+  (keputusan user): bisa lebih dari satu per barang dan berwarna. Contoh:
+  Mainan, Boneka, Alat Tulis. Di kode/database tetap bernama tag (`Tag`,
+  `tags`, `product_tags`, `Product.tags`, `ProductFilter.tagId`,
+  `ProductDraft.tagNames`) — jangan buat konsep kategori kedua.
+- Kategori lama (`categories`, `products.category_id`, satu per barang)
+  dipindah jadi tag oleh migrasi v10 (`_categoriesToTags`, juga di onCreate):
+  nama yang sudah ada dipakai ulang tanpa peduli huruf besar, warna
+  bergiliran. Tabel/kolom lama tetap di skema tetapi **tidak dibaca/ditulis
+  lagi** (seperti voucher).
 - Tabel v8: `tags` (nama unik tanpa peduli huruf besar, `color` = nama
   `TagColor`, uuid) dan `product_tags` (PK product+tag, uuid, cascade).
   `TagsDao`: daftar + jumlah barang, `setProductTags` (ganti semua),
@@ -276,7 +284,7 @@ tab **Transaksi Baru** dan **Hari Ini**.
 - `Product.tags` diisi subquery `group_concat` (pemisah char 30/31) di
   `ProductsDao._tagList` + `watchedTables`, jadi daftar barang ikut terbarui
   saat tag diubah. Filter `ProductFilter.tagId` (EXISTS).
-- `ProductDraft.tagNames`: `null` = tag tidak diubah, `[]` = lepas semua.
+- `ProductDraft.tagNames`: `null` = kategori tidak diubah, `[]` = lepas semua.
   `TagRules`: nama 1–30 huruf, tanpa koma; `split` memecah "A, B; C".
 - **Warna = penanda cepat** (permintaan user): `TagColor` = class nilai (bukan
   enum): 15 preset (`TagColor.values`, disimpan per nama) **atau warna bebas
@@ -290,20 +298,24 @@ tab **Transaksi Baru** dan **Hari Ini**.
   Anak-anak, Sarapan, Kebutuhan Pokok, Dingin, Mandi & Cuci) dipasang ke barang
   contoh saat onCreate dan migrasi v9 — hanya bila belum ada tag sama sekali.
   Tes yang butuh mulai tanpa tag memanggil `clearSampleTags(db)`.
-- Kelola Tag (admin): tambah/ubah nama & warna/hapus (tag dilepas, barang
-  tetap). Form barang: baris Tag (chip + ×) → `showTagPicker` (pilih banyak,
-  cari, Enter/"Buat tag" membuat tag baru dengan warna bergiliran). Daftar
-  barang: chip tag di bawah nama (`InsetGroupedTile.below`) + filter "Semua tag".
-- Import/export: kolom terakhir **Tag** ("Mainan, Boneka"). Import: tag baru
-  dibuat; mode Timpa mengganti tag bila kolom terisi; Update stok & harga tidak
-  menyentuh tag.
-- Laporan › Kategori: tabel "Per tag" (`ReportsDao.tagSales`; barang bertag
-  banyak dihitung di setiap tag, porsi terhadap omzet total) + sheet "Tag".
+- Kelola Kategori (admin): tambah/ubah nama & warna/hapus (kategori dilepas,
+  barang tetap). Form barang: baris Kategori (chip + ×) → `showTagPicker`
+  (pilih banyak, cari, Enter/"Buat kategori" membuat yang baru dengan warna
+  bergiliran). Daftar barang & sheet cari kasir: chip/nama kategori; satu
+  filter "Semua kategori".
+- Import/export: kolom **Kategori** ("Mainan, Boneka"; sinonim termasuk
+  Jenis/Tag/Label). Import: kategori baru dibuat (dihitung "kategori baru");
+  mode Timpa mengganti kategori bila kolom terisi; Update stok & harga tidak
+  menyentuh kategori.
+- Laporan › Kategori (`ReportsDao.categorySales` dari tag): barang
+  berkategori banyak dihitung di setiap kategori, tanpa kategori = "Tanpa
+  kategori", porsi terhadap omzet total. Kolom kategori di tabel Produk =
+  semua kategori barang (group_concat).
 
 ## Import & export barang
 
-- Kolom file = `ProductField` (label: Kode, Barcode, Nama, Kategori, Satuan,
-  Harga Beli, Harga Jual, Stok, Stok Minimum, Aktif, Tag). Export dan template memakai
+- Kolom file = `ProductField` (label: Kode, Barcode, Nama, Kategori (bisa
+  "A, B"), Satuan, Harga Beli, Harga Jual, Stok, Stok Minimum, Aktif). Export dan template memakai
   label ini → hasil export bisa langsung di-import ulang.
 - `product_file_io.dart`: baca .xlsx/.csv (di `Isolate.run`; baris judul = baris
   pertama dengan ≥ 2 kolom terisi; delimiter CSV dideteksi otomatis), tulis
@@ -435,7 +447,7 @@ Uang = INTEGER Rupiah; stok = REAL (mendukung kg/liter).
 - v1 `users`: id, username (unik, huruf kecil), full_name, password_hash (bcrypt),
   role (`admin`|`kasir`, textEnum), is_active, created_at, last_login_at
 - v2 (migrasi `from < 2` + 20 barang contoh, sekali saja):
-  - `categories` (id, name unik), `units` (id, name unik)
+  - `categories` (id, name unik; tidak dipakai sejak v10), `units` (id, name unik)
   - `products`: code (unik), barcode (unik, null), name, category_id, unit_id,
     purchase_price, selling_price, stock (REAL), min_stock, is_active, created/updated_at
   - `sales`: invoice_no (unik), sale_date, user_id, item_count, subtotal,
@@ -466,13 +478,15 @@ Uang = INTEGER Rupiah; stok = REAL (mendukung kg/liter).
 - v7: `stores.receipt_template` (TEXT null, JSON bentuk struk toko).
 - v8: `tags`, `product_tags` (tag jenis barang, banyak-ke-banyak).
 - v9: data saja (tag contoh untuk barang contoh), skema sama dengan v8.
+- v10: data saja: kategori lama → tag (kategori & tag jadi satu konsep).
+  `categories`/`products.category_id` tidak dipakai lagi.
 - Langkah `from < 4` idempoten (`_ensureColumn` cek `PRAGMA table_info`) karena
   bisa dicapai dari v1/v2/v3 yang tabelnya berbeda-beda.
 - PENTING migrasi: `createTable` memakai definisi TERBARU, jadi cabang `from < 2`
   membuat semua tabel baru sekaligus dan cabang `else if (from < 3)` hanya
   menambah yang belum ada. Pola ini harus dijaga untuk v4 dst.
 - Tes migrasi (`checkout_service_test.dart`): v1 manual, v2–v6 dari
-  `test/fixtures/schema_v{2,3,4,5,6,7,8}.sql` (skema asli DB user) → versi terbaru.
+  `test/fixtures/schema_v{2,…,9}.sql` (skema asli DB user) → versi terbaru.
   Saat menaikkan versi lagi: simpan skema DB sekarang sebagai fixture baru dulu.
 - Data contoh (`sample_products.dart`) dimasukkan di onCreate/onUpgrade, bukan di
   seeder start-up, supaya tidak muncul lagi jika user menghapusnya.

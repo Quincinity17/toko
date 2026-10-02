@@ -48,6 +48,8 @@ enum ProductField {
       'deskripsi',
     ],
   ),
+
+  /// Satu atau beberapa kategori dipisah koma, mis. "Mainan, Boneka".
   category(
     'Kategori',
     synonyms: [
@@ -60,6 +62,9 @@ enum ProductField {
       'kelompok',
       'departemen',
       'dept',
+      'tag',
+      'tags',
+      'label',
     ],
   ),
   unit(
@@ -117,11 +122,7 @@ enum ProductField {
       'min stock',
     ],
   ),
-  isActive('Aktif', synonyms: ['aktif', 'status', 'active']),
-
-  /// Beberapa tag dipisah koma, mis. "Mainan, Boneka". Kolom terakhir agar
-  /// file lama tetap cocok.
-  tags('Tag', synonyms: ['tag', 'tags', 'label', 'tag barang']);
+  isActive('Aktif', synonyms: ['aktif', 'status', 'active']);
 
   const ProductField(
     this.label, {
@@ -334,10 +335,10 @@ List<ImportRow> validateImport(
       }
     }
 
-    final tagNames = TagRules.split(cell(ProductField.tags));
-    for (final t in tagNames) {
+    final categories = TagRules.split(cell(ProductField.category));
+    for (final t in categories) {
       final tagError = TagRules.name(t);
-      if (tagError != null) errors.add('Tag "$t": $tagError');
+      if (tagError != null) errors.add('Kategori "$t": $tagError');
     }
 
     final active = cell(ProductField.isActive).toLowerCase();
@@ -363,15 +364,14 @@ List<ImportRow> validateImport(
                 code: code,
                 barcode: barcode.isEmpty ? null : barcode,
                 name: name,
-                categoryName: cell(ProductField.category),
                 unitName: cell(ProductField.unit),
                 purchasePrice: (buy ?? 0).toInt(),
                 sellingPrice: sell!.toInt(),
                 minStock: (minStock ?? 0).toDouble(),
                 isActive: isActive,
-                // Kolom Tag tidak dipetakan = tag barang tidak diubah.
-                tagNames: provided.contains(ProductField.tags)
-                    ? tagNames
+                // Kolom Kategori kosong/tidak ada = kategori barang tidak diubah.
+                tagNames: provided.contains(ProductField.category)
+                    ? categories
                     : null,
               ),
       ),

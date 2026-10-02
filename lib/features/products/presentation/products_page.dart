@@ -57,30 +57,15 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
     );
   }
 
-  Future<void> _pickCategory() async {
-    final cats = ref.read(categoriesProvider).value ?? const [];
-    final current = cats.where((c) => c.$1 == _filter.categoryId).firstOrNull;
-    final pick = await showOptionPicker(
-      context,
-      title: 'Filter kategori',
-      options: [for (final (_, n) in cats) n],
-      selected: current?.$2,
-      clearLabel: 'Semua kategori',
-    );
-    if (pick == null) return;
-    final id = cats.where((c) => c.$2 == pick.value).firstOrNull?.$1;
-    _setFilter(_filter.copyWith(categoryId: () => id));
-  }
-
   Future<void> _pickTag() async {
     final tags = ref.read(tagsProvider).value ?? const <Tag>[];
     final current = tags.where((t) => t.id == _filter.tagId).firstOrNull;
     final pick = await showOptionPicker(
       context,
-      title: 'Filter tag',
+      title: 'Filter kategori',
       options: [for (final t in tags) t.name],
       selected: current?.name,
-      clearLabel: 'Semua tag',
+      clearLabel: 'Semua kategori',
     );
     if (pick == null) return;
     final id = tags.where((t) => t.name == pick.value).firstOrNull?.id;
@@ -111,11 +96,6 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
     final filter = _filter.copyWith(storeId: () => storeId);
     final count = ref.watch(productCountProvider(filter)).value;
     final page = ref.watch(productPageProvider((filter, _page)));
-    final cats = ref.watch(categoriesProvider).value ?? const [];
-    final categoryName = cats
-        .where((x) => x.$1 == _filter.categoryId)
-        .firstOrNull
-        ?.$2;
     final tags = ref.watch(tagsProvider).value ?? const <Tag>[];
     final tag = tags.where((t) => t.id == _filter.tagId).firstOrNull;
 
@@ -180,16 +160,10 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
                     ),
                 },
               ),
-              _FilterChip(
-                icon: CupertinoIcons.square_grid_2x2,
-                label: categoryName ?? 'Semua kategori',
-                active: categoryName != null,
-                onTap: _pickCategory,
-              ),
               if (tags.isNotEmpty || tag != null)
                 _FilterChip(
-                  icon: CupertinoIcons.tag,
-                  label: tag?.name ?? 'Semua tag',
+                  icon: CupertinoIcons.square_grid_2x2,
+                  label: tag?.name ?? 'Semua kategori',
                   active: tag != null,
                   activeColor: tag?.color.color,
                   onTap: _pickTag,
@@ -308,19 +282,15 @@ class _ProductTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final p = product;
-    final sub = [
-      p.code,
-      if (p.barcode != null) p.barcode!,
-      if (p.categoryName != null) p.categoryName!,
-    ].join(' · ');
+    final sub = [p.code, if (p.barcode != null) p.barcode!].join(' · ');
 
     return InsetGroupedTile(
       leading: Opacity(
         opacity: p.isActive ? 1 : 0.45,
-        // Warna tag pertama, supaya jenis barang terlihat sekilas.
+        // Warna kategori pertama, supaya jenis barang terlihat sekilas.
         child: _Initials(
           name: p.name,
-          seed: p.categoryName ?? p.name,
+          seed: p.name,
           tagColor: p.tags.firstOrNull?.color,
         ),
       ),

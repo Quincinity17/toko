@@ -19,7 +19,7 @@ Future<List<String>?> showTagPicker(
 }) {
   return AppDialogs.popup<List<String>>(
     context,
-    title: 'Tag Barang',
+    title: 'Kategori Barang',
     maxWidth: 440,
     autofocusRoot: false,
     builder: (_) => _TagPicker(selected: selected),
@@ -104,7 +104,7 @@ class _TagPickerState extends ConsumerState<_TagPicker> {
           CupertinoSearchTextField(
             controller: _query,
             autofocus: true,
-            placeholder: 'Cari atau buat tag baru',
+            placeholder: 'Cari atau buat kategori baru',
             style: AppTypography.body.copyWith(color: c.label),
             onChanged: (_) => setState(() => _error = null),
             onSubmitted: (_) {
@@ -146,7 +146,7 @@ class _TagPickerState extends ConsumerState<_TagPicker> {
                           size: 20,
                           color: c.accent,
                         ),
-                        label: 'Buat tag "$q"',
+                        label: 'Buat kategori "$q"',
                         labelColor: c.accent,
                         onTap: _creating ? null : () => _create(q, list.length),
                       ),
@@ -169,7 +169,7 @@ class _TagPickerState extends ConsumerState<_TagPicker> {
                       Padding(
                         padding: const EdgeInsets.all(AppSpacing.lg),
                         child: Text(
-                          'Belum ada tag. Ketik nama tag (mis. Mainan) lalu '
+                          'Belum ada kategori. Ketik nama kategori (mis. Mainan) lalu '
                           'Enter untuk membuatnya.',
                           textAlign: TextAlign.center,
                           style: AppTypography.subheadline.copyWith(
@@ -189,8 +189,8 @@ class _TagPickerState extends ConsumerState<_TagPicker> {
           const SizedBox(height: AppSpacing.md),
           AppButton(
             label: _picked.isEmpty
-                ? 'Selesai (tanpa tag)'
-                : 'Selesai (${_picked.length} tag)',
+                ? 'Selesai (tanpa kategori)'
+                : 'Selesai (${_picked.length} kategori)',
             expand: true,
             onPressed: () => Navigator.pop(context, _picked.values.toList()),
           ),

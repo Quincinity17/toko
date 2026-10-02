@@ -82,10 +82,6 @@ class ProductRepository {
   Future<List<Product>> allMatching(ProductFilter filter) =>
       _db.productsDao.allMatching(filter);
 
-  Stream<List<(int, String)>> watchCategories() => _db.productsDao
-      .watchCategories()
-      .map((rows) => [for (final r in rows) (r.id, r.name)]);
-
   Stream<List<String>> watchUnitNames() => _db.productsDao.watchUnits().map(
     (rows) => [for (final r in rows) r.name],
   );
@@ -154,7 +150,6 @@ class ProductRepository {
         code: Value(code),
         barcode: Value(barcode),
         name: Value(draft.name.trim()),
-        categoryId: Value(await dao.categoryIdFor(draft.categoryName)),
         unitId: Value(await dao.unitIdFor(draft.unitName)),
         purchasePrice: Value(draft.purchasePrice),
         sellingPrice: Value(draft.sellingPrice),

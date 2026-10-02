@@ -346,7 +346,6 @@ class ReportBundle {
     required this.cashiers,
     required this.terminals,
     this.stores = const [],
-    this.tags = const [],
   });
 
   final ReportRange range;
@@ -365,10 +364,6 @@ class ReportBundle {
 
   /// Per toko; hanya berarti saat melihat semua toko.
   final List<GroupPerformance> stores;
-
-  /// Per tag barang. Barang dengan beberapa tag dihitung di setiap tagnya,
-  /// jadi jumlahnya bisa melebihi omzet total.
-  final List<GroupPerformance> tags;
 
   /// Jam dengan omzet terbesar, atau `null` jika belum ada penjualan.
   BucketPoint? get busiestHour => _max(byHour);

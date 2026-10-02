@@ -42,7 +42,6 @@ class _StoreCols {
 @DriftAccessor(
   tables: [
     Products,
-    Categories,
     Units,
     SaleItems,
     StockMovements,
@@ -68,10 +67,9 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
   );
 
   JoinedSelectStatement<HasResultSet, dynamic> _joined(_StoreCols cols) {
-    return select(products).join([
-      leftOuterJoin(categories, categories.id.equalsExp(products.categoryId)),
-      leftOuterJoin(units, units.id.equalsExp(products.unitId)),
-    ])..addColumns([cols.stock, cols.price, _tagList]);
+    return select(products)
+        .join([leftOuterJoin(units, units.id.equalsExp(products.unitId))])
+      ..addColumns([cols.stock, cols.price, _tagList]);
   }
 
   static List<Tag> _parseTags(String? raw) {
@@ -92,8 +90,6 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
       code: p.code,
       barcode: p.barcode,
       name: p.name,
-      categoryId: p.categoryId,
-      categoryName: r.readTableOrNull(categories)?.name,
       unitId: p.unitId,
       unitName: r.readTableOrNull(units)?.name,
       purchasePrice: p.purchasePrice,
@@ -194,7 +190,6 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
       ProductStatusFilter.inactive => e & products.isActive.equals(false),
       ProductStatusFilter.all => e,
     };
-    if (f.categoryId != null) e = e & products.categoryId.equals(f.categoryId!);
     if (f.tagId != null) {
       e =
           e &
@@ -303,28 +298,13 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
   }
 
   // ---------------------------------------------------------------------------
-  // Kategori & satuan
+  // Satuan (kategori = tag, lihat TagsDao)
   // ---------------------------------------------------------------------------
-
-  Stream<List<CategoryRow>> watchCategories() =>
-      (select(categories)..orderBy([(c) => OrderingTerm.asc(c.name)])).watch();
 
   Stream<List<UnitRow>> watchUnits() =>
       (select(units)..orderBy([(u) => OrderingTerm.asc(u.name)])).watch();
 
-  /// Id kategori dengan nama itu (tanpa peduli huruf besar); dibuat jika
-  /// belum ada. `null` jika [name] kosong.
-  Future<int?> categoryIdFor(String? name) async {
-    final n = name?.trim() ?? '';
-    if (n.isEmpty) return null;
-    final existing = await (select(
-      categories,
-    )..where((c) => c.name.lower().equals(n.toLowerCase()))).getSingleOrNull();
-    return existing?.id ??
-        await into(categories).insert(CategoriesCompanion.insert(name: n));
-  }
-
-  /// Seperti [categoryIdFor], untuk satuan. Nama satuan disimpan huruf besar
+  /// Id satuan dengan nama itu; dibuat jika belum ada. Nama satuan disimpan huruf besar
   /// (PCS, KG, BTL) agar seragam.
   Future<int?> unitIdFor(String? name) async {
     final n = name?.trim().toUpperCase() ?? '';

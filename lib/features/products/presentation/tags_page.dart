@@ -17,8 +17,8 @@ import '../data/tag_repository.dart';
 import '../domain/tag.dart';
 import 'tag_chip.dart';
 
-/// Pengaturan › Kelola Tag (khusus admin): tag jenis barang seperti Mainan,
-/// Boneka, Alat Tulis. Satu barang bisa punya banyak tag.
+/// Pengaturan › Kelola Kategori (khusus admin): kategori barang seperti Mainan,
+/// Boneka, Alat Tulis. Satu barang bisa punya banyak kategori (di kode: tag).
 class TagsPage extends ConsumerWidget {
   const TagsPage({super.key});
 
@@ -27,12 +27,12 @@ class TagsPage extends ConsumerWidget {
     final tags = ref.watch(tagsProvider);
 
     return LargeTitlePage(
-      title: 'Kelola Tag',
+      title: 'Kelola Kategori',
       backLabel: 'Pengaturan',
       onBack: () => context.go(AppRoutes.pengaturan),
       actions: [
         AppButton(
-          label: 'Tambah Tag',
+          label: 'Tambah Kategori',
           icon: CupertinoIcons.add,
           onPressed: () => showTagForm(context),
         ),
@@ -49,19 +49,19 @@ class TagsPage extends ConsumerWidget {
                 child: list.isEmpty
                     ? EmptyState(
                         icon: CupertinoIcons.tag,
-                        title: 'Belum ada tag',
+                        title: 'Belum ada kategori',
                         message:
-                            'Tag mengelompokkan barang menurut jenisnya, mis. '
+                            'Kategori mengelompokkan barang menurut jenisnya, mis. '
                             'Mainan, Boneka, Alat Tulis. Satu barang bisa '
-                            'punya beberapa tag.',
-                        actionLabel: 'Tambah Tag',
+                            'punya beberapa kategori.',
+                        actionLabel: 'Tambah Kategori',
                         onAction: () => showTagForm(context),
                       )
                     : InsetGroupedSection(
                         footer:
-                            'Tag dipasang di form barang dan bisa dipakai '
+                            'Kategori dipasang di form barang dan bisa dipakai '
                             'untuk memfilter daftar barang serta di laporan. '
-                            'Menghapus tag tidak menghapus barangnya.',
+                            'Menghapus kategori tidak menghapus barangnya.',
                         dividerIndent: 58,
                         children: [
                           for (final t in list)
@@ -87,11 +87,11 @@ class TagsPage extends ConsumerWidget {
   }
 }
 
-/// Sheet tambah/ubah tag: nama dan warna.
+/// Sheet tambah/ubah kategori: nama dan warna.
 Future<void> showTagForm(BuildContext context, {Tag? existing}) {
   return AppDialogs.sheet<void>(
     context,
-    title: existing == null ? 'Tag Baru' : 'Ubah Tag',
+    title: existing == null ? 'Kategori Baru' : 'Ubah Kategori',
     builder: (_) => _TagForm(existing: existing),
   );
 }
@@ -149,7 +149,7 @@ class _TagFormState extends ConsumerState<_TagForm> {
     final picked = await showColorWheelPicker(
       context,
       initial: _color.color,
-      title: 'Warna Tag',
+      title: 'Warna Kategori',
       previewBuilder: (color) =>
           TagChip(name: name, color: TagColor.custom(color)),
     );
@@ -162,10 +162,10 @@ class _TagFormState extends ConsumerState<_TagForm> {
     final t = widget.existing!;
     final ok = await AppDialogs.confirm(
       context,
-      title: 'Hapus tag ${t.name}?',
+      title: 'Hapus kategori ${t.name}?',
       message: t.productCount == 0
-          ? 'Tag belum dipakai barang mana pun.'
-          : 'Tag dilepas dari ${t.productCount} barang. Barangnya tidak '
+          ? 'Kategori belum dipakai barang mana pun.'
+          : 'Kategori dilepas dari ${t.productCount} barang. Barangnya tidak '
                 'ikut terhapus.',
       confirmLabel: 'Hapus',
       destructive: true,
@@ -198,7 +198,7 @@ class _TagFormState extends ConsumerState<_TagForm> {
         children: [
           AppTextField(
             controller: _name,
-            label: 'Nama tag',
+            label: 'Nama kategori',
             placeholder: 'mis. Mainan, Boneka, Alat Tulis',
             autofocus: widget.existing == null,
             errorText: _nameError,
@@ -275,7 +275,7 @@ class _TagFormState extends ConsumerState<_TagForm> {
           ],
           const SizedBox(height: AppSpacing.xl),
           AppButton(
-            label: widget.existing == null ? 'Tambah Tag' : 'Simpan',
+            label: widget.existing == null ? 'Tambah Kategori' : 'Simpan',
             size: AppButtonSize.large,
             expand: true,
             loading: _saving,
@@ -284,7 +284,7 @@ class _TagFormState extends ConsumerState<_TagForm> {
           if (widget.existing != null) ...[
             const SizedBox(height: AppSpacing.xs),
             AppButton(
-              label: 'Hapus Tag',
+              label: 'Hapus Kategori',
               variant: AppButtonVariant.plain,
               destructive: true,
               expand: true,

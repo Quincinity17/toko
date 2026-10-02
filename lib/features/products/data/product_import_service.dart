@@ -6,6 +6,7 @@ import '../../../core/database/tables/sales.dart';
 import '../../auth/domain/app_user.dart';
 import '../domain/product.dart';
 import '../domain/product_import.dart';
+import '../domain/tag.dart';
 import 'product_repository.dart';
 
 /// Menjalankan import barang dari baris yang sudah diperiksa
@@ -58,9 +59,10 @@ class ProductImportService {
     }
 
     return _db.transaction(() async {
+      // Kategori = tag (lihat CLAUDE.md "Kategori").
       final categories = {
-        for (final c in await _db.select(_db.categories).get())
-          c.name.toLowerCase(): c.id,
+        for (final t in await _db.select(_db.tags).get())
+          t.name.toLowerCase(): t.id,
       };
       final units = {
         for (final u in await _db.select(_db.units).get())
@@ -68,15 +70,29 @@ class ProductImportService {
       };
       var newCategories = 0, newUnits = 0;
 
-      Future<int?> categoryId(String? name) async {
-        final n = name?.trim() ?? '';
-        if (n.isEmpty) return null;
-        final key = n.toLowerCase();
-        if (categories[key] case final id?) return id;
-        newCategories++;
-        return categories[key] = await _db
-            .into(_db.categories)
-            .insert(CategoriesCompanion.insert(name: n));
+      /// Id kategori untuk nama-nama itu; yang belum ada dibuat (warna
+      /// bergiliran) dan dihitung sebagai kategori baru.
+      Future<List<int>> categoryIds(List<String> names) async {
+        final ids = <int>{};
+        for (final raw in names) {
+          final n = raw.trim();
+          if (n.isEmpty) continue;
+          final key = n.toLowerCase();
+          var id = categories[key];
+          if (id == null) {
+            final color =
+                TagColor.values[categories.length % TagColor.values.length];
+            id = await _db
+                .into(_db.tags)
+                .insert(
+                  TagsCompanion.insert(name: n, color: Value(color.name)),
+                );
+            categories[key] = id;
+            newCategories++;
+          }
+          ids.add(id);
+        }
+        return ids.toList();
       }
 
       Future<int?> unitId(String? name) async {
@@ -105,7 +121,6 @@ class ProductImportService {
               code: d.code,
               name: d.name,
               barcode: Value(d.barcode),
-              categoryId: Value(await categoryId(d.categoryName)),
               unitId: Value(await unitId(d.unitName)),
               purchasePrice: Value(d.purchasePrice),
               sellingPrice: Value(d.sellingPrice),
@@ -115,10 +130,7 @@ class ProductImportService {
             ),
           );
           if (d.tagNames case final names? when names.isNotEmpty) {
-            await _db.tagsDao.setProductTags(
-              id,
-              await _db.tagsDao.idsForNames(names),
-            );
+            await _db.tagsDao.setProductTags(id, await categoryIds(names));
           }
           if (row.stock != 0 && stockStoreId != null) {
             await storesDao.changeStock(
@@ -144,9 +156,6 @@ class ProductImportService {
               barcode: overwrite && has(ProductField.barcode)
                   ? Value(d.barcode)
                   : const Value.absent(),
-              categoryId: overwrite && has(ProductField.category)
-                  ? Value(await categoryId(d.categoryName))
-                  : const Value.absent(),
               unitId: overwrite && has(ProductField.unit)
                   ? Value(await unitId(d.unitName))
                   : const Value.absent(),
@@ -166,7 +175,7 @@ class ProductImportService {
           if (overwrite && d.tagNames != null) {
             await _db.tagsDao.setProductTags(
               id,
-              await _db.tagsDao.idsForNames(d.tagNames!),
+              await categoryIds(d.tagNames!),
             );
           }
           if (has(ProductField.stock) && stockStoreId != null) {

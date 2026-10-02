@@ -129,17 +129,18 @@ void main() {
     expect(indomie.quantity, 5);
     expect(indomie.revenue, 17500);
     expect(indomie.grossProfit, 3500);
-    expect(indomie.category, 'Makanan');
+    expect(indomie.category, contains('Makanan'));
     // Laba: Indomie 3.500, Teh 1.300, Aqua 700 → Indomie A.
     expect(indomie.abc, AbcClass.a);
     expect(list.firstWhere((p) => p.code == 'BRG009').abc, isNot(AbcClass.a));
 
-    final cats = await r.categories(week);
-    expect(cats.map((c) => c.name), ['Makanan', 'Minuman']);
-    expect(cats.first.revenue, 17500);
+    final cats = {for (final c in await r.categories(week)) c.name: c};
+    expect(cats['Makanan']!.revenue, 17500);
+    expect(cats['Minuman']!.revenue, 3500 + 5500);
   });
 
-  test('per tag: barang dengan beberapa tag dihitung di setiap tag', () async {
+  test('per kategori: barang dengan beberapa kategori dihitung di setiap '
+      'kategori; tanpa kategori dikelompokkan', () async {
     final admin = await AuthRepository(
       db,
       testHasher,
@@ -154,7 +155,6 @@ void main() {
           name: p.name,
           sellingPrice: p.defaultSellingPrice,
           purchasePrice: p.purchasePrice,
-          categoryName: p.categoryName,
           unitName: p.unitName,
           minStock: p.minStock,
           tagNames: names,
@@ -167,13 +167,12 @@ void main() {
     await tag('BRG010', ['Promo']);
     await seedSales();
     final week = ReportRange.preset(RangePreset.last7, at(0, 20));
-    final byTag = {for (final g in await repo().tags(week)) g.name: g};
-    expect(byTag.keys, ['Promo', 'Mie']); // urut omzet
-    expect(byTag['Mie']!.revenue, 17500);
-    expect(byTag['Promo']!.revenue, 17500 + 5500);
-    expect(byTag['Promo']!.transactions, 3);
-    final bundle = await repo().bundle(week);
-    expect(bundle.tags, hasLength(2));
+    final byCat = {for (final g in await repo().categories(week)) g.name: g};
+    expect(byCat.keys, ['Promo', 'Mie', 'Tanpa kategori']); // urut omzet
+    expect(byCat['Mie']!.revenue, 17500);
+    expect(byCat['Promo']!.revenue, 17500 + 5500);
+    expect(byCat['Promo']!.transactions, 3);
+    expect(byCat['Tanpa kategori']!.revenue, 3500); // Aqua
   });
 
   test('metode bayar, kasir, terminal', () async {
@@ -290,7 +289,6 @@ void main() {
       'Per Hari',
       'Produk',
       'Kategori',
-      'Tag', // tag contoh di barang contoh
       'Pembayaran',
       'Kasir',
       'Terminal',

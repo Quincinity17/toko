@@ -80,7 +80,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openDefault());
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -90,6 +90,7 @@ class AppDatabase extends _$AppDatabase {
       await _insertDefaultPaymentMethods();
       await _assignDefaultStore();
       await insertSampleTags(this);
+      await _categoriesToTags();
     },
     onUpgrade: (m, from, to) async {
       // Catatan: createTable selalu memakai definisi tabel TERBARU. Karena itu
@@ -182,11 +183,55 @@ class AppDatabase extends _$AppDatabase {
         // bila belum ada tag sama sekali.
         await insertSampleTags(this);
       }
+      if (from < 10) {
+        // Kategori & tag dilebur jadi satu konsep "Kategori" (keputusan
+        // user): kategori lama tiap barang menjadi tag barang itu.
+        await _categoriesToTags();
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
     },
   );
+
+  /// v10: kategori lama (`products.category_id`, satu per barang) dipasang
+  /// sebagai tag barang itu. Nama yang sudah ada sebagai tag dipakai ulang
+  /// (tanpa peduli huruf besar); kategori baru diberi warna bergiliran.
+  /// `categories`/`category_id` tetap ada di skema tetapi tidak dipakai lagi.
+  Future<void> _categoriesToTags() async {
+    const palette = [
+      'blue', 'green', 'orange', 'purple', 'teal', 'pink', 'indigo', //
+      'brown', 'mint', 'red', 'cyan', 'lime', 'yellow', 'gray', 'black',
+    ];
+    final rows = await customSelect(
+      'SELECT p.id AS product_id, c.name AS name FROM products p '
+      'JOIN categories c ON c.id = p.category_id',
+      readsFrom: {products, categories},
+    ).get();
+    final tagIds = <String, int>{};
+    for (final t in await select(tags).get()) {
+      tagIds[t.name.toLowerCase()] = t.id;
+    }
+    var next = 0;
+    for (final r in rows) {
+      final name = r.read<String>('name').trim();
+      if (name.isEmpty) continue;
+      final key = name.toLowerCase();
+      final id = tagIds[key] ??= await into(tags).insert(
+        TagsCompanion.insert(
+          name: name.length > 30 ? name.substring(0, 30) : name,
+          color: Value(palette[next++ % palette.length]),
+        ),
+      );
+      await into(productTags).insert(
+        ProductTagsCompanion.insert(
+          productId: r.read<int>('product_id'),
+          tagId: id,
+        ),
+        mode: InsertMode.insertOrIgnore,
+      );
+    }
+  }
 
   /// Tabel yang barisnya akan disinkron dengan server, beserta kolom uuid-nya
   /// (untuk langkah v4; stores & store_products dibuat di v6 sudah ber-uuid).

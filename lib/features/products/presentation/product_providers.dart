@@ -19,11 +19,6 @@ final productCountProvider = StreamProvider.autoDispose
       (ref, filter) => ref.watch(productRepositoryProvider).watchCount(filter),
     );
 
-/// (id, nama) semua kategori, urut nama.
-final categoriesProvider = StreamProvider.autoDispose<List<(int, String)>>(
-  (ref) => ref.watch(productRepositoryProvider).watchCategories(),
-);
-
 final unitNamesProvider = StreamProvider.autoDispose<List<String>>(
   (ref) => ref.watch(productRepositoryProvider).watchUnitNames(),
 );

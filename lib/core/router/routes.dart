@@ -13,5 +13,7 @@ class AppRoutes {
   static const metodeBayar = '/pengaturan/pembayaran';
   static const kelolaToko = '/pengaturan/toko';
   static const strukPrinter = '/pengaturan/struk';
-  static const kelolaTag = '/pengaturan/tag';
+
+  /// Kategori barang (di kode/database disebut tag).
+  static const kelolaKategori = '/pengaturan/kategori';
 }
