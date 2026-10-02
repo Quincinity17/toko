@@ -256,6 +256,12 @@ tab **Transaksi Baru** dan **Hari Ini**.
   tanpa peduli huruf besar), barcode tanpa spasi, harga ≥ 0. Kategori/satuan
   dibuat otomatis berdasarkan nama. Selisih stok → `stock_movements` jenis
   `adjust` ("Stok awal" / "Penyesuaian manual").
+- **Ubah barang → konfirmasi perubahan** (permintaan user): `productChanges`
+  (`products/domain/product_changes.dart`, fungsi murni) membandingkan barang
+  lama + stok/harga per toko dengan isian baru → daftar "lama → baru" di popup
+  (Periksa Lagi / Simpan). Tanpa perubahan = form langsung tertutup. Tag
+  dibandingkan tanpa peduli huruf besar; harga toko = harga default dianggap
+  "Harga default" (sama seperti cara menyimpannya).
 - Hapus: belum pernah terjual → hapus permanen (+ riwayat stoknya); sudah
   terjual → dinonaktifkan (hilang dari kasir, faktur lama utuh).
 
@@ -272,9 +278,14 @@ tab **Transaksi Baru** dan **Hari Ini**.
   saat tag diubah. Filter `ProductFilter.tagId` (EXISTS).
 - `ProductDraft.tagNames`: `null` = tag tidak diubah, `[]` = lepas semua.
   `TagRules`: nama 1–30 huruf, tanpa koma; `split` memecah "A, B; C".
-- **Warna = penanda cepat** (permintaan user): 15 `TagColor` (disimpan per
-  nama); chip diisi warna penuh dengan teks `onColor` (gelap untuk warna
-  terang); kotak inisial barang di daftar diisi warna tag pertama.
+- **Warna = penanda cepat** (permintaan user): `TagColor` = class nilai (bukan
+  enum): 15 preset (`TagColor.values`, disimpan per nama) **atau warna bebas
+  hex** (`TagColor.custom`, disimpan `#RRGGBB`; sama dengan preset → preset).
+  Form tag: lingkaran pelangi "kustom" → `showColorWheelPicker`
+  (`core/widgets/color_wheel.dart`: roda HSV sudut = hue, jarak = saturasi,
+  slider kecerahan, kolom hex, pratinjau chip). Chip diisi warna penuh dengan
+  teks `onColor` (gelap untuk warna terang); kotak inisial barang di daftar
+  diisi warna tag pertama.
 - Tag contoh (`insertSampleTags` di `sample_products.dart`: Laris, Promo,
   Anak-anak, Sarapan, Kebutuhan Pokok, Dingin, Mandi & Cuci) dipasang ke barang
   contoh saat onCreate dan migrasi v9 — hanya bila belum ada tag sama sekali.

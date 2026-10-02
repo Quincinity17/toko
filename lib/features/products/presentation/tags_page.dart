@@ -7,6 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_dialogs.dart';
 import '../../../core/widgets/app_text_field.dart';
+import '../../../core/widgets/color_wheel.dart';
 import '../../../core/widgets/inset_grouped_list.dart';
 import '../../../core/widgets/large_title_page.dart';
 import '../../../core/widgets/pressable_scale.dart';
@@ -142,6 +143,21 @@ class _TagFormState extends ConsumerState<_TagForm> {
     }
   }
 
+  /// Warna bebas lewat color wheel / kode hex.
+  Future<void> _pickCustom() async {
+    final name = _name.text.trim().isEmpty ? 'Contoh' : _name.text.trim();
+    final picked = await showColorWheelPicker(
+      context,
+      initial: _color.color,
+      title: 'Warna Tag',
+      previewBuilder: (color) =>
+          TagChip(name: name, color: TagColor.custom(color)),
+    );
+    if (picked != null && mounted) {
+      setState(() => _color = TagColor.custom(picked));
+    }
+  }
+
   Future<void> _delete() async {
     final t = widget.existing!;
     final ok = await AppDialogs.confirm(
@@ -221,16 +237,28 @@ class _TagFormState extends ConsumerState<_TagForm> {
                       ),
                     ),
                     child: color == _color
-                        ? const Icon(
+                        ? Icon(
                             CupertinoIcons.checkmark_alt,
                             size: 18,
-                            color: Color(0xFFFFFFFF),
+                            color: color.onColor,
                           )
                         : null,
                   ),
                 ),
+              _CustomColorSwatch(
+                selected: _color.isCustom ? _color : null,
+                onTap: _pickCustom,
+              ),
             ],
           ),
+          if (_color.isCustom)
+            Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.xs),
+              child: Text(
+                'Warna kustom ${_color.hex}',
+                style: AppTypography.footnote.copyWith(color: c.labelSecondary),
+              ),
+            ),
           const SizedBox(height: AppSpacing.md),
           Row(
             children: [
@@ -264,6 +292,62 @@ class _TagFormState extends ConsumerState<_TagForm> {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// Lingkaran pelangi "warna kustom"; berisi warna kustom bila terpilih.
+class _CustomColorSwatch extends StatelessWidget {
+  const _CustomColorSwatch({required this.selected, required this.onTap});
+
+  final TagColor? selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final sel = selected;
+    return PressableScale(
+      key: const ValueKey('custom-color'),
+      onPressed: onTap,
+      pressedScale: 0.9,
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        width: 32,
+        height: 32,
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: const SweepGradient(
+            colors: [
+              Color(0xFFFF3B30),
+              Color(0xFFFFCC00),
+              Color(0xFF34C759),
+              Color(0xFF32ADE6),
+              Color(0xFF5856D6),
+              Color(0xFFFF2D55),
+              Color(0xFFFF3B30),
+            ],
+          ),
+          border: Border.all(
+            color: sel != null ? c.label : const Color(0x00000000),
+            width: 2.5,
+          ),
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            color: sel?.color ?? c.cardElevated,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            sel != null
+                ? CupertinoIcons.checkmark_alt
+                : CupertinoIcons.eyedropper,
+            size: 14,
+            color: sel?.onColor ?? c.labelSecondary,
+          ),
+        ),
       ),
     );
   }

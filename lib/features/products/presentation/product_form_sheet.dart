@@ -16,6 +16,7 @@ import '../../stores/domain/store.dart';
 import '../data/product_repository.dart';
 import '../data/tag_repository.dart';
 import '../domain/product.dart';
+import '../domain/product_changes.dart';
 import '../domain/tag.dart';
 import 'tag_chip.dart';
 import 'tag_picker.dart';
@@ -166,8 +167,53 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
     return _errors.values.every((e) => e == null);
   }
 
+  ProductDraft get _draft => ProductDraft(
+    code: _code.text,
+    barcode: _barcode.text,
+    name: _name.text,
+    categoryName: _category,
+    unitName: _unit,
+    purchasePrice: _money(_buy) ?? 0,
+    sellingPrice: _money(_sell)!,
+    minStock: _qty(_minStock) ?? 0,
+    isActive: _active,
+    tagNames: _tags,
+  );
+
+  List<StoreProductValues> get _storeValues => [
+    for (final id in _storeStock.keys)
+      StoreProductValues(
+        storeId: id,
+        stock: _qty(_storeStock[id]!) ?? 0,
+        price: _money(_storePrice[id]!),
+      ),
+  ];
+
   Future<void> _save() async {
     if (_saved == null || !_validate()) return;
+    final draft = _draft;
+    final stores = _storeValues;
+
+    // Ubah barang: tampilkan apa saja yang berubah dan minta konfirmasi.
+    if (_p != null) {
+      final changes = productChanges(
+        before: _p!,
+        beforeStores: _saved!,
+        after: draft,
+        afterStores: stores,
+        storeNames: {
+          for (final s in ref.read(storesProvider).value ?? const <Store>[])
+            s.id: s.name,
+        },
+      );
+      if (changes.isEmpty) {
+        Navigator.pop(context);
+        return;
+      }
+      final ok = await showChangesConfirm(context, _p!.name, changes);
+      if (!ok || !mounted) return;
+    }
+
     setState(() => _saving = true);
     try {
       await ref
@@ -175,26 +221,8 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
           .save(
             actor: ref.read(authControllerProvider)!,
             id: _p?.id,
-            draft: ProductDraft(
-              code: _code.text,
-              barcode: _barcode.text,
-              name: _name.text,
-              categoryName: _category,
-              unitName: _unit,
-              purchasePrice: _money(_buy) ?? 0,
-              sellingPrice: _money(_sell)!,
-              minStock: _qty(_minStock) ?? 0,
-              isActive: _active,
-              tagNames: _tags,
-            ),
-            stores: [
-              for (final id in _storeStock.keys)
-                StoreProductValues(
-                  storeId: id,
-                  stock: _qty(_storeStock[id]!) ?? 0,
-                  price: _money(_storePrice[id]!),
-                ),
-            ],
+            draft: draft,
+            stores: stores,
           );
       if (mounted) Navigator.pop(context);
     } on ProductFailure catch (e) {
@@ -527,6 +555,128 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
               onPressed: _saving ? null : _remove,
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Popup konfirmasi perubahan barang: daftar isian lama → baru.
+Future<bool> showChangesConfirm(
+  BuildContext context,
+  String productName,
+  List<FieldChange> changes,
+) async {
+  final ok = await AppDialogs.popup<bool>(
+    context,
+    title: 'Simpan perubahan?',
+    maxWidth: 520,
+    builder: (ctx) => _ChangesView(name: productName, changes: changes),
+  );
+  return ok ?? false;
+}
+
+class _ChangesView extends StatelessWidget {
+  const _ChangesView({required this.name, required this.changes});
+
+  final String name;
+  final List<FieldChange> changes;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final muted = AppTypography.subheadline.copyWith(color: c.labelSecondary);
+    final value = AppTypography.subheadline.copyWith(
+      color: c.label,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        0,
+        AppSpacing.lg,
+        AppSpacing.lg,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('${changes.length} perubahan pada $name:', style: muted),
+          const SizedBox(height: AppSpacing.sm),
+          Container(
+            constraints: const BoxConstraints(maxHeight: 360),
+            decoration: BoxDecoration(
+              color: c.fillSecondary,
+              borderRadius: AppRadius.mdAll,
+            ),
+            child: ListView.separated(
+              shrinkWrap: true,
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.xs,
+              ),
+              itemCount: changes.length,
+              separatorBuilder: (_, _) =>
+                  Container(height: 0.5, color: c.separator),
+              itemBuilder: (_, i) {
+                final ch = changes[i];
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(width: 130, child: Text(ch.label, style: muted)),
+                      Expanded(
+                        child: Text.rich(
+                          TextSpan(
+                            children: [
+                              TextSpan(
+                                text: ch.from,
+                                style: value.copyWith(
+                                  color: c.labelSecondary,
+                                  decoration: TextDecoration.lineThrough,
+                                ),
+                              ),
+                              const TextSpan(text: '  →  '),
+                              TextSpan(
+                                text: ch.to,
+                                style: value.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                          style: value,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          Row(
+            children: [
+              Expanded(
+                child: AppButton(
+                  label: 'Periksa Lagi',
+                  variant: AppButtonVariant.gray,
+                  expand: true,
+                  onPressed: () => Navigator.pop(context, false),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: AppButton(
+                  label: 'Simpan',
+                  icon: CupertinoIcons.checkmark_alt,
+                  expand: true,
+                  onPressed: () => Navigator.pop(context, true),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );

@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:toko/core/database/app_database.dart';
 import 'package:toko/features/auth/data/auth_repository.dart';
@@ -151,6 +152,15 @@ void main() {
     await pumpEventQueue();
     await sub.cancel();
     expect(names, ['Mainan', 'Mainan Anak']);
+  });
+
+  test('warna kustom (hex) tersimpan dan terbaca kembali', () async {
+    final custom = TagColor.custom(const Color(0xFF8A2BE2));
+    final tag = await tags.save(actor: admin, name: 'Ungu Tua', color: custom);
+    expect(tag.color.name, '#8A2BE2');
+    final p = await saveWithTags('C1', ['Ungu Tua']);
+    expect(p.tags.single.color, custom);
+    expect((await tags.watchAll().first).single.color.hex, '#8A2BE2');
   });
 
   test('TagRules.split memecah kolom Tag di file', () {

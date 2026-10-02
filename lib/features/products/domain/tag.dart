@@ -1,28 +1,78 @@
 import 'package:flutter/widgets.dart';
 
-/// Warna tag (disimpan berdasarkan nama, jadi urutan boleh berubah).
+/// Warna tag: salah satu dari 15 [values] (preset), atau warna bebas dari
+/// color wheel / kode hex ([TagColor.custom]). Disimpan sebagai [name]:
+/// nama preset (`red`) atau hex (`#FF8800`).
+///
 /// Chip tag diisi warna penuh supaya tag mudah dikenali dari warnanya saja.
-enum TagColor {
-  red('Merah', Color(0xFFFF3B30)),
-  orange('Oranye', Color(0xFFFF9500)),
-  yellow('Kuning', Color(0xFFFFCC00)),
-  lime('Hijau muda', Color(0xFF9ACD32)),
-  green('Hijau', Color(0xFF34C759)),
-  mint('Mint', Color(0xFF00C7BE)),
-  teal('Toska', Color(0xFF30B0C7)),
-  cyan('Biru muda', Color(0xFF32ADE6)),
-  blue('Biru', Color(0xFF007AFF)),
-  indigo('Nila', Color(0xFF5856D6)),
-  purple('Ungu', Color(0xFFAF52DE)),
-  pink('Merah muda', Color(0xFFFF2D55)),
-  brown('Cokelat', Color(0xFFA2845E)),
-  gray('Abu-abu', Color(0xFF8E8E93)),
-  black('Hitam', Color(0xFF3A3A3C));
+@immutable
+class TagColor {
+  const TagColor._(this.name, this.label, this.color);
 
-  const TagColor(this.label, this.color);
+  /// Warna bebas. Bila sama persis dengan preset, dipakai preset itu.
+  factory TagColor.custom(Color color) {
+    final opaque = color.withAlpha(0xFF);
+    for (final p in values) {
+      if (p.color.toARGB32() == opaque.toARGB32()) return p;
+    }
+    final hex = hexOf(opaque);
+    return TagColor._(hex, hex, opaque);
+  }
 
+  static const red = TagColor._('red', 'Merah', Color(0xFFFF3B30));
+  static const orange = TagColor._('orange', 'Oranye', Color(0xFFFF9500));
+  static const yellow = TagColor._('yellow', 'Kuning', Color(0xFFFFCC00));
+  static const lime = TagColor._('lime', 'Hijau muda', Color(0xFF9ACD32));
+  static const green = TagColor._('green', 'Hijau', Color(0xFF34C759));
+  static const mint = TagColor._('mint', 'Mint', Color(0xFF00C7BE));
+  static const teal = TagColor._('teal', 'Toska', Color(0xFF30B0C7));
+  static const cyan = TagColor._('cyan', 'Biru muda', Color(0xFF32ADE6));
+  static const blue = TagColor._('blue', 'Biru', Color(0xFF007AFF));
+  static const indigo = TagColor._('indigo', 'Nila', Color(0xFF5856D6));
+  static const purple = TagColor._('purple', 'Ungu', Color(0xFFAF52DE));
+  static const pink = TagColor._('pink', 'Merah muda', Color(0xFFFF2D55));
+  static const brown = TagColor._('brown', 'Cokelat', Color(0xFFA2845E));
+  static const gray = TagColor._('gray', 'Abu-abu', Color(0xFF8E8E93));
+  static const black = TagColor._('black', 'Hitam', Color(0xFF3A3A3C));
+
+  /// Warna siap pakai, urut seperti di pemilih warna.
+  static const values = [
+    red, orange, yellow, lime, green, mint, teal, cyan, //
+    blue, indigo, purple, pink, brown, gray, black,
+  ];
+
+  /// Kunci simpan: nama preset atau `#RRGGBB`.
+  final String name;
+
+  /// Nama warna (preset) atau kode hex (warna bebas).
   final String label;
   final Color color;
+
+  bool get isCustom => name.startsWith('#');
+
+  /// `#RRGGBB` huruf besar.
+  String get hex => hexOf(color);
+
+  static String hexOf(Color c) =>
+      '#${(c.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
+
+  /// `#FF8800`, `FF8800`, atau `#F80` → warna; `null` bila tidak valid.
+  static Color? parseHex(String text) {
+    var h = text.trim().replaceFirst('#', '');
+    if (h.length == 3) h = h.split('').map((c) => '$c$c').join();
+    if (h.length != 6 || !RegExp(r'^[0-9a-fA-F]{6}$').hasMatch(h)) return null;
+    return Color(0xFF000000 | int.parse(h, radix: 16));
+  }
+
+  /// Dari kunci simpan; tidak dikenal = biru.
+  static TagColor of(String? name) {
+    if (name == null) return blue;
+    for (final p in values) {
+      if (p.name == name) return p;
+    }
+    final c = parseHex(name);
+    return c == null ? blue : TagColor.custom(c);
+  }
 
   /// Warna teks di atas [color]: gelap untuk warna terang (kuning, hijau
   /// muda, mint), putih untuk lainnya.
@@ -30,8 +80,14 @@ enum TagColor {
       ? const Color(0xFF1C1C1E)
       : const Color(0xFFFFFFFF);
 
-  static TagColor of(String? name) =>
-      TagColor.values.asNameMap()[name] ?? TagColor.blue;
+  @override
+  bool operator ==(Object other) => other is TagColor && other.name == name;
+
+  @override
+  int get hashCode => name.hashCode;
+
+  @override
+  String toString() => 'TagColor($name)';
 }
 
 /// Tag jenis barang (mis. Mainan, Boneka, Alat Tulis). Satu barang bisa

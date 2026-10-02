@@ -14,7 +14,7 @@ class Tags extends Table {
   TextColumn get uuid => text().nullable().clientDefault(newUuid)();
   TextColumn get name => text().withLength(min: 1, max: 30).unique()();
 
-  /// Nama warna `TagColor` (blue, pink, …).
+  /// Warna `TagColor`: nama preset (blue, pink, …) atau hex (`#FF8800`).
   TextColumn get color => text().withDefault(const Constant('blue'))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }

@@ -7871,7 +7871,7 @@ class TagRow extends DataClass implements Insertable<TagRow> {
   final String? uuid;
   final String name;
 
-  /// Nama warna `TagColor` (blue, pink, …).
+  /// Warna `TagColor`: nama preset (blue, pink, …) atau hex (`#FF8800`).
   final String color;
   final DateTime createdAt;
   const TagRow({

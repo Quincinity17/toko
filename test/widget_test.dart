@@ -930,6 +930,11 @@ void main() {
     await settle(tester);
     await tapCentered(tester, find.widgetWithText(AppButton, 'Simpan'));
     await settle(tester);
+    // Konfirmasi perubahan: tag kosong → Mainan, Promo.
+    expect(find.text('Simpan perubahan?'), findsOneWidget);
+    expect(find.textContaining('Tanpa tag', findRichText: true), findsWidgets);
+    await tester.tap(find.widgetWithText(AppButton, 'Simpan').last);
+    await settle(tester);
 
     // Chip tag tampil di daftar; filter per tag.
     expect(find.text('Mainan'), findsOneWidget);
@@ -940,6 +945,98 @@ void main() {
     await settle(tester);
     expect(find.textContaining('1 barang · '), findsOneWidget);
     expect(find.text('Indomie Goreng 85g'), findsOneWidget);
+
+    await unmount(tester);
+  });
+
+  testWidgets('Ubah barang: konfirmasi daftar perubahan sebelum disimpan', (
+    tester,
+  ) async {
+    final db = await pumpApp(tester);
+    await login(tester, 'admin', 'admin123');
+    await tester.tap(find.text('Produk'));
+    await settle(tester);
+
+    // Tanpa perubahan: Simpan langsung menutup form tanpa konfirmasi.
+    await tester.tap(find.text('Indomie Goreng 85g'));
+    await settle(tester);
+    await tapCentered(tester, find.widgetWithText(AppButton, 'Simpan'));
+    await settle(tester);
+    expect(find.text('Simpan perubahan?'), findsNothing);
+    expect(find.text('Ubah Barang'), findsNothing);
+
+    // Ubah harga jual → konfirmasi menampilkan harga lama dan baru.
+    await tester.tap(find.text('Indomie Goreng 85g'));
+    await settle(tester);
+    await fill(tester, 'Harga jual (Rp)', '3700');
+    await tapCentered(tester, find.widgetWithText(AppButton, 'Simpan'));
+    await settle(tester);
+    expect(find.text('Simpan perubahan?'), findsOneWidget);
+    expect(find.text('Harga jual'), findsWidgets);
+    expect(find.textContaining('Rp 3.500', findRichText: true), findsWidgets);
+    expect(find.textContaining('Rp 3.700', findRichText: true), findsWidgets);
+
+    // Periksa Lagi: kembali ke form, belum tersimpan.
+    await tester.tap(find.text('Periksa Lagi'));
+    await settle(tester);
+    expect(find.text('Ubah Barang'), findsOneWidget);
+    Future<int> price() async => (await tester.runAsync(
+      () async => (await (db.select(
+        db.products,
+      )..where((p) => p.code.equals('BRG001'))).getSingle()).sellingPrice,
+    ))!;
+    expect(await price(), 3500);
+
+    await tapCentered(tester, find.widgetWithText(AppButton, 'Simpan'));
+    await settle(tester);
+    await tester.tap(find.widgetWithText(AppButton, 'Simpan').last);
+    await settle(tester);
+    expect(find.text('Ubah Barang'), findsNothing);
+    expect(await price(), 3700);
+
+    await unmount(tester);
+  });
+
+  testWidgets('Tag dengan warna kustom dari color wheel / kode hex', (
+    tester,
+  ) async {
+    final db = await pumpApp(tester);
+    await login(tester, 'admin', 'admin123');
+    await tester.tap(find.text('Pengaturan'));
+    await settle(tester);
+    await tapCentered(tester, find.text('Kelola Tag'));
+    await settle(tester);
+    await tester.tap(find.widgetWithText(AppButton, 'Tambah Tag').first);
+    await settle(tester);
+    await fill(tester, 'Nama tag', 'Boneka');
+
+    await tester.tap(find.byKey(const ValueKey('custom-color')));
+    await settle(tester);
+    expect(find.text('Warna Tag'), findsOneWidget);
+    // Geser di roda warna lalu ketik kode hex.
+    await tester.tap(find.byKey(const ValueKey('color-wheel')));
+    await settle(tester);
+    await tester.enterText(
+      find.descendant(
+        of: find.byKey(const ValueKey('color-hex')),
+        matching: find.byType(EditableText),
+      ),
+      'FF8800',
+    );
+    await settle(tester);
+    await tester.tap(find.text('Pakai Warna'));
+    await settle(tester);
+    expect(find.text('Warna kustom #FF8800'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(AppButton, 'Tambah Tag').last);
+    await settle(tester);
+    final tag = (await tester.runAsync(
+      () => (db.select(
+        db.tags,
+      )..where((t) => t.name.equals('Boneka'))).getSingle(),
+    ))!;
+    expect(tag.color, '#FF8800');
+    expect(find.text('#FF8800'), findsOneWidget); // subtitle di daftar tag
 
     await unmount(tester);
   });
