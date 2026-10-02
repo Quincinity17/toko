@@ -20,3 +20,10 @@ Future<AppDatabase> createSeededDb() async {
 /// Id "Toko Utama", toko bawaan database baru (tempat akun seed `kasir`).
 Future<int> mainStoreId(AppDatabase db) async =>
     (await (db.select(db.stores)..limit(1)).getSingle()).id;
+
+/// Menghapus tag contoh (database baru sudah berisi tag contoh) untuk tes
+/// yang butuh mulai tanpa tag.
+Future<void> clearSampleTags(AppDatabase db) async {
+  await db.delete(db.productTags).go();
+  await db.delete(db.tags).go();
+}

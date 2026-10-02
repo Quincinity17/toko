@@ -4,7 +4,8 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/pressable_scale.dart';
 import '../domain/tag.dart';
 
-/// Label tag berwarna. [onRemove] menampilkan tombol × (di form barang).
+/// Label tag berwarna penuh (mudah dikenali dari warnanya). [onRemove]
+/// menampilkan tombol × (di form barang).
 class TagChip extends StatelessWidget {
   const TagChip({
     super.key,
@@ -30,9 +31,10 @@ class TagChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tint = color.color;
+    final fill = color.color;
+    final ink = color.onColor;
     final style = (small ? AppTypography.caption : AppTypography.footnote)
-        .copyWith(color: tint, fontWeight: FontWeight.w600);
+        .copyWith(color: ink, fontWeight: FontWeight.w600);
     return Container(
       padding: EdgeInsets.fromLTRB(
         small ? 7 : 10,
@@ -41,7 +43,7 @@ class TagChip extends StatelessWidget {
         small ? 2 : 4,
       ),
       decoration: BoxDecoration(
-        color: tint.withValues(alpha: 0.14),
+        color: fill,
         borderRadius: BorderRadius.circular(small ? 6 : 8),
       ),
       child: Row(
@@ -58,7 +60,7 @@ class TagChip extends StatelessWidget {
                 child: Icon(
                   CupertinoIcons.xmark_circle_fill,
                   size: 16,
-                  color: tint.withValues(alpha: 0.7),
+                  color: ink.withValues(alpha: 0.75),
                 ),
               ),
             ),

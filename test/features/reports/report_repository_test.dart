@@ -162,6 +162,7 @@ void main() {
       );
     }
 
+    await clearSampleTags(db);
     await tag('BRG001', ['Mie', 'Promo']);
     await tag('BRG010', ['Promo']);
     await seedSales();
@@ -289,6 +290,7 @@ void main() {
       'Per Hari',
       'Produk',
       'Kategori',
+      'Tag', // tag contoh di barang contoh
       'Pembayaran',
       'Kasir',
       'Terminal',

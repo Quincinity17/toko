@@ -887,7 +887,8 @@ void main() {
   testWidgets('Admin membuat tag, memasangnya di barang, lalu memfilter', (
     tester,
   ) async {
-    await pumpApp(tester);
+    final db = await pumpApp(tester);
+    await tester.runAsync(() => clearSampleTags(db));
     await login(tester, 'admin', 'admin123');
 
     // Pengaturan › Kelola Tag › Tambah Tag.

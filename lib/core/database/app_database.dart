@@ -80,7 +80,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openDefault());
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -89,6 +89,7 @@ class AppDatabase extends _$AppDatabase {
       await insertSampleProducts(this);
       await _insertDefaultPaymentMethods();
       await _assignDefaultStore();
+      await insertSampleTags(this);
     },
     onUpgrade: (m, from, to) async {
       // Catatan: createTable selalu memakai definisi tabel TERBARU. Karena itu
@@ -175,6 +176,11 @@ class AppDatabase extends _$AppDatabase {
         await m.createTable(productTags);
         await m.createIndex(idxProductTagsUuid);
         await m.createIndex(idxProductTagsTag);
+      }
+      if (from < 9) {
+        // Data saja (tanpa ubah skema): tag contoh untuk barang contoh, hanya
+        // bila belum ada tag sama sekali.
+        await insertSampleTags(this);
       }
     },
     beforeOpen: (details) async {

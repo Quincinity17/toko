@@ -272,6 +272,13 @@ tab **Transaksi Baru** dan **Hari Ini**.
   saat tag diubah. Filter `ProductFilter.tagId` (EXISTS).
 - `ProductDraft.tagNames`: `null` = tag tidak diubah, `[]` = lepas semua.
   `TagRules`: nama 1–30 huruf, tanpa koma; `split` memecah "A, B; C".
+- **Warna = penanda cepat** (permintaan user): 15 `TagColor` (disimpan per
+  nama); chip diisi warna penuh dengan teks `onColor` (gelap untuk warna
+  terang); kotak inisial barang di daftar diisi warna tag pertama.
+- Tag contoh (`insertSampleTags` di `sample_products.dart`: Laris, Promo,
+  Anak-anak, Sarapan, Kebutuhan Pokok, Dingin, Mandi & Cuci) dipasang ke barang
+  contoh saat onCreate dan migrasi v9 — hanya bila belum ada tag sama sekali.
+  Tes yang butuh mulai tanpa tag memanggil `clearSampleTags(db)`.
 - Kelola Tag (admin): tambah/ubah nama & warna/hapus (tag dilepas, barang
   tetap). Form barang: baris Tag (chip + ×) → `showTagPicker` (pilih banyak,
   cari, Enter/"Buat tag" membuat tag baru dengan warna bergiliran). Daftar
@@ -447,13 +454,14 @@ Uang = INTEGER Rupiah; stok = REAL (mendukung kg/liter).
   store_id yang kosong, pindahkan `products.stock` ke store_products.
 - v7: `stores.receipt_template` (TEXT null, JSON bentuk struk toko).
 - v8: `tags`, `product_tags` (tag jenis barang, banyak-ke-banyak).
+- v9: data saja (tag contoh untuk barang contoh), skema sama dengan v8.
 - Langkah `from < 4` idempoten (`_ensureColumn` cek `PRAGMA table_info`) karena
   bisa dicapai dari v1/v2/v3 yang tabelnya berbeda-beda.
 - PENTING migrasi: `createTable` memakai definisi TERBARU, jadi cabang `from < 2`
   membuat semua tabel baru sekaligus dan cabang `else if (from < 3)` hanya
   menambah yang belum ada. Pola ini harus dijaga untuk v4 dst.
 - Tes migrasi (`checkout_service_test.dart`): v1 manual, v2–v6 dari
-  `test/fixtures/schema_v{2,3,4,5,6,7}.sql` (skema asli DB user) → versi terbaru.
+  `test/fixtures/schema_v{2,3,4,5,6,7,8}.sql` (skema asli DB user) → versi terbaru.
   Saat menaikkan versi lagi: simpan skema DB sekarang sebagai fixture baru dulu.
 - Data contoh (`sample_products.dart`) dimasukkan di onCreate/onUpgrade, bukan di
   seeder start-up, supaya tidak muncul lagi jika user menghapusnya.

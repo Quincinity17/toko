@@ -1,22 +1,34 @@
 import 'package:flutter/widgets.dart';
 
-/// Warna tag. Warna sistem Apple yang terbaca di mode terang dan gelap.
+/// Warna tag (disimpan berdasarkan nama, jadi urutan boleh berubah).
+/// Chip tag diisi warna penuh supaya tag mudah dikenali dari warnanya saja.
 enum TagColor {
-  blue('Biru', Color(0xFF007AFF)),
-  purple('Ungu', Color(0xFFAF52DE)),
-  pink('Merah muda', Color(0xFFFF2D55)),
   red('Merah', Color(0xFFFF3B30)),
   orange('Oranye', Color(0xFFFF9500)),
-  yellow('Kuning', Color(0xFFD4A000)),
+  yellow('Kuning', Color(0xFFFFCC00)),
+  lime('Hijau muda', Color(0xFF9ACD32)),
   green('Hijau', Color(0xFF34C759)),
+  mint('Mint', Color(0xFF00C7BE)),
   teal('Toska', Color(0xFF30B0C7)),
+  cyan('Biru muda', Color(0xFF32ADE6)),
+  blue('Biru', Color(0xFF007AFF)),
+  indigo('Nila', Color(0xFF5856D6)),
+  purple('Ungu', Color(0xFFAF52DE)),
+  pink('Merah muda', Color(0xFFFF2D55)),
   brown('Cokelat', Color(0xFFA2845E)),
-  gray('Abu-abu', Color(0xFF8E8E93));
+  gray('Abu-abu', Color(0xFF8E8E93)),
+  black('Hitam', Color(0xFF3A3A3C));
 
   const TagColor(this.label, this.color);
 
   final String label;
   final Color color;
+
+  /// Warna teks di atas [color]: gelap untuk warna terang (kuning, hijau
+  /// muda, mint), putih untuk lainnya.
+  Color get onColor => color.computeLuminance() > 0.45
+      ? const Color(0xFF1C1C1E)
+      : const Color(0xFFFFFFFF);
 
   static TagColor of(String? name) =>
       TagColor.values.asNameMap()[name] ?? TagColor.blue;

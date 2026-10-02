@@ -12,6 +12,7 @@ import 'package:toko/features/auth/domain/user_role.dart';
 import 'package:toko/features/payments/data/payment_method_repository.dart';
 import 'package:toko/features/payments/domain/payment_method.dart';
 import 'package:toko/features/products/data/product_repository.dart';
+import 'package:toko/features/products/domain/tag.dart';
 import 'package:toko/features/receipt/data/receipt_settings_repository.dart';
 import 'package:toko/features/receipt/domain/receipt_template.dart';
 import 'package:toko/features/sales/data/checkout_service.dart';
@@ -618,5 +619,60 @@ void main() {
         expect(tag.uuid, isNotNull);
       },
     );
+
+    test('database baru: barang contoh sudah bertag dengan warna', () async {
+      final db = await createSeededDb();
+      addTearDown(db.close);
+      final tags = await db.select(db.tags).get();
+      expect(tags, hasLength(7));
+      final indomie = (await ProductRepository(db)
+          .findByCodeOrBarcode('BRG001'))!;
+      expect(indomie.tags.map((t) => t.name), ['Laris', 'Sarapan']);
+      expect(indomie.tags.first.color, TagColor.red);
+    });
+
+    Future<AppDatabase> fromV8({required bool withTag}) async {
+      final schema = File('test/fixtures/schema_v8.sql').readAsStringSync();
+      final db = AppDatabase(
+        NativeDatabase.memory(
+          setup: (Database raw) {
+            for (final stmt in schema.split(';\n')) {
+              if (stmt.trim().isNotEmpty) raw.execute(stmt);
+            }
+            raw.execute(
+              "INSERT INTO products (code, name, selling_price, uuid) "
+              "VALUES ('BRG009', 'Aqua', 3500, 'p-9'), "
+              "('X1', 'Barang Sendiri', 1000, 'p-x')",
+            );
+            if (withTag) {
+              raw.execute(
+                "INSERT INTO tags (name, color, uuid) "
+                "VALUES ('Punyaku', 'blue', 't-1')",
+              );
+            }
+            raw.userVersion = 8;
+          },
+        ),
+      );
+      addTearDown(db.close);
+      return db;
+    }
+
+    test(
+      'v8 → v9: tag contoh dipasang ke barang contoh yang masih ada',
+      () async {
+        final db = await fromV8(withTag: false);
+        final repo = ProductRepository(db);
+        final aqua = (await repo.findByCodeOrBarcode('BRG009'))!;
+        expect(aqua.tags.map((t) => t.name), ['Dingin', 'Laris']);
+        expect((await repo.findByCodeOrBarcode('X1'))!.tags, isEmpty);
+      },
+    );
+
+    test('v8 → v9: tidak menambah tag contoh bila sudah ada tag', () async {
+      final db = await fromV8(withTag: true);
+      final tags = await db.select(db.tags).get();
+      expect(tags.map((t) => t.name), ['Punyaku']);
+    });
   });
 }

@@ -72,3 +72,66 @@ String sampleBarcode(int n) {
   }
   return '$base${(10 - sum % 10) % 10}';
 }
+
+/// Tag contoh untuk barang contoh (warna = nama `TagColor`). Hanya dibuat
+/// bila belum ada tag sama sekali, dan hanya dipasang ke barang contoh yang
+/// masih ada — jadi aman untuk database yang sudah dipakai.
+Future<void> insertSampleTags(AppDatabase db) async {
+  final hasTags = await (db.select(db.tags)..limit(1)).getSingleOrNull();
+  if (hasTags != null) return;
+
+  // dart format off
+  const tags = [
+    ('Laris', 'red'),
+    ('Promo', 'orange'),
+    ('Anak-anak', 'pink'),
+    ('Sarapan', 'yellow'),
+    ('Kebutuhan Pokok', 'green'),
+    ('Dingin', 'cyan'),
+    ('Mandi & Cuci', 'blue'),
+  ];
+  const assign = {
+    'BRG001': ['Laris', 'Sarapan'],
+    'BRG002': ['Laris'],
+    'BRG003': ['Promo'],
+    'BRG004': ['Sarapan'],
+    'BRG005': ['Kebutuhan Pokok', 'Laris'],
+    'BRG006': ['Kebutuhan Pokok'],
+    'BRG007': ['Kebutuhan Pokok', 'Promo'],
+    'BRG008': ['Kebutuhan Pokok', 'Sarapan'],
+    'BRG009': ['Dingin', 'Laris'],
+    'BRG010': ['Dingin'],
+    'BRG011': ['Sarapan', 'Laris'],
+    'BRG012': ['Anak-anak', 'Dingin'],
+    'BRG013': ['Anak-anak', 'Promo'],
+    'BRG014': ['Anak-anak'],
+    'BRG015': ['Mandi & Cuci'],
+    'BRG016': ['Mandi & Cuci', 'Promo'],
+    'BRG017': ['Mandi & Cuci'],
+    'BRG018': ['Mandi & Cuci', 'Kebutuhan Pokok'],
+    'BRG019': ['Mandi & Cuci'],
+  };
+  // dart format on
+
+  final products = await (db.select(
+    db.products,
+  )..where((p) => p.code.isIn(assign.keys))).get();
+  if (products.isEmpty) return; // barang contoh sudah dihapus semua
+
+  final ids = <String, int>{};
+  for (final (name, color) in tags) {
+    ids[name] = await db
+        .into(db.tags)
+        .insert(TagsCompanion.insert(name: name, color: Value(color)));
+  }
+  await db.batch((b) {
+    for (final p in products) {
+      for (final name in assign[p.code]!) {
+        b.insert(
+          db.productTags,
+          ProductTagsCompanion.insert(productId: p.id, tagId: ids[name]!),
+        );
+      }
+    }
+  });
+}

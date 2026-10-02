@@ -70,6 +70,7 @@ class TagsPage extends ConsumerWidget {
                                 color: t.color.color,
                               ),
                               title: t.name,
+                              subtitle: t.color.label,
                               value: '${t.productCount} barang',
                               onPressed: () =>
                                   showTagForm(context, existing: t),

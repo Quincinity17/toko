@@ -317,7 +317,12 @@ class _ProductTile extends StatelessWidget {
     return InsetGroupedTile(
       leading: Opacity(
         opacity: p.isActive ? 1 : 0.45,
-        child: _Initials(name: p.name, seed: p.categoryName ?? p.name),
+        // Warna tag pertama, supaya jenis barang terlihat sekilas.
+        child: _Initials(
+          name: p.name,
+          seed: p.categoryName ?? p.name,
+          tagColor: p.tags.firstOrNull?.color,
+        ),
       ),
       title: p.name,
       subtitle: sub,
@@ -377,10 +382,14 @@ class _ProductTile extends StatelessWidget {
 
 /// Kotak membulat berisi inisial nama barang, warnanya stabil per kategori.
 class _Initials extends StatelessWidget {
-  const _Initials({required this.name, required this.seed});
+  const _Initials({required this.name, required this.seed, this.tagColor});
 
   final String name;
   final String seed;
+
+  /// Warna tag pertama barang: kotak diisi penuh warna itu. `null` = warna
+  /// lembut dipilih dari [seed].
+  final TagColor? tagColor;
 
   static const _palette = [
     Color(0xFF007AFF),
@@ -402,7 +411,9 @@ class _Initials extends StatelessWidget {
         .map((w) => w[0])
         .join()
         .toUpperCase();
+    final tag = tagColor;
     final color =
+        tag?.color ??
         _palette[seed.codeUnits.fold<int>(0, (a, b) => a + b) %
             _palette.length];
     return Container(
@@ -410,12 +421,15 @@ class _Initials extends StatelessWidget {
       height: 40,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
+        color: tag == null ? color.withValues(alpha: 0.15) : color,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Text(
         initials,
-        style: AppTypography.headline.copyWith(color: color, fontSize: 15),
+        style: AppTypography.headline.copyWith(
+          color: tag?.onColor ?? color,
+          fontSize: 15,
+        ),
       ),
     );
   }

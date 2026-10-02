@@ -23,6 +23,7 @@ void main() {
     kasir = await auth.login('kasir', 'kasir123');
     tags = TagRepository(db);
     products = ProductRepository(db);
+    await clearSampleTags(db);
   });
 
   tearDown(() => db.close());
