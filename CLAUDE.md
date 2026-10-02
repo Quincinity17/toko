@@ -470,4 +470,3 @@ Rencana berikutnya: settings.
 ## Catatan
 
 - `design_reference/` dan `sample_data/` belum diberikan user.
-- Bagian "Pratinjau Komponen" di halaman Pengaturan hanya untuk review desain; hapus setelah disetujui.
