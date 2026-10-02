@@ -13,6 +13,7 @@ import '../../../core/widgets/app_dialogs.dart';
 import '../../../core/widgets/inset_grouped_list.dart';
 import '../../../core/widgets/large_title_page.dart';
 import '../../auth/presentation/password_sheet.dart';
+import '../../receipt/data/receipt_settings_repository.dart';
 import '../../sync/presentation/terminal_section.dart';
 
 class SettingsPage extends ConsumerWidget {
@@ -45,8 +46,7 @@ class SettingsPage extends ConsumerWidget {
                         ),
                         title: 'Kelola Akun',
                         subtitle:
-                            'Tambah, ubah, atau nonaktifkan akun admin '
-                            'dan kasir',
+                            'Admin, supervisor, dan kasir beserta tokonya',
                         onPressed: () => context.go(AppRoutes.kelolaAkun),
                       ),
                       InsetGroupedTile(
@@ -107,28 +107,26 @@ class SettingsPage extends ConsumerWidget {
                   const SizedBox(height: AppSpacing.xl),
                   InsetGroupedSection(
                     header: 'Toko',
-                    footer:
-                        'Data toko ditampilkan di struk. Bisa diubah '
-                        'setelah database tersedia.',
                     dividerIndent: 58,
                     children: [
                       InsetGroupedTile(
                         leading: TileIcon(
-                          icon: CupertinoIcons.bag_fill,
+                          icon: CupertinoIcons.building_2_fill,
                           color: c.accent,
                         ),
-                        title: 'Nama Toko',
-                        value: 'Toko',
-                        onPressed: () {},
+                        title: 'Kelola Toko',
+                        subtitle: 'Cabang, alamat, dan status aktif',
+                        onPressed: () => context.go(AppRoutes.kelolaToko),
                       ),
                       InsetGroupedTile(
                         leading: TileIcon(
                           icon: CupertinoIcons.printer_fill,
                           color: c.labelSecondary,
                         ),
-                        title: 'Printer Struk',
-                        value: 'Thermal 58 mm',
-                        onPressed: () {},
+                        title: 'Struk & Printer',
+                        subtitle: 'Bentuk struk, printer, dan laci uang',
+                        value: ref.watch(printerConfigProvider).value?.summary,
+                        onPressed: () => context.go(AppRoutes.strukPrinter),
                       ),
                     ],
                   ),

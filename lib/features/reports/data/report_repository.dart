@@ -3,15 +3,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/daos/reports_dao.dart';
+import '../../stores/presentation/store_scope.dart';
 import '../domain/report_models.dart';
 
 /// Laporan keuangan dan penjualan. Metode `watch*` untuk dashboard (otomatis
 /// terbarui setiap ada transaksi), metode lain dibaca sekali.
+///
+/// Semua angka untuk toko [storeId]; `null` = semua toko.
 class ReportRepository {
-  ReportRepository(this._db, {DateTime Function()? clock})
+  ReportRepository(this._db, {this.storeId, DateTime Function()? clock})
     : _clock = clock ?? DateTime.now;
 
   final AppDatabase _db;
+  final int? storeId;
   final DateTime Function() _clock;
 
   ReportsDao get _dao => _db.reportsDao;
@@ -35,11 +39,14 @@ class ReportRepository {
     quantity: _double(r, 'qty'),
   );
 
-  Future<SalesSummary> summary(ReportRange range) async =>
-      _summary(await _dao.summary(range.start, range.end).getSingle());
+  Future<SalesSummary> summary(ReportRange range) async => _summary(
+    await _dao.summary(range.start, range.end, storeId: storeId).getSingle(),
+  );
 
-  Stream<SalesSummary> watchSummary(ReportRange range) =>
-      _dao.summary(range.start, range.end).watchSingle().map(_summary);
+  Stream<SalesSummary> watchSummary(ReportRange range) => _dao
+      .summary(range.start, range.end, storeId: storeId)
+      .watchSingle()
+      .map(_summary);
 
   List<DailyPoint> _daily(ReportRange range, List<QueryRow> rows) {
     final byDay = {for (final r in rows) r.read<String>('day'): r};
@@ -61,11 +68,13 @@ class ReportRepository {
   }
 
   /// Satu titik per hari, termasuk hari tanpa penjualan (nol).
-  Future<List<DailyPoint>> daily(ReportRange range) async =>
-      _daily(range, await _dao.daily(range.start, range.end).get());
+  Future<List<DailyPoint>> daily(ReportRange range) async => _daily(
+    range,
+    await _dao.daily(range.start, range.end, storeId: storeId).get(),
+  );
 
   Stream<List<DailyPoint>> watchDaily(ReportRange range) => _dao
-      .daily(range.start, range.end)
+      .daily(range.start, range.end, storeId: storeId)
       .watch()
       .map((rows) => _daily(range, rows));
 
@@ -74,7 +83,9 @@ class ReportRepository {
     String format,
     int count,
   ) async {
-    final rows = await _dao.buckets(range.start, range.end, format).get();
+    final rows = await _dao
+        .buckets(range.start, range.end, format, storeId: storeId)
+        .get();
     final byBucket = {for (final r in rows) _int(r, 'bucket'): r};
     return [
       for (var b = 0; b < count; b++)
@@ -112,7 +123,9 @@ class ReportRepository {
 
   /// Semua barang terjual dalam periode, sudah diberi kelas ABC.
   Future<List<ProductPerformance>> products(ReportRange range) async {
-    final rows = await _dao.productSales(range.start, range.end).get();
+    final rows = await _dao
+        .productSales(range.start, range.end, storeId: storeId)
+        .get();
     return classifyAbc(rows.map(_product).toList());
   }
 
@@ -121,7 +134,7 @@ class ReportRepository {
     ReportRange range, {
     int limit = 5,
   }) => _dao
-      .productSales(range.start, range.end, limit: limit)
+      .productSales(range.start, range.end, storeId: storeId, limit: limit)
       .watch()
       .map((rows) => rows.map(_product).toList());
 
@@ -138,16 +151,20 @@ class ReportRepository {
       (await q.get()).map(_group).toList();
 
   Future<List<GroupPerformance>> categories(ReportRange range) =>
-      _groups(_dao.categorySales(range.start, range.end));
+      _groups(_dao.categorySales(range.start, range.end, storeId: storeId));
 
   Future<List<GroupPerformance>> payments(ReportRange range) =>
-      _groups(_dao.paymentSales(range.start, range.end));
+      _groups(_dao.paymentSales(range.start, range.end, storeId: storeId));
 
   Future<List<GroupPerformance>> cashiers(ReportRange range) =>
-      _groups(_dao.cashierSales(range.start, range.end));
+      _groups(_dao.cashierSales(range.start, range.end, storeId: storeId));
 
   Future<List<GroupPerformance>> terminals(ReportRange range) =>
-      _groups(_dao.terminalSales(range.start, range.end));
+      _groups(_dao.terminalSales(range.start, range.end, storeId: storeId));
+
+  /// Per toko (berguna saat melihat semua toko).
+  Future<List<GroupPerformance>> stores(ReportRange range) =>
+      _groups(_dao.storeSales(range.start, range.end, storeId: storeId));
 
   /// Semua bagian laporan untuk [range] (dimuat paralel).
   Future<ReportBundle> bundle(ReportRange range) async {
@@ -162,6 +179,7 @@ class ReportRepository {
       payments(range),
       cashiers(range),
       terminals(range),
+      stores(range),
     ]);
     return ReportBundle(
       range: range,
@@ -175,6 +193,7 @@ class ReportRepository {
       payments: results[7] as List<GroupPerformance>,
       cashiers: results[8] as List<GroupPerformance>,
       terminals: results[9] as List<GroupPerformance>,
+      stores: results[10] as List<GroupPerformance>,
     );
   }
 
@@ -189,7 +208,7 @@ class ReportRepository {
   );
 
   Future<InventorySummary> inventory() async =>
-      _inventory(await _dao.inventory().getSingle());
+      _inventory(await _dao.inventory(storeId: storeId).getSingle());
 
   /// Rata-rata penjualan dihitung dari [windowDays] hari terakhir.
   static const windowDays = 30;
@@ -198,7 +217,7 @@ class ReportRepository {
   Future<List<StockStatus>> stockStatus() async {
     final now = _clock();
     final since = DateTime(now.year, now.month, now.day - windowDays + 1);
-    final rows = await _dao.stockStatus(since).get();
+    final rows = await _dao.stockStatus(since, storeId: storeId).get();
     return [
       for (final r in rows)
         StockStatus(
@@ -219,6 +238,10 @@ class ReportRepository {
   }
 }
 
+/// Laporan untuk toko yang dipilih di sidebar (atau semua toko).
 final reportRepositoryProvider = Provider<ReportRepository>(
-  (ref) => ReportRepository(ref.watch(appDatabaseProvider)),
+  (ref) => ReportRepository(
+    ref.watch(appDatabaseProvider),
+    storeId: ref.watch(storeScopeProvider),
+  ),
 );

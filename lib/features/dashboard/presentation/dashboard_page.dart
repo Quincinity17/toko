@@ -16,6 +16,7 @@ import '../../products/data/product_repository.dart';
 import '../../products/domain/product.dart';
 import '../../reports/data/report_repository.dart';
 import '../../reports/domain/report_models.dart';
+import '../../stores/presentation/store_scope.dart';
 
 // Provider di-key dengan rentang tanggal, jadi otomatis berganti hari saat
 // halaman dibangun ulang setelah tengah malam.
@@ -36,19 +37,22 @@ final _topProvider = StreamProvider.autoDispose
           ref.watch(reportRepositoryProvider).watchTopProducts(range),
     );
 
-const _lowStockFilter = ProductFilter(
+/// Stok menipis di toko yang dipilih (atau stok gabungan semua toko).
+ProductFilter _lowStockFilter(Ref ref) => ProductFilter(
   lowStockOnly: true,
   sort: ProductSort.stockLow,
+  storeId: ref.watch(storeScopeProvider),
 );
 
 final _lowStockProvider = StreamProvider.autoDispose<List<Product>>(
   (ref) => ref
       .watch(productRepositoryProvider)
-      .watchPage(_lowStockFilter, page: 0, pageSize: 5),
+      .watchPage(_lowStockFilter(ref), page: 0, pageSize: 5),
 );
 
 final _lowStockCountProvider = StreamProvider.autoDispose<int>(
-  (ref) => ref.watch(productRepositoryProvider).watchCount(_lowStockFilter),
+  (ref) =>
+      ref.watch(productRepositoryProvider).watchCount(_lowStockFilter(ref)),
 );
 
 /// Ringkasan hari ini untuk admin, diperbarui otomatis setiap ada transaksi.
@@ -106,7 +110,9 @@ class DashboardPage extends ConsumerWidget {
 
     return LargeTitlePage(
       title: 'Dashboard',
-      subtitle: Fmt.dateLong(now),
+      subtitle:
+          '${Fmt.dateLong(now)} · '
+          '${ref.watch(activeStoreProvider)?.name ?? 'Semua toko'}',
       actions: [
         AppButton(
           label: 'Lihat Laporan',

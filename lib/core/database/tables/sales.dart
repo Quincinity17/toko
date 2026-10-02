@@ -3,6 +3,7 @@ import 'package:drift/drift.dart';
 import '../uuid.dart';
 import 'payment_methods.dart';
 import 'products.dart';
+import 'stores.dart';
 import 'users.dart';
 import 'vouchers.dart';
 
@@ -24,6 +25,9 @@ class Sales extends Table {
 
   /// v4: kode terminal (komputer) yang membuat faktur, mis. `K01`.
   TextColumn get terminalCode => text().nullable()();
+
+  /// v6: toko tempat transaksi. Faktur lama diisi toko pertama saat migrasi.
+  IntColumn get storeId => integer().nullable().references(Stores, #id)();
   DateTimeColumn get saleDate => dateTime()();
   IntColumn get userId => integer().references(Users, #id)();
 
@@ -96,6 +100,13 @@ class StockMovements extends Table {
   /// terisi lewat clientDefault dan backfill migrasi v4.
   TextColumn get uuid => text().nullable().clientDefault(newUuid)();
   IntColumn get productId => integer().references(Products, #id)();
+
+  /// v6: stok toko mana yang berubah.
+  IntColumn get storeId => integer().nullable().references(Stores, #id)();
+
+  /// v6: user yang mengubah (kasir saat menjual, admin/supervisor saat
+  /// menyesuaikan). Riwayat lama: `null`.
+  IntColumn get userId => integer().nullable().references(Users, #id)();
   TextColumn get type => textEnum<StockMovementType>()();
 
   /// Negatif = stok berkurang.

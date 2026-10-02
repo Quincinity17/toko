@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 
 import '../../../features/auth/domain/user_role.dart';
 import '../uuid.dart';
+import 'stores.dart';
 
 /// Akun login. Username disimpan dalam huruf kecil agar login tidak peka
 /// huruf besar/kecil.
@@ -20,6 +21,9 @@ class Users extends Table {
   /// Hash bcrypt, tidak pernah password asli.
   TextColumn get passwordHash => text()();
   TextColumn get role => textEnum<UserRole>()();
+
+  /// v6: toko tempat supervisor/kasir bekerja. Admin: `null` (semua toko).
+  IntColumn get storeId => integer().nullable().references(Stores, #id)();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastLoginAt => dateTime().nullable()();

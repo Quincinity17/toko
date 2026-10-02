@@ -57,6 +57,7 @@ void main() {
     await CheckoutService(db, clock: () => when).checkout(
       cart: cart,
       cashier: kasir,
+      storeId: await mainStoreId(db),
       paymentMethodId: (method ?? tunai).id,
       paid: 1000000,
     );

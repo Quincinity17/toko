@@ -12,6 +12,7 @@ import '../../../../core/widgets/pressable_scale.dart';
 import '../../../../core/widgets/state_views.dart';
 import '../../../products/data/product_repository.dart';
 import '../../../products/domain/product.dart';
+import '../../../stores/presentation/store_scope.dart';
 
 /// Cari barang berdasarkan nama/kode/barcode (F3). Enter memilih hasil yang
 /// disorot; panah atas/bawah memindah sorotan.
@@ -67,10 +68,11 @@ class _ProductSearchState extends ConsumerState<_ProductSearch> {
   Future<void> _search() async {
     final text = _query.text;
     final repo = ref.read(productRepositoryProvider);
-    var results = await repo.search(text);
+    final storeId = ref.read(storeScopeProvider);
+    var results = await repo.search(text, storeId: storeId);
     var suggested = false;
     if (results.isEmpty && text.trim().isNotEmpty) {
-      results = await repo.suggest(text);
+      results = await repo.suggest(text, storeId: storeId);
       suggested = results.isNotEmpty;
     }
     if (!mounted || text != _query.text) return;

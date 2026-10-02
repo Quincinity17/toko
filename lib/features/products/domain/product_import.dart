@@ -216,6 +216,7 @@ class ImportRow {
     this.errors = const [],
     this.existingId,
     this.provided = const {},
+    this.stock = 0,
   });
 
   /// Nomor baris di file (seperti di Excel).
@@ -228,6 +229,9 @@ class ImportRow {
 
   /// Kolom yang benar-benar terisi di file (untuk "update stok & harga").
   final Set<ProductField> provided;
+
+  /// Stok dari file, untuk toko tujuan import.
+  final double stock;
 
   bool get isValid => errors.isEmpty;
   bool get isNew => isValid && existingId == null;
@@ -341,6 +345,7 @@ List<ImportRow> validateImport(
         errors: errors,
         existingId: existingId,
         provided: provided,
+        stock: (stock ?? 0).toDouble(),
         draft: errors.isNotEmpty
             ? null
             : ProductDraft(
@@ -351,7 +356,6 @@ List<ImportRow> validateImport(
                 unitName: cell(ProductField.unit),
                 purchasePrice: (buy ?? 0).toInt(),
                 sellingPrice: sell!.toInt(),
-                stock: (stock ?? 0).toDouble(),
                 minStock: (minStock ?? 0).toDouble(),
                 isActive: isActive,
               ),

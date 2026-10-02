@@ -14,10 +14,11 @@ class Product {
     this.unitName,
     required this.purchasePrice,
     required this.sellingPrice,
+    int? defaultSellingPrice,
     required this.stock,
     required this.minStock,
     this.isActive = true,
-  });
+  }) : defaultSellingPrice = defaultSellingPrice ?? sellingPrice;
 
   final int id;
   final String code;
@@ -28,12 +29,23 @@ class Product {
   final int? unitId;
   final String? unitName;
   final int purchasePrice;
+
+  /// Harga jual di toko yang sedang dipakai (harga khusus toko, atau harga
+  /// default bila toko tidak mengaturnya / dilihat untuk semua toko).
   final int sellingPrice;
+
+  /// Harga jual default barang (`products.selling_price`).
+  final int defaultSellingPrice;
+
+  /// Stok di toko yang sedang dipakai, atau jumlah semua toko.
   final double stock;
   final double minStock;
   final bool isActive;
 
   bool get isLowStock => stock <= minStock;
+
+  /// Toko ini memakai harga khusus (berbeda dari harga default).
+  bool get hasStorePrice => sellingPrice != defaultSellingPrice;
 
   /// Untung per satuan (bisa negatif bila harga jual di bawah harga beli).
   int get margin => sellingPrice - purchasePrice;
@@ -57,7 +69,6 @@ class ProductDraft {
     this.unitName,
     this.purchasePrice = 0,
     required this.sellingPrice,
-    this.stock = 0,
     this.minStock = 0,
     this.isActive = true,
   });
@@ -68,10 +79,27 @@ class ProductDraft {
   final String? categoryName;
   final String? unitName;
   final int purchasePrice;
+
+  /// Harga jual default (toko bisa punya harga sendiri).
   final int sellingPrice;
-  final double stock;
   final double minStock;
   final bool isActive;
+}
+
+/// Stok dan harga khusus satu toko, diisi di form barang admin.
+@immutable
+class StoreProductValues {
+  const StoreProductValues({
+    required this.storeId,
+    required this.stock,
+    this.price,
+  });
+
+  final int storeId;
+  final double stock;
+
+  /// `null` = memakai harga default barang.
+  final int? price;
 }
 
 /// Validasi isian barang. Setiap fungsi mengembalikan pesan error atau `null`.
@@ -151,7 +179,12 @@ class ProductFilter {
     this.lowStockOnly = false,
     this.status = ProductStatusFilter.active,
     this.sort = ProductSort.name,
+    this.storeId,
   });
+
+  /// Stok & harga mengikuti toko ini; `null` = semua toko (stok dijumlah,
+  /// harga default).
+  final int? storeId;
 
   final String text;
   final int? categoryId;
@@ -165,12 +198,14 @@ class ProductFilter {
     bool? lowStockOnly,
     ProductStatusFilter? status,
     ProductSort? sort,
+    int? Function()? storeId,
   }) => ProductFilter(
     text: text ?? this.text,
     categoryId: categoryId != null ? categoryId() : this.categoryId,
     lowStockOnly: lowStockOnly ?? this.lowStockOnly,
     status: status ?? this.status,
     sort: sort ?? this.sort,
+    storeId: storeId != null ? storeId() : this.storeId,
   );
 
   @override
@@ -180,8 +215,10 @@ class ProductFilter {
       other.categoryId == categoryId &&
       other.lowStockOnly == lowStockOnly &&
       other.status == status &&
-      other.sort == sort;
+      other.sort == sort &&
+      other.storeId == storeId;
 
   @override
-  int get hashCode => Object.hash(text, categoryId, lowStockOnly, status, sort);
+  int get hashCode =>
+      Object.hash(text, categoryId, lowStockOnly, status, sort, storeId);
 }

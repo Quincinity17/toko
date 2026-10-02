@@ -13,6 +13,7 @@ class AppUser {
     required this.role,
     this.isActive = true,
     this.lastLoginAt,
+    this.storeId,
   });
 
   final int id;
@@ -22,7 +23,17 @@ class AppUser {
   final bool isActive;
   final DateTime? lastLoginAt;
 
+  /// Toko supervisor/kasir; `null` untuk admin (semua toko).
+  final int? storeId;
+
   bool get isAdmin => role == UserRole.admin;
+
+  /// Boleh mengubah stok toko [storeId] (admin semua toko, supervisor tokonya).
+  bool canAdjustStockAt(int storeId) =>
+      isAdmin || (role == UserRole.supervisor && this.storeId == storeId);
+
+  /// Boleh berjualan di toko [storeId] (admin semua toko).
+  bool canSellAt(int storeId) => isAdmin || this.storeId == storeId;
 
   /// Maksimal dua huruf, untuk avatar: "Kasir Pagi" → "KP".
   String get initials {
@@ -37,6 +48,7 @@ class AppUser {
     UserRole? role,
     bool? isActive,
     DateTime? lastLoginAt,
+    int? storeId,
   }) {
     return AppUser(
       id: id,
@@ -45,6 +57,7 @@ class AppUser {
       role: role ?? this.role,
       isActive: isActive ?? this.isActive,
       lastLoginAt: lastLoginAt ?? this.lastLoginAt,
+      storeId: storeId ?? this.storeId,
     );
   }
 
@@ -57,9 +70,10 @@ class AppUser {
       other.fullName == fullName &&
       other.role == role &&
       other.isActive == isActive &&
-      other.lastLoginAt == lastLoginAt;
+      other.lastLoginAt == lastLoginAt &&
+      other.storeId == storeId;
 
   @override
   int get hashCode =>
-      Object.hash(id, username, fullName, role, isActive, lastLoginAt);
+      Object.hash(id, username, fullName, role, isActive, lastLoginAt, storeId);
 }

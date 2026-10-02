@@ -18,6 +18,7 @@ import '../domain/product.dart';
 import 'product_export_dialog.dart';
 import 'product_form_sheet.dart';
 import 'product_providers.dart';
+import '../../stores/presentation/store_scope.dart';
 
 /// Master barang (khusus admin): cari, filter, urutkan, tambah, ubah, hapus.
 class ProductsPage extends ConsumerStatefulWidget {
@@ -86,8 +87,12 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final count = ref.watch(productCountProvider(_filter)).value;
-    final page = ref.watch(productPageProvider((_filter, _page)));
+    // Stok & harga mengikuti toko yang dipilih di sidebar.
+    final store = ref.watch(activeStoreProvider);
+    final storeId = ref.watch(storeScopeProvider);
+    final filter = _filter.copyWith(storeId: () => storeId);
+    final count = ref.watch(productCountProvider(filter)).value;
+    final page = ref.watch(productPageProvider((filter, _page)));
     final cats = ref.watch(categoriesProvider).value ?? const [];
     final categoryName = cats
         .where((x) => x.$1 == _filter.categoryId)
@@ -96,7 +101,10 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
 
     return LargeTitlePage(
       title: 'Produk',
-      subtitle: count == null ? null : '${Fmt.number(count)} barang',
+      subtitle: count == null
+          ? null
+          : '${Fmt.number(count)} barang · '
+                '${storeId == null ? 'stok semua toko' : 'stok & harga ${store?.name ?? 'toko'}'}',
       actions: [
         AppButton(
           label: 'Import',
@@ -109,7 +117,7 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
           icon: CupertinoIcons.square_arrow_up,
           variant: AppButtonVariant.gray,
           onPressed: () =>
-              showProductExportDialog(context, currentFilter: _filter),
+              showProductExportDialog(context, currentFilter: filter),
         ),
         AppButton(
           label: 'Tambah',
@@ -183,7 +191,7 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
             loading: () => const SizedBox(height: 240, child: LoadingState()),
             error: (e, _) => ErrorBanner(message: 'Gagal memuat barang: $e'),
             data: (list) => list.isEmpty
-                ? _Empty(filter: _filter)
+                ? _Empty(filter: filter)
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -448,7 +456,7 @@ class _Empty extends ConsumerWidget {
         child: EmptyState(
           icon: CupertinoIcons.cube_box,
           title: 'Tidak ada barang',
-          message: filter == const ProductFilter()
+          message: filter.copyWith(storeId: () => null) == const ProductFilter()
               ? 'Tambah barang satu per satu atau import dari file Excel.'
               : 'Tidak ada barang yang cocok dengan filter ini.',
         ),

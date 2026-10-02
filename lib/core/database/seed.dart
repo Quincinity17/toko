@@ -1,3 +1,5 @@
+import 'package:drift/drift.dart';
+
 import '../../features/auth/domain/user_role.dart';
 import '../security/password_hasher.dart';
 import 'app_database.dart';
@@ -33,6 +35,9 @@ class DatabaseSeeder {
   Future<void> _seedUsers() async {
     if (await _db.usersDao.countUsers() > 0) return;
 
+    // Database baru selalu punya "Toko Utama" (dibuat saat migrasi).
+    final store = await _db.select(_db.stores).get();
+    final storeId = store.isEmpty ? null : store.first.id;
     final rows = [
       for (final a in defaultAccounts)
         UsersCompanion.insert(
@@ -40,6 +45,7 @@ class DatabaseSeeder {
           fullName: a.fullName,
           passwordHash: await _hasher.hash(a.password),
           role: a.role,
+          storeId: Value(a.role.needsStore ? storeId : null),
         ),
     ];
     await _db.batch((b) => b.insertAll(_db.users, rows));

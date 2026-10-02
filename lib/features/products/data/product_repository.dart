@@ -35,22 +35,30 @@ class ProductRepository {
   // Kasir
   // ---------------------------------------------------------------------------
 
+  // Harga & stok mengikuti toko [storeId] (`null` = semua toko).
+
   /// Untuk scan barcode / ketik kode di kasir: harus cocok persis.
-  Future<Product?> findByCodeOrBarcode(String value) {
+  Future<Product?> findByCodeOrBarcode(String value, {int? storeId}) {
     if (value.trim().isEmpty) return Future.value(null);
-    return _db.productsDao.findActiveByCodeOrBarcode(value);
+    return _db.productsDao.findActiveByCodeOrBarcode(value, storeId: storeId);
   }
 
-  Future<List<Product>> search(String text, {int limit = 50}) =>
-      _db.productsDao.searchActive(text, limit: limit);
+  Future<List<Product>> search(String text, {int? storeId, int limit = 50}) =>
+      _db.productsDao.searchActive(text, storeId: storeId, limit: limit);
 
   /// Saran barang dengan nama yang mendekati [text] (salah ketik dll.),
   /// dipakai saat [search] tidak menemukan apa pun.
-  Future<List<Product>> suggest(String text, {int limit = 8}) async {
+  Future<List<Product>> suggest(
+    String text, {
+    int? storeId,
+    int limit = 8,
+  }) async {
     if (text.trim().length < 3) return const [];
     final names = await _db.productsDao.activeNames();
     final ids = FuzzyMatch.rank(text, names, (n) => n.$2, limit: limit);
-    return _db.productsDao.byIds([for (final (id, _) in ids) id]);
+    return _db.productsDao.byIds([
+      for (final (id, _) in ids) id,
+    ], storeId: storeId);
   }
 
   // ---------------------------------------------------------------------------
@@ -81,12 +89,23 @@ class ProductRepository {
     (rows) => [for (final r in rows) r.name],
   );
 
-  /// Menambah (`id == null`) atau mengubah barang. Perubahan stok dicatat
-  /// sebagai riwayat stok jenis penyesuaian.
+  /// Stok dan harga khusus barang [productId] di setiap toko yang punya
+  /// datanya (`storeId → (stok, harga khusus)`), untuk form barang.
+  Future<Map<int, ({double stock, int? price})>> storeValues(
+    int productId,
+  ) async => {
+    for (final e in await _db.storesDao.entriesOf(productId))
+      e.storeId: (stock: e.stock, price: e.sellingPrice),
+  };
+
+  /// Menambah (`id == null`) atau mengubah barang, beserta stok & harga
+  /// khusus per toko ([stores]; toko yang tidak disebut tidak diubah).
+  /// Perubahan stok dicatat sebagai riwayat stok jenis penyesuaian.
   Future<Product> save({
     required AppUser actor,
     int? id,
     required ProductDraft draft,
+    List<StoreProductValues> stores = const [],
   }) async {
     _requireAdmin(actor);
     final code = draft.code.trim();
@@ -99,6 +118,11 @@ class ProductRepository {
     _check(ProductRules.price(draft.purchasePrice, label: 'Harga beli'));
     _check(ProductRules.price(draft.sellingPrice, label: 'Harga jual'));
     _check(ProductRules.minStock(draft.minStock));
+    for (final v in stores) {
+      if (v.price != null) {
+        _check(ProductRules.price(v.price, label: 'Harga jual toko'));
+      }
+    }
 
     final dao = _db.productsDao;
     return _db.transaction(() async {
@@ -130,7 +154,6 @@ class ProductRepository {
         unitId: Value(await dao.unitIdFor(draft.unitName)),
         purchasePrice: Value(draft.purchasePrice),
         sellingPrice: Value(draft.sellingPrice),
-        stock: Value(draft.stock),
         minStock: Value(draft.minStock),
         isActive: Value(draft.isActive),
         updatedAt: Value(_clock()),
@@ -139,14 +162,29 @@ class ProductRepository {
       final savedId = id ?? await dao.insertProduct(data);
       if (id != null) await dao.updateProduct(id, data);
 
-      final change = draft.stock - (current?.stock ?? 0);
-      if (change != 0) {
-        await dao.addStockMovement(
-          productId: savedId,
-          type: StockMovementType.adjust,
-          qtyChange: change,
-          note: current == null ? 'Stok awal' : 'Penyesuaian manual',
-        );
+      final storesDao = _db.storesDao;
+      for (final v in stores) {
+        final entry = await storesDao.entry(v.storeId, savedId);
+        // Harga sama dengan default disimpan sebagai "tanpa harga khusus".
+        final price = v.price == draft.sellingPrice ? null : v.price;
+        if (price != entry?.sellingPrice) {
+          await storesDao.setPrice(
+            storeId: v.storeId,
+            productId: savedId,
+            price: price,
+          );
+        }
+        final change = v.stock - (entry?.stock ?? 0);
+        if (change != 0) {
+          await storesDao.changeStock(
+            storeId: v.storeId,
+            productId: savedId,
+            delta: change,
+            type: StockMovementType.adjust,
+            userId: actor.id,
+            note: current == null ? 'Stok awal' : 'Penyesuaian manual',
+          );
+        }
       }
       return (await dao.findById(savedId))!;
     });

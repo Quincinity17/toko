@@ -187,6 +187,9 @@ Uint8List exportReportXlsx({
     ...groupHeaders,
   ], groupRows(bundle.categories));
   sheet('Pembayaran', ['Metode', ...groupHeaders], groupRows(bundle.payments));
+  if (bundle.stores.length > 1) {
+    sheet('Toko', ['Toko', ...groupHeaders], groupRows(bundle.stores));
+  }
   sheet('Kasir', ['Kasir', ...groupHeaders], groupRows(bundle.cashiers));
   sheet('Terminal', ['Terminal', ...groupHeaders], groupRows(bundle.terminals));
 

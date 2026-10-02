@@ -5,14 +5,17 @@ import '../../domain/app_user.dart';
 import '../../domain/user_role.dart';
 
 extension UserRoleStyle on UserRole {
-  /// Admin biru, kasir hijau: dipakai konsisten di login dan sidebar.
+  /// Admin biru, supervisor ungu, kasir hijau: dipakai konsisten di login
+  /// dan sidebar.
   Color color(AppColors c) => switch (this) {
     UserRole.admin => c.accent,
+    UserRole.supervisor => c.purple,
     UserRole.kasir => c.success,
   };
 
   IconData get icon => switch (this) {
     UserRole.admin => CupertinoIcons.person_badge_plus_fill,
+    UserRole.supervisor => CupertinoIcons.cube_box_fill,
     UserRole.kasir => CupertinoIcons.cart_fill,
   };
 }
@@ -51,7 +54,7 @@ class UserAvatar extends StatelessWidget {
   }
 }
 
-/// Label kecil "Admin" / "Kasir".
+/// Label kecil "Admin" / "Supervisor" / "Kasir".
 class RoleBadge extends StatelessWidget {
   const RoleBadge({super.key, required this.role});
 
@@ -71,11 +74,15 @@ class RoleBadge extends StatelessWidget {
         children: [
           Icon(role.icon, size: 11, color: color),
           const SizedBox(width: 4),
-          Text(
-            role.label,
-            style: AppTypography.caption.copyWith(
-              color: color,
-              fontWeight: FontWeight.w600,
+          Flexible(
+            child: Text(
+              role.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.caption.copyWith(
+                color: color,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],

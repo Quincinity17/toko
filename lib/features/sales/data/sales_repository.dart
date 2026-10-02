@@ -9,15 +9,24 @@ class SalesRepository {
   final AppDatabase _db;
 
   /// Transaksi pada tanggal [day] (jam diabaikan), terbaru dulu.
-  Stream<List<SaleSummary>> watchDay(DateTime day) {
+  /// [storeId] `null` = semua toko.
+  Stream<List<SaleSummary>> watchDay(DateTime day, {int? storeId}) {
     final start = DateTime(day.year, day.month, day.day);
-    return watchBetween(start, DateTime(day.year, day.month, day.day + 1));
+    return watchBetween(
+      start,
+      DateTime(day.year, day.month, day.day + 1),
+      storeId: storeId,
+    );
   }
 
   /// Transaksi dalam rentang [start, end), terbaru dulu.
-  Stream<List<SaleSummary>> watchBetween(DateTime start, DateTime end) {
+  Stream<List<SaleSummary>> watchBetween(
+    DateTime start,
+    DateTime end, {
+    int? storeId,
+  }) {
     return _db.salesDao
-        .watchSalesBetween(start, end)
+        .watchSalesBetween(start, end, storeId: storeId)
         .map(
           (rows) => [
             for (final (s, cashier) in rows)

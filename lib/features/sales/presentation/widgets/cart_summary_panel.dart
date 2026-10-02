@@ -6,18 +6,31 @@ import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_card.dart';
 import '../../domain/cart.dart';
 
-/// Panel kanan layar kasir: total besar, lalu tombol Bayar dan Batalkan.
+/// Panel kanan layar kasir: total besar, lalu tombol Tahan/Tertahan, Bayar,
+/// dan Batalkan.
 class CartSummaryPanel extends StatelessWidget {
   const CartSummaryPanel({
     super.key,
     required this.cart,
+    required this.heldCount,
     required this.onPay,
+    required this.onHold,
+    required this.onShowHeld,
     required this.onClear,
+    this.onOpenDrawer,
   });
 
   final Cart cart;
+
+  /// Jumlah transaksi tertahan hari ini.
+  final int heldCount;
   final VoidCallback onPay;
+  final VoidCallback onHold;
+  final VoidCallback onShowHeld;
   final VoidCallback onClear;
+
+  /// Buka laci uang tanpa transaksi; `null` = printer belum diatur.
+  final VoidCallback? onOpenDrawer;
 
   @override
   Widget build(BuildContext context) {
@@ -88,6 +101,59 @@ class CartSummaryPanel extends StatelessWidget {
           ),
         ),
         const Spacer(),
+        Row(
+          children: [
+            Expanded(
+              child: AppButton(
+                label: 'Tahan  (F4)',
+                variant: AppButtonVariant.tinted,
+                expand: true,
+                onPressed: cart.isEmpty ? null : onHold,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.xs),
+            Expanded(
+              // Jumlah tertahan sebagai lencana agar label tidak terpotong.
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  AppButton(
+                    label: 'Tertahan  (F5)',
+                    variant: AppButtonVariant.tinted,
+                    expand: true,
+                    onPressed: heldCount == 0 ? null : onShowHeld,
+                  ),
+                  if (heldCount > 0)
+                    Positioned(
+                      top: -6,
+                      right: -4,
+                      child: IgnorePointer(
+                        child: Container(
+                          key: const ValueKey('held-count'),
+                          constraints: const BoxConstraints(minWidth: 22),
+                          height: 22,
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: c.danger,
+                            borderRadius: BorderRadius.circular(11),
+                          ),
+                          child: Text(
+                            '$heldCount',
+                            style: AppTypography.caption.copyWith(
+                              color: CupertinoColors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.xs),
         AppButton(
           label: 'Bayar  (F2)',
           icon: CupertinoIcons.creditcard_fill,
@@ -104,6 +170,16 @@ class CartSummaryPanel extends StatelessWidget {
           expand: true,
           onPressed: cart.isEmpty ? null : onClear,
         ),
+        if (onOpenDrawer != null) ...[
+          const SizedBox(height: AppSpacing.xs),
+          AppButton(
+            label: 'Buka Laci  (F6)',
+            icon: CupertinoIcons.tray_arrow_down,
+            variant: AppButtonVariant.plain,
+            expand: true,
+            onPressed: onOpenDrawer,
+          ),
+        ],
       ],
     );
   }

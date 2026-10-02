@@ -11,6 +11,8 @@ import '../../../core/widgets/inset_grouped_list.dart';
 import '../../../core/widgets/option_picker.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../auth/presentation/auth_controller.dart';
+import '../../stores/data/store_repository.dart';
+import '../../stores/domain/store.dart';
 import '../data/product_repository.dart';
 import '../domain/product.dart';
 import 'product_providers.dart';
@@ -44,11 +46,15 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
     text: _p == null ? '' : Fmt.number(_p!.purchasePrice),
   );
   late final _sell = TextEditingController(
-    text: _p == null ? '' : Fmt.number(_p!.sellingPrice),
+    text: _p == null ? '' : Fmt.number(_p!.defaultSellingPrice),
   );
-  late final _stock = TextEditingController(
-    text: _p == null ? '' : Fmt.number(_p!.stock),
-  );
+
+  /// Isian per toko (stok, harga khusus), dibuat saat toko pertama tampil.
+  final _storeStock = <int, TextEditingController>{};
+  final _storePrice = <int, TextEditingController>{};
+
+  /// Nilai tersimpan per toko; `null` selama dimuat (barang lama).
+  Map<int, ({double stock, int? price})>? _saved;
   late final _minStock = TextEditingController(
     text: _p == null || _p!.minStock == 0 ? '' : Fmt.number(_p!.minStock),
   );
@@ -67,8 +73,9 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
     _name,
     _buy,
     _sell,
-    _stock,
     _minStock,
+    ..._storeStock.values,
+    ..._storePrice.values,
   ];
 
   @override
@@ -77,6 +84,38 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
     // Margin dihitung ulang setiap harga berubah.
     _buy.addListener(_refresh);
     _sell.addListener(_refresh);
+    if (_p == null) {
+      _saved = const {};
+    } else {
+      ref.read(productRepositoryProvider).storeValues(_p!.id).then((v) {
+        if (!mounted) return;
+        setState(() => _saved = v);
+        for (final MapEntry(key: id, value: c) in _storeStock.entries) {
+          c.text = Fmt.number(v[id]?.stock ?? 0);
+        }
+        for (final MapEntry(key: id, value: c) in _storePrice.entries) {
+          final price = v[id]?.price;
+          c.text = price == null ? '' : Fmt.number(price);
+        }
+      });
+    }
+  }
+
+  /// Membuat isian untuk toko [s] (sekali), terisi nilai tersimpan.
+  void _ensureStoreFields(Store s) {
+    final saved = _saved?[s.id];
+    _storeStock.putIfAbsent(
+      s.id,
+      () => TextEditingController(
+        text: _p == null || _saved == null ? '' : Fmt.number(saved?.stock ?? 0),
+      ),
+    );
+    _storePrice.putIfAbsent(
+      s.id,
+      () => TextEditingController(
+        text: saved?.price == null ? '' : Fmt.number(saved!.price!),
+      ),
+    );
   }
 
   void _refresh() => setState(() {});
@@ -106,9 +145,14 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
         'buy': _buy.text.trim().isNotEmpty && _money(_buy) == null
             ? 'Format angka tidak valid.'
             : null,
-        'stock': _stock.text.trim().isNotEmpty && _qty(_stock) == null
-            ? 'Format angka tidak valid.'
-            : null,
+        for (final MapEntry(key: id, value: c) in _storeStock.entries)
+          'stock$id': c.text.trim().isNotEmpty && _qty(c) == null
+              ? 'Format angka tidak valid.'
+              : null,
+        for (final MapEntry(key: id, value: c) in _storePrice.entries)
+          'price$id': c.text.trim().isNotEmpty && _money(c) == null
+              ? 'Format angka tidak valid.'
+              : null,
         'minStock': _minStock.text.trim().isNotEmpty && _qty(_minStock) == null
             ? 'Format angka tidak valid.'
             : ProductRules.minStock(_qty(_minStock)),
@@ -118,7 +162,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
   }
 
   Future<void> _save() async {
-    if (!_validate()) return;
+    if (_saved == null || !_validate()) return;
     setState(() => _saving = true);
     try {
       await ref
@@ -134,10 +178,17 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
               unitName: _unit,
               purchasePrice: _money(_buy) ?? 0,
               sellingPrice: _money(_sell)!,
-              stock: _qty(_stock) ?? 0,
               minStock: _qty(_minStock) ?? 0,
               isActive: _active,
             ),
+            stores: [
+              for (final id in _storeStock.keys)
+                StoreProductValues(
+                  storeId: id,
+                  stock: _qty(_storeStock[id]!) ?? 0,
+                  price: _money(_storePrice[id]!),
+                ),
+            ],
           );
       if (mounted) Navigator.pop(context);
     } on ProductFailure catch (e) {
@@ -214,6 +265,10 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
     // Muat daftar kategori & satuan lebih awal untuk picker.
     ref.watch(categoriesProvider);
     ref.watch(unitNamesProvider);
+    final stores = (ref.watch(storesProvider).value ?? const <Store>[])
+        .where((s) => s.isActive)
+        .toList();
+    stores.forEach(_ensureStoreFields);
 
     final buy = _money(_buy) ?? 0;
     final sell = _money(_sell);
@@ -293,6 +348,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
               controller: _sell,
               label: 'Harga jual (Rp)',
               placeholder: '0',
+              helper: 'Harga default semua toko.',
               errorText: _errors['sell'],
               keyboardType: TextInputType.number,
               inputFormatters: [RupiahInputFormatter()],
@@ -312,27 +368,77 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
           const SizedBox(height: AppSpacing.md),
           pair(
             AppTextField(
-              controller: _stock,
-              label: 'Stok',
-              placeholder: '0',
-              errorText: _errors['stock'],
-              helper: widget.existing == null
-                  ? null
-                  : 'Perubahan dicatat di riwayat stok.',
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-            ),
-            AppTextField(
               controller: _minStock,
               label: 'Stok minimum (opsional)',
               placeholder: '0',
               errorText: _errors['minStock'],
-              helper: 'Ditandai "stok menipis" jika stok ≤ angka ini.',
+              helper: 'Ditandai "stok menipis" jika stok toko ≤ angka ini.',
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
             ),
+            const SizedBox.shrink(),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          Text(
+            'STOK & HARGA PER TOKO',
+            style: AppTypography.footnote.copyWith(
+              color: c.labelSecondary,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.4,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          if (_saved == null)
+            const SizedBox(height: 64, child: LoadingState())
+          else
+            for (final store in stores) ...[
+              Container(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                decoration: BoxDecoration(
+                  color: c.fillSecondary,
+                  borderRadius: AppRadius.mdAll,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      store.name,
+                      style: AppTypography.headline.copyWith(color: c.label),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    pair(
+                      AppTextField(
+                        controller: _storeStock[store.id],
+                        label: 'Stok',
+                        placeholder: '0',
+                        errorText: _errors['stock${store.id}'],
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                      ),
+                      AppTextField(
+                        controller: _storePrice[store.id],
+                        label: 'Harga khusus toko (Rp)',
+                        placeholder: sell == null
+                            ? 'Sama dengan default'
+                            : Fmt.number(sell),
+                        errorText: _errors['price${store.id}'],
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [RupiahInputFormatter()],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+            ],
+          Text(
+            widget.existing == null
+                ? 'Harga khusus kosong = memakai harga default.'
+                : 'Harga khusus kosong = memakai harga default. Perubahan '
+                      'stok dicatat di riwayat stok.',
+            style: AppTypography.footnote.copyWith(color: c.labelSecondary),
           ),
           if (widget.existing != null) ...[
             const SizedBox(height: AppSpacing.lg),

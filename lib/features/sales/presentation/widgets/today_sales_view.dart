@@ -7,13 +7,17 @@ import '../../../../core/utils/formatters.dart';
 import '../../../../core/widgets/app_card.dart';
 import '../../../../core/widgets/pressable_scale.dart';
 import '../../../../core/widgets/state_views.dart';
+import '../../../stores/presentation/store_scope.dart';
 import '../../data/sales_repository.dart';
 import '../../domain/sale.dart';
 import 'sale_detail_sheet.dart';
 
-/// Transaksi hari ini, diperbarui otomatis setiap ada penjualan baru.
+/// Transaksi hari ini di toko yang dipakai, diperbarui otomatis setiap ada
+/// penjualan baru.
 final todaySalesProvider = StreamProvider.autoDispose<List<SaleSummary>>(
-  (ref) => ref.watch(salesRepositoryProvider).watchDay(DateTime.now()),
+  (ref) => ref
+      .watch(salesRepositoryProvider)
+      .watchDay(DateTime.now(), storeId: ref.watch(storeScopeProvider)),
 );
 
 const _cols = <(String, double?, TextAlign)>[

@@ -15,6 +15,8 @@ import '../../../auth/domain/user_role.dart';
 import '../../../auth/presentation/auth_controller.dart';
 import '../../../auth/presentation/widgets/user_avatar.dart';
 import 'account_form_sheet.dart';
+import '../../../stores/data/store_repository.dart';
+import '../../../stores/domain/store.dart';
 
 /// Semua akun, diperbarui otomatis saat database berubah.
 final accountsProvider = StreamProvider.autoDispose<List<AppUser>>(
@@ -29,6 +31,7 @@ class AccountsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final accounts = ref.watch(accountsProvider);
     final me = ref.watch(authControllerProvider);
+    final stores = ref.watch(storesProvider).value ?? const <Store>[];
 
     return LargeTitlePage(
       title: 'Kelola Akun',
@@ -54,7 +57,7 @@ class AccountsPage extends ConsumerWidget {
               alignment: Alignment.topLeft,
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 720),
-                child: _AccountGroups(accounts: list, me: me),
+                child: _AccountGroups(accounts: list, stores: stores, me: me),
               ),
             ),
           ),
@@ -64,10 +67,17 @@ class AccountsPage extends ConsumerWidget {
   }
 }
 
+/// Admin, lalu satu bagian per toko (supervisor dulu, lalu kasir), lalu
+/// akun nonaktif.
 class _AccountGroups extends StatelessWidget {
-  const _AccountGroups({required this.accounts, required this.me});
+  const _AccountGroups({
+    required this.accounts,
+    required this.stores,
+    required this.me,
+  });
 
   final List<AppUser> accounts;
+  final List<Store> stores;
   final AppUser? me;
 
   @override
@@ -75,10 +85,12 @@ class _AccountGroups extends StatelessWidget {
     final admins = accounts
         .where((u) => u.isActive && u.role == UserRole.admin)
         .toList();
-    final cashiers = accounts
-        .where((u) => u.isActive && u.role == UserRole.kasir)
-        .toList();
     final inactive = accounts.where((u) => !u.isActive).toList();
+    List<AppUser> staffOf(int storeId) =>
+        accounts
+            .where((u) => u.isActive && !u.isAdmin && u.storeId == storeId)
+            .toList()
+          ..sort((a, b) => a.role.index.compareTo(b.role.index));
 
     final sections = [
       if (admins.isNotEmpty)
@@ -86,16 +98,19 @@ class _AccountGroups extends StatelessWidget {
           context,
           'Admin',
           admins,
-          'Admin bisa membuka semua menu dan mengelola akun.',
+          'Admin tidak terikat toko: bisa membuka semua menu dan mengelola '
+              'akun.',
         ),
-      _section(
-        context,
-        'Kasir',
-        cashiers,
-        cashiers.isEmpty
-            ? 'Belum ada kasir. Tekan "Tambah Akun" untuk membuat.'
-            : 'Kasir hanya bisa membuka layar Kasir (transaksi dan daftar pembayaran hari ini).',
-      ),
+      for (final store in stores)
+        if (store.isActive || staffOf(store.id).isNotEmpty)
+          _section(
+            context,
+            store.isActive ? store.name : '${store.name} (nonaktif)',
+            staffOf(store.id),
+            staffOf(store.id).isEmpty
+                ? 'Belum ada supervisor atau kasir di toko ini.'
+                : 'Supervisor: Kasir + Stok. Kasir: hanya layar Kasir.',
+          ),
       if (inactive.isNotEmpty)
         _section(
           context,

@@ -8,10 +8,13 @@ import '../../features/dashboard/presentation/dashboard_page.dart';
 import '../../features/payments/presentation/payment_methods_page.dart';
 import '../../features/products/presentation/product_import_page.dart';
 import '../../features/products/presentation/products_page.dart';
+import '../../features/receipt/presentation/receipt_settings_page.dart';
 import '../../features/reports/presentation/reports_page.dart';
 import '../../features/sales/presentation/pos_page.dart';
 import '../../features/settings/presentation/accounts/accounts_page.dart';
 import '../../features/settings/presentation/settings_page.dart';
+import '../../features/stock/presentation/stock_page.dart';
+import '../../features/stores/presentation/stores_page.dart';
 import '../theme/app_theme.dart';
 import 'app_shell.dart';
 import 'routes.dart';
@@ -51,6 +54,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             const ProductsPage(),
             routes: [_page('import', const ProductImportPage())],
           ),
+          _page(AppRoutes.stok, const StockPage()),
           _page(AppRoutes.laporan, const ReportsPage()),
           _page(
             AppRoutes.pengaturan,
@@ -58,6 +62,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             routes: [
               _page('akun', const AccountsPage()),
               _page('pembayaran', const PaymentMethodsPage()),
+              _page('toko', const StoresPage()),
+              _page('struk', const ReceiptSettingsPage()),
             ],
           ),
         ],

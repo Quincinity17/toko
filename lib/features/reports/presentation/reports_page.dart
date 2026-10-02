@@ -10,6 +10,7 @@ import '../../../core/widgets/pressable_scale.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../sales/data/sales_repository.dart';
 import '../../sales/domain/sale.dart';
+import '../../stores/presentation/store_scope.dart';
 import '../data/report_export.dart';
 import '../data/report_repository.dart';
 import '../domain/report_models.dart';
@@ -32,7 +33,11 @@ final _invoicesProvider = StreamProvider.autoDispose
     .family<List<SaleSummary>, ReportRange>(
       (ref, range) => ref
           .watch(salesRepositoryProvider)
-          .watchBetween(range.start, range.end),
+          .watchBetween(
+            range.start,
+            range.end,
+            storeId: ref.watch(storeScopeProvider),
+          ),
     );
 
 enum ReportSection {
@@ -108,7 +113,11 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
       final bundle = await ref.read(reportBundleProvider(_range).future);
       final invoices = await ref
           .read(salesRepositoryProvider)
-          .watchBetween(_range.start, _range.end)
+          .watchBetween(
+            _range.start,
+            _range.end,
+            storeId: ref.read(storeScopeProvider),
+          )
           .first;
       final bytes = exportReportXlsx(
         bundle: bundle,
@@ -150,7 +159,9 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
 
     return LargeTitlePage(
       title: 'Laporan',
-      subtitle: _range.label,
+      subtitle:
+          '${_range.label} · '
+          '${ref.watch(activeStoreProvider)?.name ?? 'Semua toko'}',
       actions: [
         AppIconButton(
           icon: CupertinoIcons.arrow_clockwise,

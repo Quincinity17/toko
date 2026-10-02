@@ -38,10 +38,13 @@ class ProductImportService {
     return ExistingIndex(idByCode: byCode, idByBarcode: byBarcode);
   }
 
+  /// Harga jual di file menjadi harga default barang; kolom Stok masuk ke
+  /// toko [stockStoreId] (wajib jika file berisi stok).
   Future<ImportResult> run({
     required AppUser actor,
     required List<ImportRow> rows,
     required ExistingProductAction existingAction,
+    int? stockStoreId,
     void Function(int done, int total)? onProgress,
   }) async {
     if (!actor.isAdmin) {
@@ -49,6 +52,10 @@ class ProductImportService {
     }
     final valid = rows.where((r) => r.isValid).toList();
     final failed = rows.where((r) => !r.isValid).toList();
+    final hasStock = valid.any((r) => r.provided.contains(ProductField.stock));
+    if (hasStock && stockStoreId == null) {
+      throw const ProductFailure('Pilih toko tujuan untuk stok dari file.');
+    }
 
     return _db.transaction(() async {
       final categories = {
@@ -83,6 +90,7 @@ class ProductImportService {
       }
 
       final dao = _db.productsDao;
+      final storesDao = _db.storesDao;
       final now = _clock();
       var inserted = 0, updated = 0, skipped = 0;
 
@@ -101,17 +109,18 @@ class ProductImportService {
               unitId: Value(await unitId(d.unitName)),
               purchasePrice: Value(d.purchasePrice),
               sellingPrice: Value(d.sellingPrice),
-              stock: Value(d.stock),
               minStock: Value(d.minStock),
               isActive: Value(d.isActive),
               updatedAt: Value(now),
             ),
           );
-          if (d.stock != 0) {
-            await dao.addStockMovement(
+          if (row.stock != 0 && stockStoreId != null) {
+            await storesDao.changeStock(
+              storeId: stockStoreId,
               productId: id,
+              delta: row.stock,
               type: StockMovementType.import,
-              qtyChange: d.stock,
+              userId: actor.id,
               note: 'Import (stok awal)',
             );
           }
@@ -120,7 +129,6 @@ class ProductImportService {
           skipped++;
         } else {
           final id = row.existingId!;
-          final current = (await dao.findById(id))!;
           final overwrite = existingAction == ExistingProductAction.overwrite;
           // Hanya kolom yang terisi di file yang mengganti data lama.
           await dao.updateProduct(
@@ -146,22 +154,22 @@ class ProductImportService {
                   ? Value(d.purchasePrice)
                   : const Value.absent(),
               sellingPrice: Value(d.sellingPrice),
-              stock: has(ProductField.stock)
-                  ? Value(d.stock)
-                  : const Value.absent(),
               updatedAt: Value(now),
             ),
           );
-          final double change = has(ProductField.stock)
-              ? d.stock - current.stock
-              : 0;
-          if (change != 0) {
-            await dao.addStockMovement(
-              productId: id,
-              type: StockMovementType.import,
-              qtyChange: change,
-              note: 'Import (update stok)',
-            );
+          if (has(ProductField.stock) && stockStoreId != null) {
+            final entry = await storesDao.entry(stockStoreId, id);
+            final change = row.stock - (entry?.stock ?? 0);
+            if (change != 0) {
+              await storesDao.changeStock(
+                storeId: stockStoreId,
+                productId: id,
+                delta: change,
+                type: StockMovementType.import,
+                userId: actor.id,
+                note: 'Import (update stok)',
+              );
+            }
           }
           updated++;
         }

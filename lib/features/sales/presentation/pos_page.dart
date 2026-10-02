@@ -5,13 +5,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/widgets/app_button.dart';
+import '../../../core/widgets/state_views.dart';
 import '../../auth/presentation/auth_controller.dart';
+import '../../receipt/data/receipt_settings_repository.dart';
+import '../../receipt/presentation/printer_settings_section.dart';
+import '../../stores/presentation/store_scope.dart';
 import 'widgets/checkout_view.dart';
 import 'widgets/today_sales_view.dart';
 
 enum _PosTab { checkout, today }
 
 /// Halaman Kasir: tab Transaksi Baru (checkout) dan Hari Ini (daftar faktur).
+///
+/// Berjualan selalu di satu toko: toko akun (supervisor/kasir) atau toko yang
+/// dipilih admin. Admin yang sedang di "Semua toko" diminta memilih dulu.
 class PosPage extends ConsumerStatefulWidget {
   const PosPage({super.key});
 
@@ -32,9 +40,20 @@ class _PosPageState extends ConsumerState<PosPage> {
     }
   }
 
+  Future<void> _openPrinterSettings() async {
+    await showPrinterSettingsDialog(
+      context,
+      storeId: ref.read(storeScopeProvider),
+    );
+    _checkoutKey.currentState?.focusEntry();
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    final hasStore = ref.watch(storeScopeProvider) != null;
+    final printerReady =
+        ref.watch(printerConfigProvider).value?.isReady ?? false;
 
     return ColoredBox(
       color: c.background,
@@ -55,30 +74,52 @@ class _PosPageState extends ConsumerState<PosPage> {
                   style: AppTypography.largeTitle.copyWith(color: c.label),
                 ),
                 const SizedBox(width: AppSpacing.xl),
-                CupertinoSlidingSegmentedControl<_PosTab>(
-                  groupValue: _tab,
-                  padding: const EdgeInsets.all(3),
-                  onValueChanged: (t) {
-                    if (t != null) _setTab(t);
-                  },
-                  children: const {
-                    _PosTab.checkout: _Seg('Transaksi Baru'),
-                    _PosTab.today: _Seg('Hari Ini'),
-                  },
-                ),
+                if (hasStore)
+                  CupertinoSlidingSegmentedControl<_PosTab>(
+                    groupValue: _tab,
+                    padding: const EdgeInsets.all(3),
+                    onValueChanged: (t) {
+                      if (t != null) _setTab(t);
+                    },
+                    children: const {
+                      _PosTab.checkout: _Seg('Transaksi Baru'),
+                      _PosTab.today: _Seg('Hari Ini'),
+                    },
+                  ),
                 const SizedBox(width: AppSpacing.md),
                 const Expanded(child: _InfoBar()),
+                const SizedBox(width: AppSpacing.md),
+                // Printer menempel ke komputer kasir, jadi semua peran boleh
+                // mengaturnya dari sini (bentuk struk tetap diatur admin).
+                AppButton(
+                  label: printerReady ? 'Printer Nota' : 'Atur Printer',
+                  icon: CupertinoIcons.printer,
+                  variant: AppButtonVariant.tinted,
+                  size: AppButtonSize.small,
+                  onPressed: _openPrinterSettings,
+                ),
               ],
             ),
           ),
           Expanded(
-            child: IndexedStack(
-              index: _tab.index,
-              children: [
-                CheckoutView(key: _checkoutKey),
-                const TodaySalesView(),
-              ],
-            ),
+            child: hasStore
+                ? IndexedStack(
+                    index: _tab.index,
+                    children: [
+                      CheckoutView(key: _checkoutKey),
+                      const TodaySalesView(),
+                    ],
+                  )
+                : EmptyState(
+                    icon: CupertinoIcons.building_2_fill,
+                    title: 'Pilih toko dulu',
+                    message:
+                        'Kasir selalu berjualan di satu toko: stok dan harga '
+                        'mengikuti toko yang dipilih.',
+                    actionLabel: 'Pilih Toko',
+                    onAction: () =>
+                        pickStoreScope(context, ref, allowAll: false),
+                  ),
           ),
         ],
       ),

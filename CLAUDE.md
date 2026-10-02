@@ -20,7 +20,8 @@ dari artifact `toko-windows` lalu dites di PC Windows.
 ## Arsitektur
 
 - Feature-first: `lib/features/<fitur>/{data,domain,presentation}`.
-  Fitur: auth, dashboard, products, import, sales, reports, settings.
+  Fitur: auth, dashboard, products, import, sales, reports, settings,
+  stores (toko & cakupan toko), stock (halaman Stok), receipt (struk & printer).
 - `lib/core/`: `theme/`, `widgets/` (komponen reusable), `router/`, `utils/`,
   `database/` (drift: tabel, DAO, seed), `security/` (bcrypt).
 - Aturan: logika bisnis di repository/service (`data`/`domain`), bukan di widget.
@@ -39,13 +40,18 @@ dari artifact `toko-windows` lalu dites di PC Windows.
 - `UserRole` (`features/auth/domain/user_role.dart`) adalah sumber tunggal hak
   akses: `canAccess(path)` dan `homePath`. Router (`redirect`) dan sidebar
   sama-sama memakainya.
-- Admin: semua halaman, mulai di Dashboard. Kasir: hanya halaman Kasir
-  (tanpa Dashboard, permintaan user). URL terlarang dialihkan ke halaman awal peran.
+- Tiga peran (permintaan user): **Admin** (tidak terikat toko, semua halaman,
+  mulai di Dashboard), **Supervisor** (terikat 1 toko: Kasir + Stok), **Kasir**
+  (terikat 1 toko: hanya Kasir). Beda supervisor & kasir hanya hak ubah stok
+  (`UserRole.canAdjustStock`, `AppUser.canAdjustStockAt`). URL terlarang
+  dialihkan ke halaman awal peran.
+- `users.store_id` wajib untuk supervisor/kasir, `null` untuk admin (dicek di
+  `UserRepository._storeFor`). Akun dari toko nonaktif tidak bisa login.
 - Sesi hanya di memori (`authControllerProvider`); aplikasi dibuka = login lagi.
 - Layar login: ketik username + password (Enter pindah/masuk). Sengaja tidak
   menampilkan daftar akun atau petunjuk akun. Pesan gagal sama untuk user tidak
   ada / password salah: "Username atau password salah."
-- Warna peran (admin biru, kasir hijau) dipakai di avatar/badge sidebar dan Kelola Akun.
+- Warna peran (admin biru, supervisor ungu `AppColors.purple`, kasir hijau) dipakai di avatar/badge sidebar dan Kelola Akun.
 - Password: bcrypt cost 10 di `Isolate.run` (`PasswordHasher`). Tes memakai cost 4.
 - Akun seed: `admin / admin123`, `kasir / kasir123`. Tidak ditampilkan di
   aplikasi; harus diganti sebelum dipakai di toko.
@@ -66,6 +72,35 @@ dari artifact `toko-windows` lalu dites di PC Windows.
   3–32 karakter `[a-z0-9._]`, disimpan huruf kecil; password minimal 6.
 - Akun nonaktif tidak bisa login.
 - User yang sudah punya transaksi tidak bisa dihapus (harus dinonaktifkan).
+
+## Multi-toko (`features/stores`, `features/stock`)
+
+- Toko dikelola admin di Pengaturan › Kelola Toko (`/pengaturan/toko`,
+  `StoreRepository`): nama unik, alamat, aktif; minimal satu aktif; toko yang
+  sudah dipakai hanya dinonaktifkan. Data lama dipindah ke "Toko Utama" (v6).
+- **Toko mengikuti akun** (keputusan user): komputer tidak terikat toko.
+- **Stok per toko** dan **harga per toko** (keputusan user): `store_products`
+  (store_id, product_id, stock, selling_price null = harga default
+  `products.selling_price`). Baris dibuat saat dibutuhkan (`StoresDao.changeStock`
+  / `setPrice`, upsert). `products.stock` tidak dipakai lagi sejak v6.
+- `storeScopeProvider` (`stores/presentation/store_scope.dart`) = toko yang
+  dipakai semua halaman. Supervisor/kasir: tokonya (tetap). Admin: dipilih di
+  header sidebar (`pickStoreScope`), `null` = semua toko, disimpan di settings
+  `admin.store_scope`; belum memilih + satu toko aktif = toko itu.
+- Query barang menerima `storeId` (`ProductFilter.storeId`, `_StoreCols` di
+  `ProductsDao`: subquery + `watchedTables`); `null` = stok dijumlah, harga default.
+  `Product.sellingPrice` = harga toko, `defaultSellingPrice` = default.
+- Kasir wajib satu toko (admin di "semua toko" diminta memilih); keranjang
+  kosong saat toko berganti; `CheckoutService` menolak kasir dari toko lain.
+  Faktur, riwayat stok (+ `user_id`), dan transaksi tertahan menyimpan store_id.
+- Halaman **Stok** (`/stok`, admin & supervisor): daftar stok toko, popup
+  Barang Masuk / Barang Keluar / Stok Opname + catatan + riwayat 20 terakhir
+  (`StockRepository`, type `adjust`, catatan diawali nama mode).
+- Form barang admin: harga jual = default; bagian "Stok & harga per toko".
+  Import: harga jual = default, kolom Stok masuk ke satu toko tujuan (dipilih
+  di langkah Periksa). Export: stok & harga toko yang dipilih.
+- Laporan & dashboard mengikuti toko yang dipilih (`ReportRepository.storeId`,
+  filter `?3` di `ReportsDao`); bagian "Per toko" + sheet Toko bila > 1 toko.
 
 ## Kasir (`features/sales`)
 
@@ -89,20 +124,85 @@ tab **Transaksi Baru** dan **Hari Ini**.
   jarak edit Damerau per kata, awalan kata, tanpa spasi; skor ≥ 0,7; maks 8)
   dengan keterangan "Mungkin maksud Anda:". Saran dihitung di Dart dari
   id+nama semua barang aktif.
+- **Tahan transaksi** (F4, permintaan user): pelanggan masih lihat-lihat →
+  keranjang disimpan + catatan opsional, lalu dikosongkan untuk antrian
+  berikutnya. Tombol Tertahan (F5, lencana jumlah) membuka daftar hari ini
+  (catatan, jam, kasir, barang, total) → Lanjutkan / Hapus. Melanjutkan saat
+  keranjang terisi = keranjang itu ditahan dulu (tanpa catatan). Disimpan di
+  tabel `held_carts` (lokal, tidak disinkron, semua user di komputer ini
+  melihatnya); harga mengikuti harga terbaru saat dilanjutkan, barang nonaktif
+  dilewati dan diberi tahu. Hanya berlaku hari itu: yang lama tidak tampil dan
+  dihapus `purgeExpired()` di `main()`. Logika di `HeldCartRepository`.
 - Hari Ini: hanya tabel faktur hari ini (tanpa kartu ringkasan/angka di label
   tab, permintaan user); klik = rincian.
-- Shortcut: F2 / End = bayar, F3 = cari barang, ↑↓ + Enter di sheet cari,
-  Esc menutup popup.
+- Shortcut: F2 / End = bayar, F3 = cari barang, F4 = tahan, F5 = daftar
+  tertahan, ↑↓ + Enter di sheet cari, Esc menutup popup.
 - Logika di domain murni (`cart.dart`, `invoice_number.dart`, `cash_suggestions.dart`)
   dan `CheckoutService`; widget hanya memanggil `cartControllerProvider`.
 - Pembulatan: total baris = round(qty × harga).
 - Stok boleh minus (penjualan tidak diblokir); baris diberi tanda bila qty > stok tercatat.
 - Keranjang tetap ada saat pindah halaman, kosong otomatis saat ganti user.
-- Belum ada (di luar tahap 1): pelanggan, sales, PPN, biaya lain, pending,
-  buka laci, split payment (satu faktur dua metode), cetak struk (Langkah 6).
+- Belum ada (di luar tahap 1): pelanggan, sales, PPN, biaya lain,
+  split payment (satu faktur dua metode).
+
+## Struk & printer (`features/receipt`, Pengaturan › Struk & Printer, `/pengaturan/struk`, admin)
+
+- **Bentuk struk = template HTML + CSS yang diketik admin** (keputusan user:
+  HTML/CSS sungguhan, bukan tag khusus). Variabel Mustache (`mustache_template`,
+  lenient, nilai di-escape): `{{toko.nama}}`, `{{faktur.no}}`,
+  `{{#barang}}…{{/barang}}`, `{{#kembali}}`, `{{#cetak_ulang}}`, dll. Daftar
+  lengkap di `ReceiptVariables`; nilai dari `ReceiptData.toTemplateValues`
+  (angka sudah diformat, kosong = `null`). Template bawaan:
+  `default_receipt_html.dart`.
+- `ReceiptHtml.render` → isi variabel → `inlineCss`: aturan `<style>` ditempel ke
+  `style=""` (perender hanya baca inline; selector lewat `querySelectorAll`,
+  `body` = pembungkus, at-rule diabaikan, inline paling kuat) + perbaikan ala
+  browser (anak `display:flex` di-blockify, elemen kosong ber-border tetap
+  digambar).
+- Perender: `flutter_widget_from_html_core` di `ReceiptView` (kertas putih
+  selebar titik: 58 mm = 384, 80 mm = 576; font Inter 20px). `ReceiptWidgetFactory`:
+  gambar `data:` di-cache (logo), gambar internet tidak dimuat, baris flex
+  diganti `ShrinkRow` (meniru `flex-shrink`: lebar intrinsik, menyusut
+  sebanding bila kepanjangan). Border dashed tergambar solid.
+- Cetak: `WidgetReceiptRasterizer` merender `ReceiptView` di luar layar
+  (`renderWidgetToImage`: RenderView + BuildOwner sendiri) → `MonoBitmap`
+  (ambang 160, baris putih bawah dibuang) → ESC/POS raster `GS v 0` per 128
+  baris. Pratinjau di layar memakai widget yang sama = hasil cetak.
+- Logo **per toko** (keputusan user): unggah PNG/JPG ≤ 5 MB → `logoToDataUri`
+  (diperkecil ke lebar 576 titik bila lebih lebar, disimpan PNG data URI) →
+  `{{logo}}` di template.
+- **Bentuk struk per toko** (keputusan user): `ReceiptTemplate` (html, logo) =
+  JSON di `stores.receipt_template` (v7; `null` = bawaan), ikut data toko supaya
+  nanti tersinkron. Hanya admin. Struk faktur memakai template toko faktur
+  (`ReceiptData.storeId`). Halaman admin: pilih toko → editor; "Terapkan ke Semua
+  Toko" (`applyHtmlToAllStores`: hanya HTML, logo tiap toko tetap). Editor: simpan + pratinjau setelah jeda
+  400 ms (disimpan dulu sebelum pindah toko); template rusak → pesan error,
+  pratinjau terakhir tetap.
+- **Printer per komputer, diatur dari layar Kasir** (keputusan user, semua peran):
+  `PrinterConfig` (sambungan tidak ada / terpasang (USB) / jaringan IP:9100 /
+  **Bluetooth-serial** (port COM + baud 9600–115200), **lebar
+  kertas** 58/80, cetak otomatis, potong, buka laci saat tunai, pin 2/5, baris
+  kosong akhir) = JSON di `settings` `printer.config`. Tombol "Printer Nota" /
+  "Atur Printer" di header Kasir → `showPrinterSettingsDialog`; widget yang sama
+  (`PrinterSettingsSection`) dipakai di halaman admin. Tes cetak memakai bentuk
+  struk toko yang sedang dipakai. "Cek Sambungan" (`PrinterTransport.check`)
+  menghubungi printer tanpa mencetak.
+- Pengiriman (`PrinterTransport`): Windows = spooler RAW lewat FFI `win32`
+  (`windows_spooler.dart`, `Isolate.run`), macOS/Linux = `lp -o raw`, jaringan =
+  socket TCP, Bluetooth/serial = Windows `CreateFile(\\.\COMx)` + DCB 8-N-1
+  lewat FFI (`windows_serial.dart`; daftar port dari registry SERIALCOMM),
+  macOS/Linux `stty` + tulis ke `/dev/…`. macOS: entitlement `network.client` + `print`.
+- Alur: popup Transaksi Berhasil → `ReceiptPrinter.afterCheckout` (cetak + laci
+  satu pekerjaan, atau laci saja bila cetak otomatis mati) + status; gagal cetak
+  tidak membatalkan transaksi. Ctrl+P cetak (ulang); rincian faktur "Cetak Ulang
+  Struk"; tombol Buka Laci (F6) di kasir bila printer diatur (semua peran).
+- Tes: `FakeTransport` + `FakeRasterizer` (`test/helpers/fake_printer.dart`);
+  render sungguhan hanya di `render_preview_test.dart` (`runAsync`, memuat font
+  Inter dulu karena font tes lebih lebar → flex meluap).
 
 ## Arsitektur online/offline (disepakati, bertahap)
 
+- **Tanpa layanan database cloud** (keputusan user 2026-10-01): server milik sendiri.
 - Satu **komputer server** di toko (selalu nyala) menyimpan data pusat; komputer
   kasir lain (< 10, di lokasi lain via internet/VPN) memakai pola
   **offline-first**: database lokal + sinkron. Semua komputer, termasuk aplikasi
@@ -260,9 +360,10 @@ di `core/utils/number_input.dart`.
 
 ### Shortcut keyboard
 
-- Ctrl+1..5: pindah halaman (Dashboard, Kasir, Produk, Laporan, Pengaturan)
+- Ctrl+1..6: pindah halaman (Dashboard, Kasir, Produk, Stok, Laporan, Pengaturan; sesuai menu peran)
 - Ctrl+\\: ciutkan/tampilkan sidebar
-- Kasir: F2 / End bayar, F3 cari barang
+- Kasir: F2 / End bayar, F3 cari barang, F4 tahan transaksi, F5 daftar tertahan,
+  F6 buka laci; popup sukses: Enter transaksi baru, Ctrl+P cetak (ulang) struk
 
 ## Skema database
 
@@ -293,13 +394,20 @@ Uang = INTEGER Rupiah; stok = REAL (mendukung kg/liter).
   `sales.terminal_code`. Tabel `settings` (key/value) dan `sync_outbox`.
   Faktur lama otomatis diantrikan. Kolom voucher `quota`/`used_count` dihapus
   dari definisi (DB lama masih punya kolomnya, tidak dipakai).
+- v5: `held_carts` (id, user_id, note, items JSON `[{id,code,name,qty}]`,
+  item_count, total, created_at). Lokal saja, tanpa uuid.
+- v6: `stores`, `store_products` (uuid, unik store+product); `store_id` di
+  users, sales, stock_movements, held_carts; `stock_movements.user_id`.
+  `_assignDefaultStore()` (onCreate & upgrade): buat "Toko Utama", isi
+  store_id yang kosong, pindahkan `products.stock` ke store_products.
+- v7: `stores.receipt_template` (TEXT null, JSON bentuk struk toko).
 - Langkah `from < 4` idempoten (`_ensureColumn` cek `PRAGMA table_info`) karena
   bisa dicapai dari v1/v2/v3 yang tabelnya berbeda-beda.
 - PENTING migrasi: `createTable` memakai definisi TERBARU, jadi cabang `from < 2`
   membuat semua tabel baru sekaligus dan cabang `else if (from < 3)` hanya
   menambah yang belum ada. Pola ini harus dijaga untuk v4 dst.
-- Tes migrasi (`checkout_service_test.dart`): v1 manual, v2 dan v3 dari
-  `test/fixtures/schema_v{2,3}.sql` (skema asli DB user) → versi terbaru.
+- Tes migrasi (`checkout_service_test.dart`): v1 manual, v2–v6 dari
+  `test/fixtures/schema_v{2,3,4,5,6}.sql` (skema asli DB user) → versi terbaru.
   Saat menaikkan versi lagi: simpan skema DB sekarang sebagai fixture baru dulu.
 - Data contoh (`sample_products.dart`) dimasukkan di onCreate/onUpgrade, bukan di
   seeder start-up, supaya tidak muncul lagi jika user menghapusnya.
@@ -325,13 +433,15 @@ Rencana berikutnya: settings.
 - [x] Metode pembayaran, popup pembayaran, potongan manual dihapus (permintaan user)
 - [x] Fitur voucher dihapus seluruhnya (permintaan user; tabel DB dipertahankan)
 - [x] Kasir tanpa Dashboard; tab Hari Ini tanpa ringkasan (permintaan user)
+- [x] Tahan transaksi + catatan (F4/F5, berlaku hari itu; permintaan user)
+- [x] Multi-toko: peran supervisor, stok & harga per toko, halaman Stok, Kelola Toko (permintaan user)
 - [x] Saran nama barang mirip (FuzzyMatch) + pencarian per kata
 - [x] Sinkron Tahap A — fondasi lokal (terminal, uuid, outbox, nomor faktur per terminal); kuota voucher dihapus
 
 - [x] Langkah 3 — Master barang (daftar, filter, form, hapus/nonaktif)
 - [x] Langkah 4 — Import barang (Excel/CSV, termasuk gaya iPOS) + Export + template
   (contoh file iPOS asli belum diberikan; pemetaan kolom berdasarkan nama kolom umum)
-- [ ] Langkah 6 — Struk 58 mm (PDF preview)
+- [x] Langkah 6 — Struk dari template HTML + CSS (dicetak sebagai gambar ESC/POS 58/80 mm) + logo + buka laci, pratinjau langsung
 - [x] Langkah 7 — Dashboard + laporan keuangan (8 bagian + export Excel)
 - [ ] Sinkron Tahap B/C/D — server, mesin sinkron & pairing, VPN (**ditunda ke paling akhir**, keputusan user 2026-10-01; fokus fitur dulu)
 

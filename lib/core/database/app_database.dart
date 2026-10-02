@@ -5,18 +5,22 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../features/auth/domain/user_role.dart';
 import '../../features/payments/domain/payment_method.dart';
+import 'daos/held_carts_dao.dart';
 import 'daos/payment_methods_dao.dart';
 import 'daos/outbox_dao.dart';
 import 'daos/products_dao.dart';
 import 'daos/reports_dao.dart';
 import 'daos/sales_dao.dart';
 import 'daos/settings_dao.dart';
+import 'daos/stores_dao.dart';
 import 'daos/users_dao.dart';
 import 'sample_products.dart';
 import 'uuid.dart';
+import 'tables/held_carts.dart';
 import 'tables/payment_methods.dart';
 import 'tables/products.dart';
 import 'tables/sales.dart';
+import 'tables/stores.dart';
 import 'tables/sync.dart';
 import 'tables/users.dart';
 import 'tables/vouchers.dart';
@@ -34,6 +38,10 @@ part 'app_database.g.dart';
 ///   voucher_code, payment_method_id, payment_ref
 /// - v4: kolom `uuid` di semua tabel yang disinkron, sales.terminal_code,
 ///   settings, sync_outbox; kuota voucher tidak dipakai lagi
+/// - v5: held_carts (transaksi ditahan, lokal saja)
+/// - v6: stores, store_products (stok & harga per toko); store_id di users,
+///   sales, stock_movements, held_carts; stock_movements.user_id. Data lama
+///   masuk ke "Toko Utama".
 @DriftDatabase(
   tables: [
     Users,
@@ -47,6 +55,9 @@ part 'app_database.g.dart';
     StockMovements,
     AppSettings,
     SyncOutbox,
+    HeldCarts,
+    Stores,
+    StoreProducts,
   ],
   daos: [
     UsersDao,
@@ -56,13 +67,15 @@ part 'app_database.g.dart';
     SettingsDao,
     OutboxDao,
     ReportsDao,
+    HeldCartsDao,
+    StoresDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openDefault());
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -70,6 +83,7 @@ class AppDatabase extends _$AppDatabase {
       await m.createAll();
       await insertSampleProducts(this);
       await _insertDefaultPaymentMethods();
+      await _assignDefaultStore();
     },
     onUpgrade: (m, from, to) async {
       // Catatan: createTable selalu memakai definisi tabel TERBARU. Karena itu
@@ -127,13 +141,36 @@ class AppDatabase extends _$AppDatabase {
           'ORDER BY id',
         );
       }
+      if (from < 5) {
+        // Tidak dibuat di cabang mana pun di atas, jadi aman dibuat di sini.
+        await m.createTable(heldCarts);
+      }
+      if (from < 6) {
+        await m.createTable(stores);
+        await m.createIndex(idxStoresUuid);
+        await m.createTable(storeProducts);
+        await m.createIndex(idxStoreProductsUuid);
+        // Idempoten: sales/stock_movements/held_carts yang dibuat di cabang
+        // lebih awal sudah memakai definisi terbaru (sudah punya store_id).
+        await _ensureColumn(m, users, users.storeId);
+        await _ensureColumn(m, sales, sales.storeId);
+        await _ensureColumn(m, stockMovements, stockMovements.storeId);
+        await _ensureColumn(m, stockMovements, stockMovements.userId);
+        await _ensureColumn(m, heldCarts, heldCarts.storeId);
+        await _assignDefaultStore();
+      }
+      if (from < 7) {
+        // Idempoten: tabel stores dari cabang v6 di atas sudah punya kolomnya.
+        await _ensureColumn(m, stores, stores.receiptTemplate);
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
     },
   );
 
-  /// Tabel yang barisnya akan disinkron dengan server, beserta kolom uuid-nya.
+  /// Tabel yang barisnya akan disinkron dengan server, beserta kolom uuid-nya
+  /// (untuk langkah v4; stores & store_products dibuat di v6 sudah ber-uuid).
   List<(TableInfo, GeneratedColumn<String>)> get _syncedTables => [
     (users, users.uuid),
     (categories, categories.uuid),
@@ -171,6 +208,47 @@ class AppDatabase extends _$AppDatabase {
         ],
       );
     }
+  }
+
+  /// Memastikan ada minimal satu toko, lalu memasukkan data yang belum punya
+  /// toko ke toko pertama: akun supervisor/kasir, faktur, riwayat stok,
+  /// transaksi tertahan, dan stok barang (dari `products.stock` lama).
+  Future<void> _assignDefaultStore() async {
+    final first =
+        await (select(stores)
+              ..orderBy([(s) => OrderingTerm.asc(s.id)])
+              ..limit(1))
+            .getSingleOrNull();
+    final storeId =
+        first?.id ??
+        await into(stores).insert(StoresCompanion.insert(name: 'Toko Utama'));
+    await customStatement(
+      "UPDATE users SET store_id = ? WHERE store_id IS NULL AND role != 'admin'",
+      [storeId],
+    );
+    for (final table in ['sales', 'stock_movements', 'held_carts']) {
+      await customStatement(
+        'UPDATE $table SET store_id = ? WHERE store_id IS NULL',
+        [storeId],
+      );
+    }
+    final missing = await customSelect(
+      'SELECT id, stock FROM products WHERE id NOT IN '
+      '(SELECT product_id FROM store_products WHERE store_id = ?)',
+      variables: [Variable.withInt(storeId)],
+    ).get();
+    await batch((b) {
+      for (final r in missing) {
+        b.insert(
+          storeProducts,
+          StoreProductsCompanion.insert(
+            storeId: storeId,
+            productId: r.read<int>('id'),
+            stock: Value(r.read<double>('stock')),
+          ),
+        );
+      }
+    });
   }
 
   Future<void> _insertDefaultPaymentMethods() async {

@@ -1,9 +1,13 @@
 import '../../../core/router/routes.dart';
 
-/// Peran user. Disimpan di database sebagai nama enum (`admin` / `kasir`),
-/// jadi urutan nilai boleh berubah tanpa merusak data.
+/// Peran user. Disimpan di database sebagai nama enum (`admin` /
+/// `supervisor` / `kasir`), jadi urutan nilai boleh berubah tanpa merusak data.
+///
+/// Admin tidak terikat toko. Supervisor dan kasir terikat ke satu toko;
+/// bedanya hanya supervisor boleh mengubah stok tokonya (halaman Stok).
 enum UserRole {
   admin('Admin'),
+  supervisor('Supervisor'),
   kasir('Kasir');
 
   const UserRole(this.label);
@@ -13,13 +17,21 @@ enum UserRole {
   /// Halaman pertama setelah login.
   String get homePath => switch (this) {
     UserRole.admin => AppRoutes.dashboard,
-    UserRole.kasir => AppRoutes.kasir,
+    UserRole.supervisor || UserRole.kasir => AppRoutes.kasir,
   };
 
+  /// Terikat ke satu toko (supervisor & kasir).
+  bool get needsStore => this != UserRole.admin;
+
+  /// Boleh mengubah stok barang (admin semua toko, supervisor tokonya).
+  bool get canAdjustStock => this != UserRole.kasir;
+
   /// Halaman yang boleh dibuka. Admin bebas; kasir hanya halaman Kasir
-  /// (transaksi baru dan daftar pembayaran hari ini).
+  /// (transaksi baru dan daftar pembayaran hari ini); supervisor Kasir + Stok.
   bool canAccess(String path) => switch (this) {
     UserRole.admin => true,
+    UserRole.supervisor =>
+      path.startsWith(AppRoutes.kasir) || path.startsWith(AppRoutes.stok),
     UserRole.kasir => path.startsWith(AppRoutes.kasir),
   };
 }

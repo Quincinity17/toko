@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../../core/database/tables/sales.dart';
 import '../../../core/database/tables/sync.dart';
 import '../../../core/database/uuid.dart';
 import '../../auth/domain/app_user.dart';
@@ -29,6 +30,7 @@ class CheckoutResult {
     required this.paid,
     required this.change,
     required this.paymentMethod,
+    required this.isCash,
   });
 
   final int saleId;
@@ -37,6 +39,9 @@ class CheckoutResult {
   final int paid;
   final int change;
   final String paymentMethod;
+
+  /// Metode tunai: laci uang dibuka (jika diatur).
+  final bool isCash;
 }
 
 /// Menyimpan transaksi penjualan: faktur, baris barang, pengurangan stok,
@@ -50,9 +55,11 @@ class CheckoutService {
   final DateTime Function() _clock;
 
   /// [paid] diabaikan untuk metode non-tunai (dianggap pas sesuai total).
+  /// Stok yang dikurangi adalah stok toko [storeId].
   Future<CheckoutResult> checkout({
     required Cart cart,
     required AppUser cashier,
+    required int storeId,
     required int paymentMethodId,
     int? paid,
     String? paymentRef,
@@ -63,9 +70,16 @@ class CheckoutService {
     if (cart.lines.any((l) => l.qty <= 0)) {
       throw const CheckoutFailure('Jumlah barang harus lebih dari 0.');
     }
+    if (!cashier.canSellAt(storeId)) {
+      throw const CheckoutFailure('Anda tidak terdaftar di toko ini.');
+    }
 
     final now = _clock();
     return _db.transaction(() async {
+      final store = await _db.storesDao.findById(storeId);
+      if (store == null || !store.isActive) {
+        throw const CheckoutFailure('Toko tidak ditemukan atau nonaktif.');
+      }
       final methodRow = await _db.paymentMethodsDao.findById(paymentMethodId);
       if (methodRow == null || !methodRow.isActive) {
         throw const CheckoutFailure('Metode pembayaran tidak tersedia.');
@@ -98,6 +112,7 @@ class CheckoutService {
               uuid: Value(saleUuid),
               invoiceNo: invoiceNo,
               terminalCode: Value(terminalCode),
+              storeId: Value(storeId),
               saleDate: now,
               userId: cashier.id,
               itemCount: cart.lines.length,
@@ -127,11 +142,14 @@ class CheckoutService {
                 subtotal: line.total,
               ),
             );
-        await _db.salesDao.decreaseStock(
+        await _db.storesDao.changeStock(
+          storeId: storeId,
           productId: line.product.id,
-          qty: line.qty,
-          saleId: saleId,
-          invoiceNo: invoiceNo,
+          delta: -line.qty,
+          type: StockMovementType.sale,
+          userId: cashier.id,
+          refId: saleId,
+          note: invoiceNo,
         );
       }
 
@@ -146,6 +164,7 @@ class CheckoutService {
         paid: paidValue,
         change: paidValue - total,
         paymentMethod: methodRow.name,
+        isCash: isCash,
       );
     });
   }

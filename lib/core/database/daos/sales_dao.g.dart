@@ -4,6 +4,7 @@ part of 'sales_dao.dart';
 
 // ignore_for_file: type=lint
 mixin _$SalesDaoMixin on DatabaseAccessor<AppDatabase> {
+  $StoresTable get stores => attachedDatabase.stores;
   $UsersTable get users => attachedDatabase.users;
   $VouchersTable get vouchers => attachedDatabase.vouchers;
   $PaymentMethodsTable get paymentMethods => attachedDatabase.paymentMethods;
@@ -19,6 +20,8 @@ mixin _$SalesDaoMixin on DatabaseAccessor<AppDatabase> {
 class SalesDaoManager {
   final _$SalesDaoMixin _db;
   SalesDaoManager(this._db);
+  $$StoresTableTableManager get stores =>
+      $$StoresTableTableManager(_db.attachedDatabase, _db.stores);
   $$UsersTableTableManager get users =>
       $$UsersTableTableManager(_db.attachedDatabase, _db.users);
   $$VouchersTableTableManager get vouchers =>

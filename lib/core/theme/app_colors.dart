@@ -25,6 +25,7 @@ class AppColors extends ThemeExtension<AppColors> {
     required this.hover,
     required this.shadow,
     required this.chart2,
+    required this.purple,
   });
 
   /// Latar belakang utama (systemGroupedBackground).
@@ -61,6 +62,9 @@ class AppColors extends ThemeExtension<AppColors> {
   /// Bukan warna status, jadi tidak dipakai untuk peringatan.
   final Color chart2;
 
+  /// Ungu sistem Apple. Warna peran supervisor (admin biru, kasir hijau).
+  final Color purple;
+
   static const light = AppColors(
     background: Color(0xFFF2F2F7),
     card: Color(0xFFFFFFFF),
@@ -80,6 +84,7 @@ class AppColors extends ThemeExtension<AppColors> {
     hover: Color(0x0A000000),
     shadow: Color(0x0F000000),
     chart2: Color(0xFFD55181),
+    purple: Color(0xFFAF52DE),
   );
 
   static const dark = AppColors(
@@ -101,6 +106,7 @@ class AppColors extends ThemeExtension<AppColors> {
     hover: Color(0x14FFFFFF),
     shadow: Color(0x00000000),
     chart2: Color(0xFFD55181),
+    purple: Color(0xFFBF5AF2),
   );
 
   @override
@@ -123,6 +129,7 @@ class AppColors extends ThemeExtension<AppColors> {
     Color? hover,
     Color? shadow,
     Color? chart2,
+    Color? purple,
   }) {
     return AppColors(
       background: background ?? this.background,
@@ -143,6 +150,7 @@ class AppColors extends ThemeExtension<AppColors> {
       hover: hover ?? this.hover,
       shadow: shadow ?? this.shadow,
       chart2: chart2 ?? this.chart2,
+      purple: purple ?? this.purple,
     );
   }
 
@@ -169,6 +177,7 @@ class AppColors extends ThemeExtension<AppColors> {
       hover: l(hover, other.hover),
       shadow: l(shadow, other.shadow),
       chart2: l(chart2, other.chart2),
+      purple: l(purple, other.purple),
     );
   }
 }

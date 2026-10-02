@@ -16,3 +16,7 @@ Future<AppDatabase> createSeededDb() async {
   await TerminalRepository(db).ensureInitialized();
   return db;
 }
+
+/// Id "Toko Utama", toko bawaan database baru (tempat akun seed `kasir`).
+Future<int> mainStoreId(AppDatabase db) async =>
+    (await (db.select(db.stores)..limit(1)).getSingle()).id;

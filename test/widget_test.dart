@@ -14,12 +14,19 @@ import 'package:toko/core/widgets/app_button.dart';
 import 'package:toko/core/widgets/app_sidebar.dart';
 import 'package:toko/core/widgets/large_title_page.dart';
 import 'package:toko/features/auth/data/auth_repository.dart';
+import 'package:toko/features/auth/data/user_repository.dart';
+import 'package:toko/features/auth/domain/user_role.dart';
 import 'package:toko/features/payments/data/payment_method_repository.dart';
+import 'package:toko/features/receipt/data/printer_transport.dart';
+import 'package:toko/features/receipt/data/receipt_renderer.dart';
+import 'package:toko/features/receipt/data/receipt_settings_repository.dart';
+import 'package:toko/features/receipt/domain/printer_config.dart';
 import 'package:toko/features/products/data/product_repository.dart';
 import 'package:toko/features/sales/data/checkout_service.dart';
 import 'package:toko/features/sales/domain/cart.dart';
 import 'package:toko/features/products/presentation/product_import_page.dart';
 
+import 'helpers/fake_printer.dart';
 import 'helpers/test_app.dart';
 
 /// Hash/verifikasi bcrypt tanpa isolate, karena isolate tidak berjalan di dalam
@@ -95,16 +102,35 @@ Future<void> tapVisible(WidgetTester tester, Finder finder) async {
   await tester.tap(finder);
 }
 
-/// Mengisi AppTextField berdasarkan labelnya.
-Future<void> fill(WidgetTester tester, String label, String text) async {
-  final field = find.descendant(
-    of: find
-        .ancestor(of: find.text(label), matching: find.byType(Column))
-        .first,
-    matching: find.byType(EditableText),
-  );
-  await tester.enterText(field, text);
+/// Seperti [tapVisible], tetapi digulir ke tengah layar supaya tidak
+/// tertutup toolbar kaca halaman panjang.
+Future<void> tapCentered(WidgetTester tester, Finder finder) async {
+  await Scrollable.ensureVisible(tester.element(finder), alignment: 0.5);
   await tester.pump();
+  await tester.tap(finder);
+}
+
+/// Mengisi AppTextField berdasarkan labelnya. Label yang sama bisa muncul di
+/// tempat lain (mis. "Stok" di sidebar), jadi dipilih label pertama yang
+/// Column induknya berisi kolom isian.
+Future<void> fill(WidgetTester tester, String label, String text) async {
+  for (final candidate in find.text(label).evaluate()) {
+    final field = find.descendant(
+      of: find
+          .ancestor(
+            of: find.byWidget(candidate.widget),
+            matching: find.byType(Column),
+          )
+          .first,
+      matching: find.byType(EditableText),
+    );
+    if (field.evaluate().isNotEmpty) {
+      await tester.enterText(field.first, text);
+      await tester.pump();
+      return;
+    }
+  }
+  fail('Kolom isian "$label" tidak ditemukan.');
 }
 
 void main() {
@@ -213,11 +239,8 @@ void main() {
     // 2 × 3.500 + 3.500 = 10.500
     expect(find.text('Rp 10.500'), findsWidgets);
 
-    // Fitur voucher sudah dihapus: tidak ada tombol, F4 tidak membuka apa pun.
+    // Fitur voucher sudah dihapus (F4 sekarang = tahan transaksi).
     expect(find.textContaining('Voucher'), findsNothing);
-    await tester.sendKeyEvent(LogicalKeyboardKey.f4);
-    await settle(tester);
-    expect(find.text('Pakai Voucher'), findsNothing);
 
     // F2 membuka popup pembayaran; Tunai terpilih otomatis.
     await tester.sendKeyEvent(LogicalKeyboardKey.f2);
@@ -258,13 +281,124 @@ void main() {
     expect(find.text('Tunai'), findsOneWidget);
     expect(find.text('Omzet Hari Ini'), findsNothing);
 
-    // Stok berkurang.
-    final indomie = (await tester.runAsync(
-      () => (db.select(
+    // Stok Toko Utama berkurang.
+    final indomie = (await tester.runAsync(() async {
+      final p = await (db.select(
         db.products,
-      )..where((p) => p.code.equals('BRG001'))).getSingle(),
-    ))!;
+      )..where((p) => p.code.equals('BRG001'))).getSingle();
+      return db.storesDao.entry(await mainStoreId(db), p.id);
+    }))!;
     expect(indomie.stock, 118);
+
+    await unmount(tester);
+  });
+
+  testWidgets('Kasir menahan transaksi lalu melanjutkannya', (tester) async {
+    final db = await pumpApp(tester);
+    await login(tester, 'kasir', 'kasir123');
+
+    Future<void> scan(String code) async {
+      await fill(tester, 'Kode / Barcode', code);
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await settle(tester);
+    }
+
+    String? heldCount() => tester
+        .widget<Text>(
+          find.descendant(
+            of: find.byKey(const ValueKey('held-count')),
+            matching: find.byType(Text),
+          ),
+        )
+        .data;
+
+    // Ibu A: 2 barang, lalu ditahan dengan catatan (F4).
+    await scan('BRG001');
+    await scan('BRG009');
+    await tester.sendKeyEvent(LogicalKeyboardKey.f4);
+    await settle(tester);
+    expect(find.text('Tahan Transaksi'), findsWidgets);
+    await fill(tester, 'Catatan (opsional)', 'Ibu A baju merah');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await settle(tester);
+
+    expect(find.text('Belum ada barang'), findsOneWidget);
+    expect(heldCount(), '1');
+
+    // Ibu B dilayani dulu, lalu daftar tertahan dibuka (F5) dan Ibu A
+    // dilanjutkan: keranjang Ibu B ikut ditahan.
+    await scan('BRG010');
+    await tester.sendKeyEvent(LogicalKeyboardKey.f5);
+    await settle(tester);
+    expect(find.text('Ibu A baju merah'), findsOneWidget);
+    expect(find.textContaining('Indomie Goreng 85g, Aqua'), findsOneWidget);
+    await tester.tap(find.text('Lanjutkan'));
+    await settle(tester);
+    expect(find.text('Tahan keranjang sekarang?'), findsOneWidget);
+    await tester.tap(find.text('Tahan & Lanjutkan'));
+    await settle(tester);
+
+    expect(find.text('Indomie Goreng 85g'), findsOneWidget);
+    expect(find.text('Aqua Botol 600ml'), findsOneWidget);
+    expect(heldCount(), '1');
+    final held = (await tester.runAsync(() => db.select(db.heldCarts).get()))!;
+    expect(held.single.note, isNull);
+    expect(held.single.itemCount, 1);
+
+    await unmount(tester);
+  });
+
+  testWidgets('Supervisor hanya Kasir + Stok, dan bisa menambah stok', (
+    tester,
+  ) async {
+    final db = await pumpApp(tester);
+    await tester.runAsync(() async {
+      final admin = await AuthRepository(
+        db,
+        testHasher,
+      ).login('admin', 'admin123');
+      await UserRepository(db, testHasher).create(
+        actor: admin,
+        username: 'budi',
+        fullName: 'Budi Supervisor',
+        role: UserRole.supervisor,
+        storeId: await mainStoreId(db),
+        password: 'rahasia1',
+      );
+    });
+    await login(tester, 'budi', 'rahasia1');
+
+    // Mulai di Kasir; menu hanya Kasir dan Stok, toko tampil di sidebar.
+    expect(find.text('Kode / Barcode'), findsOneWidget);
+    final sidebar = find.byType(AppSidebar);
+    expect(
+      find.descendant(of: sidebar, matching: find.text('Stok')),
+      findsOneWidget,
+    );
+    expect(find.text('Produk'), findsNothing);
+    expect(find.text('Laporan'), findsNothing);
+    expect(
+      find.descendant(of: sidebar, matching: find.text('Toko Utama')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.descendant(of: sidebar, matching: find.text('Stok')));
+    await settle(tester);
+    expect(find.text('Indomie Goreng 85g'), findsOneWidget);
+    expect(find.text('120 PCS'), findsOneWidget);
+
+    // Barang masuk 10 → 130.
+    await tester.tap(find.text('Indomie Goreng 85g'));
+    await settle(tester);
+    expect(find.text('Stok sekarang'), findsOneWidget);
+    await fill(tester, 'Jumlah masuk (PCS)', '10');
+    await fill(tester, 'Catatan (opsional)', 'kiriman supplier');
+    await settle(tester);
+    expect(find.text('Stok menjadi 130 PCS'), findsOneWidget);
+    await tester.tap(find.widgetWithText(AppButton, 'Simpan'));
+    await settle(tester);
+    expect(find.text('Stok sekarang'), findsNothing);
+    expect(find.text('130 PCS'), findsOneWidget);
 
     await unmount(tester);
   });
@@ -303,7 +437,7 @@ void main() {
     await tester.tap(find.text('Produk'));
     await settle(tester);
 
-    expect(find.text('20 barang'), findsOneWidget);
+    expect(find.textContaining('20 barang · '), findsOneWidget);
     expect(find.text('Indomie Goreng 85g'), findsOneWidget);
 
     // Cari (urutan kata bebas).
@@ -334,13 +468,13 @@ void main() {
     await tester.tap(find.widgetWithText(AppButton, 'Simpan Barang'));
     await settle(tester);
     expect(find.text('Barang Baru'), findsNothing);
-    expect(find.text('21 barang'), findsOneWidget);
+    expect(find.textContaining('21 barang · '), findsOneWidget);
 
     // Filter stok menipis memuat barang baru (2 ≤ 5).
     await tester.tap(find.text('Stok menipis'));
     await settle(tester);
     expect(find.text('Kecap Bango 220ml'), findsOneWidget);
-    expect(find.text('4 barang'), findsOneWidget);
+    expect(find.textContaining('4 barang · '), findsOneWidget);
 
     await unmount(tester);
   });
@@ -390,7 +524,7 @@ void main() {
 
     await tapVisible(tester, find.widgetWithText(AppButton, 'Lihat Produk'));
     await settle(tester);
-    expect(find.text('21 barang'), findsOneWidget);
+    expect(find.textContaining('21 barang · '), findsOneWidget);
     expect(find.text('Kopi Kenangan'), findsOneWidget);
 
     await unmount(tester);
@@ -450,6 +584,7 @@ void main() {
       await CheckoutService(db).checkout(
         cart: const Cart().add(indomie, qty: 3),
         cashier: kasir,
+        storeId: await mainStoreId(db),
         paymentMethodId: tunai.id,
         paid: 20000,
       );
@@ -499,6 +634,196 @@ void main() {
     );
     await settle(tester);
     expect(find.textContaining('INV-K01-'), findsOneWidget);
+
+    await unmount(tester);
+  });
+
+  testWidgets('Admin mengubah template HTML struk: pratinjau ikut berubah', (
+    tester,
+  ) async {
+    final transport = FakeTransport();
+    final rasterizer = FakeRasterizer();
+    final db = await pumpApp(
+      tester,
+      overrides: [
+        printerTransportProvider.overrideWithValue(transport),
+        receiptRasterizerProvider.overrideWithValue(rasterizer),
+      ],
+    );
+    await login(tester, 'admin', 'admin123');
+    await tester.tap(find.text('Pengaturan'));
+    await settle(tester);
+    await tapVisible(tester, find.text('Struk & Printer'));
+    await settle(tester);
+
+    // Pratinjau template bawaan memakai data contoh.
+    expect(
+      find.textContaining('INV-K01-20261002-0001', findRichText: true),
+      findsOneWidget,
+    );
+
+    final editor = find.descendant(
+      of: find.byKey(const ValueKey('receipt-html-editor')),
+      matching: find.byType(EditableText),
+    );
+    Future<void> typeTemplate(String html) async {
+      await tester.enterText(editor, html);
+      await settle(tester); // lewat jeda 400 ms
+    }
+
+    await typeTemplate(
+      '<style>.t { font-weight: bold }</style>'
+      '<p class="t">Halo {{kasir}} {{total}}</p>',
+    );
+    expect(
+      find.textContaining('Halo Kasir 51.000', findRichText: true),
+      findsOneWidget,
+    );
+
+    // Template rusak: pesan error, pratinjau terakhir tetap tampil.
+    await typeTemplate('<p>{{#barang}}</p>');
+    expect(find.textContaining('belum ditutup'), findsOneWidget);
+    expect(
+      find.textContaining('Halo Kasir 51.000', findRichText: true),
+      findsOneWidget,
+    );
+
+    await typeTemplate('<p>Akhir {{faktur.no}}</p>');
+    expect(find.textContaining('belum ditutup'), findsNothing);
+
+    // Pilih printer terpasang lalu tes cetak memakai template itu.
+    await tapCentered(tester, find.text('Terpasang (USB)'));
+    await settle(tester);
+    await tapCentered(tester, find.text('Pilih…'));
+    await settle(tester);
+    await tester.tap(find.text('Thermal 58'));
+    await settle(tester);
+    await tapCentered(tester, find.text('Tes Cetak'));
+    await settle(tester);
+    expect(find.text('Tes cetak terkirim.'), findsOneWidget);
+    expect(transport.jobs, hasLength(1));
+    expect(rasterizer.html.single, contains('Akhir INV-K01-20261002-0001'));
+
+    final saved = (await tester.runAsync(() async {
+      final repo = ReceiptSettingsRepository(db);
+      return (
+        await repo.templateFor(await mainStoreId(db)),
+        await repo.printer(),
+      );
+    }))!;
+    expect(saved.$1.html, '<p>Akhir {{faktur.no}}</p>');
+    expect(saved.$2.connection, PrinterConnection.system);
+    expect(saved.$2.printerName, 'Thermal 58');
+
+    await unmount(tester);
+  });
+
+  testWidgets('Bayar tunai mencetak struk dan membuka laci', (tester) async {
+    final transport = FakeTransport();
+    final rasterizer = FakeRasterizer();
+    final db = await pumpApp(
+      tester,
+      overrides: [
+        printerTransportProvider.overrideWithValue(transport),
+        receiptRasterizerProvider.overrideWithValue(rasterizer),
+      ],
+    );
+    await tester.runAsync(
+      () => db.settingsDao.set(
+        ReceiptSettingsRepository.kPrinter,
+        jsonEncode(
+          const PrinterConfig(
+            connection: PrinterConnection.system,
+            printerName: 'Thermal 58',
+          ).toJson(),
+        ),
+      ),
+    );
+    await login(tester, 'kasir', 'kasir123');
+    await fill(tester, 'Kode / Barcode', 'BRG001');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await settle(tester);
+
+    // Tombol buka laci tampil karena printer sudah diatur.
+    expect(find.text('Buka Laci  (F6)'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.f2);
+    await settle(tester);
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await settle(tester);
+
+    expect(find.text('Transaksi Berhasil'), findsOneWidget);
+    expect(find.text('Struk dicetak'), findsOneWidget);
+    expect(transport.jobs, hasLength(1));
+    // ESC p (buka laci) ikut dikirim untuk pembayaran tunai.
+    expect(transport.jobs.single.sublist(2, 4), [0x1B, 0x70]);
+    expect(rasterizer.html.single, contains('Indomie Goreng 85g'));
+
+    // Ctrl+P = cetak ulang.
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyP);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await settle(tester);
+    expect(transport.jobs, hasLength(2));
+    expect(rasterizer.html.last, contains('CETAK ULANG'));
+
+    await unmount(tester);
+  });
+
+  testWidgets('Kasir mengatur printer nota dari layar Kasir', (tester) async {
+    final transport = FakeTransport();
+    final rasterizer = FakeRasterizer();
+    final db = await pumpApp(
+      tester,
+      overrides: [
+        printerTransportProvider.overrideWithValue(transport),
+        receiptRasterizerProvider.overrideWithValue(rasterizer),
+      ],
+    );
+    await login(tester, 'kasir', 'kasir123');
+    // Kasir tidak bisa membuka Pengaturan, tapi bisa mengatur printer.
+    expect(find.text('Pengaturan'), findsNothing);
+    await tester.tap(find.text('Atur Printer'));
+    await settle(tester);
+    expect(find.text('Printer Nota'), findsOneWidget);
+
+    await tester.tap(find.text('Terpasang (USB)'));
+    await settle(tester);
+    await tester.tap(find.text('80 mm'));
+    await settle(tester);
+    await tester.tap(find.text('Pilih…'));
+    await settle(tester);
+    await tester.tap(find.text('Thermal 58'));
+    await settle(tester);
+    await tapVisible(tester, find.text('Tes Cetak'));
+    await settle(tester);
+    expect(find.text('Tes cetak terkirim.'), findsOneWidget);
+    expect(transport.jobs, hasLength(1));
+    expect(rasterizer.widths.single, PaperWidth.mm80);
+
+    // Ganti ke printer Bluetooth (port COM) lalu cek sambungan.
+    await tapVisible(tester, find.text('Bluetooth'));
+    await settle(tester);
+    await tapVisible(tester, find.text('Pilih port…'));
+    await settle(tester);
+    await tester.tap(find.text('COM5'));
+    await settle(tester);
+    await tapVisible(tester, find.text('Cek Sambungan'));
+    await settle(tester);
+    expect(find.textContaining('Printer tersambung (COM5'), findsOneWidget);
+    expect(transport.checked.single.serialPort, 'COM5');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await settle(tester);
+    expect(find.text('Printer Nota'), findsOneWidget); // label tombol
+
+    final saved = (await tester.runAsync(
+      () => ReceiptSettingsRepository(db).printer(),
+    ))!;
+    expect(saved.printerName, 'Thermal 58');
+    expect(saved.paperWidth, PaperWidth.mm80);
+    expect(saved.connection, PrinterConnection.serial);
+    expect(saved.serialPort, 'COM5');
 
     await unmount(tester);
   });

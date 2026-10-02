@@ -13,6 +13,7 @@ void main() {
   late AuthRepository auth;
   late AppUser admin;
   late AppUser kasir;
+  late int store;
 
   Matcher failsWith(String text) => throwsA(
     isA<AccountFailure>().having((e) => e.message, 'message', contains(text)),
@@ -24,6 +25,7 @@ void main() {
     auth = AuthRepository(db, testHasher);
     admin = await auth.login('admin', 'admin123');
     kasir = await auth.login('kasir', 'kasir123');
+    store = await mainStoreId(db);
   });
 
   tearDown(() => db.close());
@@ -35,6 +37,7 @@ void main() {
         username: ' Siti ',
         fullName: 'Siti Aminah',
         role: UserRole.kasir,
+        storeId: store,
         password: 'rahasia1',
       );
       expect(created.username, 'siti');
@@ -50,6 +53,7 @@ void main() {
           username: 'KASIR',
           fullName: 'Lain',
           role: UserRole.kasir,
+          storeId: store,
           password: 'rahasia1',
         ),
         failsWith('sudah dipakai'),
@@ -63,6 +67,7 @@ void main() {
           username: 'siti aminah',
           fullName: 'Siti',
           role: UserRole.kasir,
+          storeId: store,
           password: 'rahasia1',
         ),
         failsWith('tanpa spasi'),
@@ -73,6 +78,7 @@ void main() {
           username: 'siti',
           fullName: 'Siti',
           role: UserRole.kasir,
+          storeId: store,
           password: '123',
         ),
         failsWith('minimal'),
@@ -111,6 +117,7 @@ void main() {
           id: admin.id,
           fullName: admin.fullName,
           role: UserRole.kasir,
+          storeId: store,
           isActive: true,
         ),
         failsWith('akun sendiri'),

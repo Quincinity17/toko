@@ -94,7 +94,7 @@ void main() {
       final d = rows.single.draft!;
       expect(d.purchasePrice, 26000);
       expect(d.sellingPrice, 29000);
-      expect(d.stock, 12.5);
+      expect(rows.single.stock, 12.5);
     });
 
     test('kode yang sudah ada ditandai, barcode milik barang lain error', () {
@@ -160,7 +160,7 @@ void main() {
         expect(a.barcode, '8991234000015');
         expect(a.categoryName, 'Makanan');
         expect(a.sellingPrice, 3500);
-        expect(b.stock, 12.5);
+        expect(rows[1].stock, 12.5);
         expect(b.barcode, isNull);
         expect(b.isActive, isFalse);
       });
@@ -234,6 +234,7 @@ void main() {
           actor: admin,
           rows: rows,
           existingAction: ExistingProductAction.skip,
+          stockStoreId: await mainStoreId(db),
           onProgress: (done, _) => progress.add(done),
         );
         expect(result.inserted, 1);
@@ -260,6 +261,7 @@ void main() {
         actor: admin,
         rows: await rowsOf(file),
         existingAction: ExistingProductAction.overwrite,
+        stockStoreId: await mainStoreId(db),
       );
       final p = (await ProductRepository(db).findByCodeOrBarcode('BRG001'))!;
       expect(p.name, 'Indomie Goreng Baru');
@@ -274,6 +276,7 @@ void main() {
         actor: admin,
         rows: await rowsOf(file),
         existingAction: ExistingProductAction.updateStockPrice,
+        stockStoreId: await mainStoreId(db),
       );
       expect(result.updated, 1);
       final p = (await ProductRepository(db).findByCodeOrBarcode('BRG001'))!;
@@ -298,6 +301,7 @@ void main() {
         actor: admin,
         rows: await rowsOf(buffer.toString()),
         existingAction: ExistingProductAction.skip,
+        stockStoreId: await mainStoreId(db),
       );
       sw.stop();
       expect(result.inserted, 3000);

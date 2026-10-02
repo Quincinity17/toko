@@ -769,6 +769,12 @@ class PeopleSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // Hanya saat melihat semua toko (lebih dari satu toko berjualan).
+        if (bundle.stores.length > 1) ...[
+          const SectionTitle('Per toko'),
+          _table('Toko', bundle.stores),
+          _gap,
+        ],
         const SectionTitle('Per kasir'),
         _table('Kasir', bundle.cashiers),
         _gap,

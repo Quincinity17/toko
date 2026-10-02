@@ -3,8 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
+import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_dialogs.dart';
 import '../../../../core/widgets/state_views.dart';
+import '../../../receipt/data/printer_failure.dart';
+import '../../../receipt/data/receipt_printer.dart';
+import '../../../receipt/data/receipt_settings_repository.dart';
 import '../../data/sales_repository.dart';
 import '../../domain/sale.dart';
 
@@ -140,8 +144,64 @@ class _SaleDetail extends ConsumerWidget {
           row('Dibayar (${sale.paymentMethod})', Fmt.rupiah(sale.paid)),
           if (sale.paymentRef != null) row('No. referensi', sale.paymentRef!),
           if (sale.change > 0) row('Kembalian', Fmt.rupiah(sale.change)),
+          if (ref.watch(printerConfigProvider).value?.isReady ?? false) ...[
+            const SizedBox(height: AppSpacing.lg),
+            _ReprintButton(saleId: sale.id),
+          ],
         ],
       ),
+    );
+  }
+}
+
+/// Mencetak ulang struk faktur (diberi tanda "CETAK ULANG").
+class _ReprintButton extends ConsumerStatefulWidget {
+  const _ReprintButton({required this.saleId});
+
+  final int saleId;
+
+  @override
+  ConsumerState<_ReprintButton> createState() => _ReprintButtonState();
+}
+
+class _ReprintButtonState extends ConsumerState<_ReprintButton> {
+  bool _printing = false;
+  String? _error;
+
+  Future<void> _print() async {
+    setState(() {
+      _printing = true;
+      _error = null;
+    });
+    try {
+      await ref
+          .read(receiptPrinterProvider)
+          .printSale(widget.saleId, reprint: true);
+    } on PrinterFailure catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _printing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_error != null) ...[
+          ErrorBanner(message: _error!),
+          const SizedBox(height: AppSpacing.sm),
+        ],
+        AppButton(
+          label: 'Cetak Ulang Struk',
+          icon: CupertinoIcons.printer,
+          variant: AppButtonVariant.tinted,
+          expand: true,
+          loading: _printing,
+          onPressed: _print,
+        ),
+      ],
     );
   }
 }

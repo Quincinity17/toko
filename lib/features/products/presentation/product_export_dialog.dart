@@ -72,7 +72,10 @@ class _ExportFormState extends ConsumerState<_ExportForm> {
 
   /// Ada pencarian/filter aktif (urutan saja tidak dihitung).
   bool get _hasFilter =>
-      widget.currentFilter.copyWith(sort: ProductSort.name) !=
+      widget.currentFilter.copyWith(
+        sort: ProductSort.name,
+        storeId: () => null,
+      ) !=
       const ProductFilter();
 
   Future<void> _export() async {
@@ -85,7 +88,10 @@ class _ExportFormState extends ConsumerState<_ExportForm> {
       final products = await repo.allMatching(
         _onlyFiltered
             ? widget.currentFilter
-            : const ProductFilter(status: ProductStatusFilter.all),
+            : ProductFilter(
+                status: ProductStatusFilter.all,
+                storeId: widget.currentFilter.storeId,
+              ),
       );
       final bytes = _format == ProductFileFormat.xlsx
           ? exportProductsXlsx(products)

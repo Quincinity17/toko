@@ -4,22 +4,64 @@ import '../../../features/products/domain/product.dart';
 import '../app_database.dart';
 import '../tables/products.dart';
 import '../tables/sales.dart';
+import '../tables/stores.dart';
 
 part 'products_dao.g.dart';
 
-@DriftAccessor(tables: [Products, Categories, Units, SaleItems, StockMovements])
+/// Stok dan harga barang untuk satu toko, atau semua toko (`storeId` null:
+/// stok dijumlah, harga default). Dihitung lewat subquery ke
+/// `store_products`; [watchedTables] membuat stream ikut terbarui saat stok
+/// atau harga toko berubah.
+class _StoreCols {
+  _StoreCols(this.storeId, TableInfo sp, $ProductsTable products)
+    : stock = CustomExpression<double>(
+        storeId == null
+            ? '(SELECT COALESCE(SUM(sp.stock), 0) FROM store_products sp '
+                  'WHERE sp.product_id = products.id)'
+            : 'COALESCE((SELECT sp.stock FROM store_products sp '
+                  'WHERE sp.product_id = products.id '
+                  'AND sp.store_id = $storeId), 0)',
+        watchedTables: [sp],
+      ),
+      price = storeId == null
+          ? products.sellingPrice
+          : CustomExpression<int>(
+              'COALESCE((SELECT sp.selling_price FROM store_products sp '
+              'WHERE sp.product_id = products.id AND sp.store_id = $storeId), '
+              'products.selling_price)',
+              watchedTables: [sp],
+            );
+
+  final int? storeId;
+  final Expression<double> stock;
+  final Expression<int> price;
+}
+
+@DriftAccessor(
+  tables: [
+    Products,
+    Categories,
+    Units,
+    SaleItems,
+    StockMovements,
+    StoreProducts,
+  ],
+)
 class ProductsDao extends DatabaseAccessor<AppDatabase>
     with _$ProductsDaoMixin {
   ProductsDao(super.attachedDatabase);
 
-  JoinedSelectStatement<HasResultSet, dynamic> _joined() {
+  _StoreCols _cols(int? storeId) =>
+      _StoreCols(storeId, storeProducts, products);
+
+  JoinedSelectStatement<HasResultSet, dynamic> _joined(_StoreCols cols) {
     return select(products).join([
       leftOuterJoin(categories, categories.id.equalsExp(products.categoryId)),
       leftOuterJoin(units, units.id.equalsExp(products.unitId)),
-    ]);
+    ])..addColumns([cols.stock, cols.price]);
   }
 
-  Product _read(TypedResult r) {
+  Product _read(TypedResult r, _StoreCols cols) {
     final p = r.readTable(products);
     return Product(
       id: p.id,
@@ -31,8 +73,9 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
       unitId: p.unitId,
       unitName: r.readTableOrNull(units)?.name,
       purchasePrice: p.purchasePrice,
-      sellingPrice: p.sellingPrice,
-      stock: p.stock,
+      sellingPrice: r.read(cols.price) ?? p.sellingPrice,
+      defaultSellingPrice: p.sellingPrice,
+      stock: r.read(cols.stock) ?? 0,
       minStock: p.minStock,
       isActive: p.isActive,
     );
@@ -44,9 +87,13 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
 
   /// Cocok persis dengan kode (tanpa peduli huruf besar/kecil) atau barcode.
   /// Dipakai untuk scan barcode dan ketik kode di kasir.
-  Future<Product?> findActiveByCodeOrBarcode(String value) async {
+  Future<Product?> findActiveByCodeOrBarcode(
+    String value, {
+    required int? storeId,
+  }) async {
     final v = value.trim();
-    final query = _joined()
+    final cols = _cols(storeId);
+    final query = _joined(cols)
       ..where(
         products.isActive.equals(true) &
             (products.code.lower().equals(v.toLowerCase()) |
@@ -54,17 +101,22 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
       )
       ..limit(1);
     final row = await query.getSingleOrNull();
-    return row == null ? null : _read(row);
+    return row == null ? null : _read(row, cols);
   }
 
   /// Pencarian per kata: setiap kata harus ada di nama, atau menjadi awalan
   /// kode/barcode. Urutan kata bebas ("goreng indomie" = "indomie goreng").
-  Future<List<Product>> searchActive(String text, {int limit = 50}) {
-    final query = _joined()
+  Future<List<Product>> searchActive(
+    String text, {
+    required int? storeId,
+    int limit = 50,
+  }) {
+    final cols = _cols(storeId);
+    final query = _joined(cols)
       ..where(products.isActive.equals(true) & _textFilter(text))
       ..orderBy([OrderingTerm.asc(products.name)])
       ..limit(limit);
-    return query.map(_read).get();
+    return query.map((r) => _read(r, cols)).get();
   }
 
   /// Id dan nama semua barang aktif, bahan untuk saran nama yang mendekati.
@@ -78,11 +130,12 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
   }
 
   /// Barang berdasarkan id, mengikuti urutan [ids].
-  Future<List<Product>> byIds(List<int> ids) async {
+  Future<List<Product>> byIds(List<int> ids, {required int? storeId}) async {
     if (ids.isEmpty) return const [];
-    final rows = await (_joined()..where(products.id.isIn(ids)))
-        .map(_read)
-        .get();
+    final cols = _cols(storeId);
+    final rows = await (_joined(
+      cols,
+    )..where(products.id.isIn(ids))).map((r) => _read(r, cols)).get();
     final byId = {for (final p in rows) p.id: p};
     return [for (final id in ids) ?byId[id]];
   }
@@ -109,7 +162,7 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
     return all;
   }
 
-  Expression<bool> _filter(ProductFilter f) {
+  Expression<bool> _filter(ProductFilter f, _StoreCols cols) {
     Expression<bool> e = _textFilter(f.text);
     e = switch (f.status) {
       ProductStatusFilter.active => e & products.isActive.equals(true),
@@ -118,60 +171,67 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
     };
     if (f.categoryId != null) e = e & products.categoryId.equals(f.categoryId!);
     if (f.lowStockOnly) {
-      e = e & products.stock.isSmallerOrEqual(products.minStock);
+      e = e & cols.stock.isSmallerOrEqual(products.minStock);
     }
     return e;
   }
 
-  List<OrderingTerm> _order(ProductSort sort) => switch (sort) {
-    ProductSort.name => [OrderingTerm.asc(products.name)],
-    ProductSort.code => [OrderingTerm.asc(products.code)],
-    ProductSort.stockLow => [
-      OrderingTerm.asc(products.stock),
-      OrderingTerm.asc(products.name),
-    ],
-    ProductSort.priceHigh => [
-      OrderingTerm.desc(products.sellingPrice),
-      OrderingTerm.asc(products.name),
-    ],
-    ProductSort.updated => [
-      OrderingTerm.desc(products.updatedAt),
-      OrderingTerm.desc(products.id),
-    ],
-  };
+  List<OrderingTerm> _order(ProductSort sort, _StoreCols cols) =>
+      switch (sort) {
+        ProductSort.name => [OrderingTerm.asc(products.name)],
+        ProductSort.code => [OrderingTerm.asc(products.code)],
+        ProductSort.stockLow => [
+          OrderingTerm.asc(cols.stock),
+          OrderingTerm.asc(products.name),
+        ],
+        ProductSort.priceHigh => [
+          OrderingTerm.desc(cols.price),
+          OrderingTerm.asc(products.name),
+        ],
+        ProductSort.updated => [
+          OrderingTerm.desc(products.updatedAt),
+          OrderingTerm.desc(products.id),
+        ],
+      };
 
   Stream<List<Product>> watchPage(
     ProductFilter f, {
     required int offset,
     required int limit,
   }) {
-    final query = _joined()
-      ..where(_filter(f))
-      ..orderBy(_order(f.sort))
+    final cols = _cols(f.storeId);
+    final query = _joined(cols)
+      ..where(_filter(f, cols))
+      ..orderBy(_order(f.sort, cols))
       ..limit(limit, offset: offset);
-    return query.map(_read).watch();
+    return query.map((r) => _read(r, cols)).watch();
   }
 
   Stream<int> watchCount(ProductFilter f) {
+    final cols = _cols(f.storeId);
     final count = products.id.count();
     final query = selectOnly(products)
       ..addColumns([count])
-      ..where(_filter(f));
+      ..where(_filter(f, cols));
     return query.map((r) => r.read(count) ?? 0).watchSingle();
   }
 
   /// Semua barang sesuai filter, untuk export.
-  Future<List<Product>> allMatching(ProductFilter f) =>
-      (_joined()
-            ..where(_filter(f))
-            ..orderBy(_order(f.sort)))
-          .map(_read)
-          .get();
+  Future<List<Product>> allMatching(ProductFilter f) {
+    final cols = _cols(f.storeId);
+    return (_joined(cols)
+          ..where(_filter(f, cols))
+          ..orderBy(_order(f.sort, cols)))
+        .map((r) => _read(r, cols))
+        .get();
+  }
 
-  Future<Product?> findById(int id) async {
-    final row = await (_joined()..where(products.id.equals(id)))
-        .getSingleOrNull();
-    return row == null ? null : _read(row);
+  Future<Product?> findById(int id, {int? storeId}) async {
+    final cols = _cols(storeId);
+    final row = await (_joined(
+      cols,
+    )..where(products.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _read(row, cols);
   }
 
   /// Barang (aktif maupun tidak) dengan kode sama, tanpa peduli huruf besar.
@@ -199,26 +259,13 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
   Future<void> updateProduct(int id, ProductsCompanion p) =>
       (update(products)..where((t) => t.id.equals(id))).write(p);
 
-  /// Menghapus barang beserta riwayat stoknya. Hanya untuk barang yang belum
-  /// pernah terjual (dicek pemanggil).
+  /// Menghapus barang beserta riwayat stok dan data per tokonya. Hanya untuk
+  /// barang yang belum pernah terjual (dicek pemanggil).
   Future<void> deleteProduct(int id) async {
     await (delete(stockMovements)..where((m) => m.productId.equals(id))).go();
+    await (delete(storeProducts)..where((p) => p.productId.equals(id))).go();
     await (delete(products)..where((p) => p.id.equals(id))).go();
   }
-
-  Future<void> addStockMovement({
-    required int productId,
-    required StockMovementType type,
-    required double qtyChange,
-    String? note,
-  }) => into(stockMovements).insert(
-    StockMovementsCompanion.insert(
-      productId: productId,
-      type: type,
-      qtyChange: qtyChange,
-      note: Value(note),
-    ),
-  );
 
   // ---------------------------------------------------------------------------
   // Kategori & satuan

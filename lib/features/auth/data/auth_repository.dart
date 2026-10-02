@@ -36,6 +36,17 @@ class AuthRepository {
     if (!row.isActive) {
       throw const AuthFailure('Akun ini dinonaktifkan. Hubungi admin.');
     }
+    if (row.role.needsStore) {
+      final store = row.storeId == null
+          ? null
+          : await _db.storesDao.findById(row.storeId!);
+      if (store == null || !store.isActive) {
+        throw const AuthFailure(
+          'Toko untuk akun ini belum diatur atau sudah nonaktif. '
+          'Hubungi admin.',
+        );
+      }
+    }
 
     final now = _clock();
     await _db.usersDao.touchLastLogin(row.id, now);
@@ -51,6 +62,7 @@ AppUser userFromRow(UserRow row) => AppUser(
   role: row.role,
   isActive: row.isActive,
   lastLoginAt: row.lastLoginAt,
+  storeId: row.storeId,
 );
 
 final authRepositoryProvider = Provider<AuthRepository>(

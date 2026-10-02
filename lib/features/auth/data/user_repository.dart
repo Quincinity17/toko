@@ -42,6 +42,7 @@ class UserRepository {
     required String username,
     required String fullName,
     required UserRole role,
+    int? storeId,
     required String password,
   }) async {
     _requireAdmin(actor);
@@ -53,6 +54,7 @@ class UserRepository {
     if (await _db.usersDao.findByUsername(normalized) != null) {
       throw AccountFailure('Username "$normalized" sudah dipakai.');
     }
+    final store = await _storeFor(role, storeId);
 
     final hash = await _hasher.hash(password);
     final id = await _db.usersDao.insertUser(
@@ -61,17 +63,19 @@ class UserRepository {
         fullName: fullName.trim(),
         passwordHash: hash,
         role: role,
+        storeId: Value(store),
       ),
     );
     return userFromRow((await _db.usersDao.findById(id))!);
   }
 
-  /// Mengubah nama, peran, dan status aktif. Username tidak bisa diubah.
+  /// Mengubah nama, peran, toko, dan status aktif. Username tidak bisa diubah.
   Future<AppUser> update({
     required AppUser actor,
     required int id,
     required String fullName,
     required UserRole role,
+    int? storeId,
     required bool isActive,
   }) async {
     _requireAdmin(actor);
@@ -89,12 +93,14 @@ class UserRepository {
       if (_isActiveAdmin(current) && !staysActiveAdmin) {
         await _ensureAnotherActiveAdmin();
       }
+      final store = await _storeFor(role, storeId);
 
       await _db.usersDao.updateUser(
         id,
         UsersCompanion(
           fullName: Value(fullName.trim()),
           role: Value(role),
+          storeId: Value(store),
           isActive: Value(isActive),
         ),
       );
@@ -165,6 +171,20 @@ class UserRepository {
     final row = await _db.usersDao.findById(id);
     if (row == null) throw const AccountFailure('Akun tidak ditemukan.');
     return row;
+  }
+
+  /// Toko yang disimpan untuk [role]: wajib toko aktif untuk supervisor/kasir,
+  /// selalu `null` untuk admin.
+  Future<int?> _storeFor(UserRole role, int? storeId) async {
+    if (!role.needsStore) return null;
+    if (storeId == null) {
+      throw AccountFailure('Pilih toko untuk ${role.label.toLowerCase()}.');
+    }
+    final store = await _db.storesDao.findById(storeId);
+    if (store == null || !store.isActive) {
+      throw const AccountFailure('Toko tidak ditemukan atau sudah nonaktif.');
+    }
+    return storeId;
   }
 
   bool _isActiveAdmin(UserRow row) =>

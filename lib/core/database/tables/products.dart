@@ -46,7 +46,12 @@ class Products extends Table {
       integer().nullable().references(Categories, #id)();
   IntColumn get unitId => integer().nullable().references(Units, #id)();
   IntColumn get purchasePrice => integer().withDefault(const Constant(0))();
+
+  /// Harga jual default; toko bisa punya harga sendiri (`store_products`).
   IntColumn get sellingPrice => integer().withDefault(const Constant(0))();
+
+  /// Sejak v6 tidak dipakai lagi: stok disimpan per toko di `store_products`.
+  /// Kolom dipertahankan (dipindah ke toko pertama saat migrasi).
   RealColumn get stock => real().withDefault(const Constant(0))();
   RealColumn get minStock => real().withDefault(const Constant(0))();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();

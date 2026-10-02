@@ -14,6 +14,10 @@ import '../../../auth/presentation/auth_controller.dart';
 import '../../../payments/data/payment_method_repository.dart';
 import '../../../payments/domain/payment_method.dart';
 import '../../../payments/presentation/payment_method_icon.dart';
+import '../../../receipt/data/printer_failure.dart';
+import '../../../receipt/data/receipt_printer.dart';
+import '../../../receipt/data/receipt_settings_repository.dart';
+import '../../../stores/presentation/store_scope.dart';
 import '../../data/checkout_service.dart';
 import '../../domain/cart.dart';
 import '../../domain/cash_suggestions.dart';
@@ -103,6 +107,7 @@ class _PaymentFormState extends ConsumerState<_PaymentForm> {
           .checkout(
             cart: widget.cart,
             cashier: ref.read(authControllerProvider)!,
+            storeId: ref.read(storeScopeProvider)!,
             paymentMethodId: method.id,
             paid: method.isCash ? _paidValue : null,
             paymentRef: method.isCash ? null : _ref.text,
@@ -475,7 +480,9 @@ class _CashChip extends StatelessWidget {
 }
 
 /// Popup konfirmasi transaksi selesai: kembalian besar, nomor faktur,
-/// dan metode bayar. Enter atau tombol menutup untuk transaksi berikutnya.
+/// dan metode bayar. Saat muncul, struk dicetak otomatis dan laci dibuka
+/// (sesuai Pengaturan › Struk & Printer). Enter menutup untuk transaksi
+/// berikutnya; Ctrl+P mencetak (ulang) struk.
 Future<void> showCheckoutSuccessDialog(
   BuildContext context,
   CheckoutResult result,
@@ -485,83 +492,237 @@ Future<void> showCheckoutSuccessDialog(
     maxWidth: 440,
     // Fokus harus di dalam CallbackShortcuts agar Enter tertangkap.
     autofocusRoot: false,
-    builder: (ctx) => CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.enter): () =>
-            Navigator.pop(ctx),
-        const SingleActivator(LogicalKeyboardKey.numpadEnter): () =>
-            Navigator.pop(ctx),
-      },
-      child: Focus(autofocus: true, child: _SuccessView(result: result)),
-    ),
+    builder: (ctx) => _SuccessView(result: result),
   );
 }
 
-class _SuccessView extends StatelessWidget {
+enum _PrintState { idle, working, printed, drawerOpened, failed }
+
+class _SuccessView extends ConsumerStatefulWidget {
   const _SuccessView({required this.result});
 
   final CheckoutResult result;
 
   @override
+  ConsumerState<_SuccessView> createState() => _SuccessViewState();
+}
+
+class _SuccessViewState extends ConsumerState<_SuccessView> {
+  _PrintState _print = _PrintState.idle;
+  String? _error;
+
+  /// Struk sudah pernah tercetak: cetak berikutnya diberi tanda cetak ulang.
+  bool _printedOnce = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _afterCheckout();
+  }
+
+  Future<void> _afterCheckout() async {
+    setState(() => _print = _PrintState.working);
+    try {
+      final done = await ref
+          .read(receiptPrinterProvider)
+          .afterCheckout(widget.result.saleId, isCash: widget.result.isCash);
+      if (!mounted) return;
+      setState(() {
+        _printedOnce = done == AfterCheckout.printed;
+        _print = switch (done) {
+          AfterCheckout.nothing => _PrintState.idle,
+          AfterCheckout.printed => _PrintState.printed,
+          AfterCheckout.drawerOpened => _PrintState.drawerOpened,
+        };
+      });
+    } on PrinterFailure catch (e) {
+      _fail(e.message);
+    }
+  }
+
+  Future<void> _printReceipt() async {
+    if (_print == _PrintState.working) return;
+    setState(() => _print = _PrintState.working);
+    try {
+      await ref
+          .read(receiptPrinterProvider)
+          .printSale(widget.result.saleId, reprint: _printedOnce);
+      if (!mounted) return;
+      setState(() {
+        _printedOnce = true;
+        _print = _PrintState.printed;
+      });
+    } on PrinterFailure catch (e) {
+      _fail(e.message);
+    }
+  }
+
+  void _fail(String message) {
+    if (!mounted) return;
+    setState(() {
+      _print = _PrintState.failed;
+      _error = message;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    final result = widget.result;
     final hasChange = result.change > 0;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.xl,
-        0,
-        AppSpacing.xl,
-        AppSpacing.xl,
+    final printerReady =
+        ref.watch(printerConfigProvider).value?.isReady ?? false;
+    void close() => Navigator.pop(context);
+
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.enter): close,
+        const SingleActivator(LogicalKeyboardKey.numpadEnter): close,
+        const SingleActivator(LogicalKeyboardKey.keyP, control: true):
+            _printReceipt,
+        const SingleActivator(LogicalKeyboardKey.keyP, meta: true):
+            _printReceipt,
+      },
+      child: Focus(
+        autofocus: true,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.xl,
+            0,
+            AppSpacing.xl,
+            AppSpacing.xl,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0.4, end: 1),
+                duration: AppDurations.slow,
+                curve: SpringCurve.bouncy,
+                builder: (_, s, child) =>
+                    Transform.scale(scale: s, child: child),
+                child: Icon(
+                  CupertinoIcons.checkmark_circle_fill,
+                  size: 72,
+                  color: c.success,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'Transaksi Berhasil',
+                style: AppTypography.title2.copyWith(color: c.label),
+              ),
+              Text(
+                '${result.invoiceNo} · ${result.paymentMethod}',
+                style: AppTypography.subheadline.copyWith(
+                  color: c.labelSecondary,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              Text(
+                hasChange ? 'Kembalian' : 'Total dibayar',
+                style: AppTypography.subheadline.copyWith(
+                  color: c.labelSecondary,
+                ),
+              ),
+              Text(
+                Fmt.rupiah(hasChange ? result.change : result.total),
+                style: AppTypography.displayAmount.copyWith(
+                  color: hasChange ? c.success : c.label,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                [
+                  'Total ${Fmt.rupiah(result.total)}',
+                  if (hasChange) 'Dibayar ${Fmt.rupiah(result.paid)}',
+                ].join(' · '),
+                textAlign: TextAlign.center,
+                style: AppTypography.footnote.copyWith(color: c.labelSecondary),
+              ),
+              if (_print != _PrintState.idle) ...[
+                const SizedBox(height: AppSpacing.md),
+                _PrintStatus(state: _print, error: _error),
+              ],
+              const SizedBox(height: AppSpacing.xl),
+              AppButton(
+                label: 'Transaksi Baru  (Enter)',
+                size: AppButtonSize.large,
+                expand: true,
+                onPressed: close,
+              ),
+              if (printerReady) ...[
+                const SizedBox(height: AppSpacing.xs),
+                AppButton(
+                  label: _printedOnce
+                      ? 'Cetak Ulang Struk  (Ctrl+P)'
+                      : 'Cetak Struk  (Ctrl+P)',
+                  icon: CupertinoIcons.printer,
+                  variant: AppButtonVariant.gray,
+                  expand: true,
+                  loading: _print == _PrintState.working,
+                  onPressed: _printReceipt,
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
-      child: Column(
+    );
+  }
+}
+
+class _PrintStatus extends StatelessWidget {
+  const _PrintStatus({required this.state, this.error});
+
+  final _PrintState state;
+  final String? error;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final (icon, color, text) = switch (state) {
+      _PrintState.working => (
+        CupertinoIcons.printer,
+        c.labelSecondary,
+        'Mencetak struk…',
+      ),
+      _PrintState.printed => (
+        CupertinoIcons.checkmark_alt,
+        c.success,
+        'Struk dicetak',
+      ),
+      _PrintState.drawerOpened => (
+        CupertinoIcons.tray_arrow_down,
+        c.success,
+        'Laci dibuka',
+      ),
+      _PrintState.failed => (
+        CupertinoIcons.exclamationmark_triangle_fill,
+        c.danger,
+        'Struk gagal dicetak: ${error ?? ''}',
+      ),
+      _PrintState.idle => (CupertinoIcons.printer, c.labelSecondary, ''),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: AppRadius.mdAll,
+      ),
+      child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0.4, end: 1),
-            duration: AppDurations.slow,
-            curve: SpringCurve.bouncy,
-            builder: (_, s, child) => Transform.scale(scale: s, child: child),
-            child: Icon(
-              CupertinoIcons.checkmark_circle_fill,
-              size: 72,
-              color: c.success,
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: AppSpacing.xs),
+          Flexible(
+            child: Text(
+              text,
+              style: AppTypography.footnote.copyWith(color: c.label),
             ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            'Transaksi Berhasil',
-            style: AppTypography.title2.copyWith(color: c.label),
-          ),
-          Text(
-            '${result.invoiceNo} · ${result.paymentMethod}',
-            style: AppTypography.subheadline.copyWith(color: c.labelSecondary),
-          ),
-          const SizedBox(height: AppSpacing.xl),
-          Text(
-            hasChange ? 'Kembalian' : 'Total dibayar',
-            style: AppTypography.subheadline.copyWith(color: c.labelSecondary),
-          ),
-          Text(
-            Fmt.rupiah(hasChange ? result.change : result.total),
-            style: AppTypography.displayAmount.copyWith(
-              color: hasChange ? c.success : c.label,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            [
-              'Total ${Fmt.rupiah(result.total)}',
-              if (hasChange) 'Dibayar ${Fmt.rupiah(result.paid)}',
-            ].join(' · '),
-            textAlign: TextAlign.center,
-            style: AppTypography.footnote.copyWith(color: c.labelSecondary),
-          ),
-          const SizedBox(height: AppSpacing.xl),
-          AppButton(
-            label: 'Transaksi Baru  (Enter)',
-            size: AppButtonSize.large,
-            expand: true,
-            onPressed: () => Navigator.pop(context),
           ),
         ],
       ),

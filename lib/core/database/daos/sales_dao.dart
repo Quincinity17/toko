@@ -23,20 +23,35 @@ class SalesDao extends DatabaseAccessor<AppDatabase> with _$SalesDaoMixin {
   }
 
   /// Faktur dalam rentang [start, end), terbaru dulu, beserta nama kasir.
+  /// [storeId] `null` = semua toko.
   Stream<List<(SaleRow, String)>> watchSalesBetween(
     DateTime start,
-    DateTime end,
-  ) {
+    DateTime end, {
+    int? storeId,
+  }) {
     final query =
         select(sales).join([innerJoin(users, users.id.equalsExp(sales.userId))])
           ..where(
             sales.saleDate.isBiggerOrEqualValue(start) &
-                sales.saleDate.isSmallerThanValue(end),
+                sales.saleDate.isSmallerThanValue(end) &
+                (storeId == null
+                    ? const Constant(true)
+                    : sales.storeId.equals(storeId)),
           )
           ..orderBy([OrderingTerm.desc(sales.saleDate)]);
     return query
         .map((r) => (r.readTable(sales), r.readTable(users).fullName))
         .watch();
+  }
+
+  /// Satu faktur beserta nama kasirnya.
+  Future<(SaleRow, String)?> findWithCashier(int saleId) {
+    final query = select(sales).join([
+      innerJoin(users, users.id.equalsExp(sales.userId)),
+    ])..where(sales.id.equals(saleId));
+    return query
+        .map((r) => (r.readTable(sales), r.readTable(users).fullName))
+        .getSingleOrNull();
   }
 
   Future<List<SaleItemRow>> itemsOf(int saleId) {
@@ -54,32 +69,5 @@ class SalesDao extends DatabaseAccessor<AppDatabase> with _$SalesDaoMixin {
               ..where(sales.userId.equals(userId)))
             .getSingle();
     return row.read(count) ?? 0;
-  }
-
-  /// Mengurangi stok dan mencatat riwayatnya. Dipanggil di dalam transaksi.
-  Future<void> decreaseStock({
-    required int productId,
-    required double qty,
-    required int saleId,
-    required String invoiceNo,
-  }) async {
-    await customUpdate(
-      'UPDATE products SET stock = stock - ?, updated_at = ? WHERE id = ?',
-      variables: [
-        Variable.withReal(qty),
-        Variable.withDateTime(DateTime.now()),
-        Variable.withInt(productId),
-      ],
-      updates: {products},
-    );
-    await into(stockMovements).insert(
-      StockMovementsCompanion.insert(
-        productId: productId,
-        type: StockMovementType.sale,
-        qtyChange: -qty,
-        refId: Value(saleId),
-        note: Value(invoiceNo),
-      ),
-    );
   }
 }

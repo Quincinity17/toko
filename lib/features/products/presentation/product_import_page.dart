@@ -19,6 +19,9 @@ import '../data/product_file_io.dart';
 import '../data/product_import_service.dart';
 import '../domain/product_import.dart';
 import 'product_export_dialog.dart';
+import '../../stores/data/store_repository.dart';
+import '../../stores/domain/store.dart';
+import '../../stores/presentation/store_scope.dart';
 
 enum _Step { pick, map, review, running, done }
 
@@ -55,6 +58,39 @@ class _ProductImportPageState extends ConsumerState<ProductImportPage> {
   ImportMapping _mapping = {};
   List<ImportRow> _rows = const [];
   ExistingProductAction _action = ExistingProductAction.skip;
+
+  /// Toko tujuan kolom Stok (dipilih di langkah Periksa).
+  int? _stockStoreId;
+
+  List<Store> get _activeStores =>
+      (ref.read(storesProvider).value ?? const <Store>[])
+          .where((s) => s.isActive)
+          .toList();
+
+  /// Toko tujuan stok: pilihan user, toko yang sedang dipakai, atau satu-satunya
+  /// toko aktif.
+  int? get _stockStore {
+    if (_stockStoreId != null) return _stockStoreId;
+    final scope = ref.read(storeScopeProvider);
+    if (scope != null) return scope;
+    final stores = _activeStores;
+    return stores.length == 1 ? stores.first.id : null;
+  }
+
+  Future<void> _pickStockStore() async {
+    final stores = _activeStores;
+    final current = stores.where((s) => s.id == _stockStore).firstOrNull;
+    final pick = await showOptionPicker(
+      context,
+      title: 'Stok masuk ke toko',
+      options: [for (final s in stores) s.name],
+      selected: current?.name,
+    );
+    final name = pick?.value;
+    if (name == null) return;
+    setState(() => _stockStoreId = stores.firstWhere((s) => s.name == name).id);
+  }
+
   (int, int) _progress = (0, 0);
   ImportResult? _result;
 
@@ -110,6 +146,7 @@ class _ProductImportPageState extends ConsumerState<ProductImportPage> {
             actor: ref.read(authControllerProvider)!,
             rows: _rows,
             existingAction: _action,
+            stockStoreId: _stockStore,
             onProgress: (done, total) {
               if (mounted) setState(() => _progress = (done, total));
             },
@@ -136,6 +173,9 @@ class _ProductImportPageState extends ConsumerState<ProductImportPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Daftar toko untuk pilihan tujuan stok.
+    ref.watch(storesProvider);
+    ref.watch(storeScopeProvider);
     return LargeTitlePage(
       title: 'Import Barang',
       backLabel: 'Produk',
@@ -174,6 +214,12 @@ class _ProductImportPageState extends ConsumerState<ProductImportPage> {
                     ),
                     _Step.review => _ReviewStep(
                       rows: _rows,
+                      hasStock: _mapping[ProductField.stock] != null,
+                      stockStoreName: _activeStores
+                          .where((s) => s.id == _stockStore)
+                          .firstOrNull
+                          ?.name,
+                      onPickStockStore: _pickStockStore,
                       action: _action,
                       onAction: (a) => setState(() => _action = a),
                       onBack: () => setState(() => _step = _Step.map),
@@ -532,6 +578,9 @@ class _Preview extends StatelessWidget {
 class _ReviewStep extends StatelessWidget {
   const _ReviewStep({
     required this.rows,
+    required this.hasStock,
+    required this.stockStoreName,
+    required this.onPickStockStore,
     required this.action,
     required this.onAction,
     required this.onBack,
@@ -539,6 +588,11 @@ class _ReviewStep extends StatelessWidget {
   });
 
   final List<ImportRow> rows;
+
+  /// File punya kolom Stok, jadi perlu toko tujuan.
+  final bool hasStock;
+  final String? stockStoreName;
+  final VoidCallback onPickStockStore;
   final ExistingProductAction action;
   final ValueChanged<ExistingProductAction> onAction;
   final VoidCallback onBack;
@@ -603,6 +657,29 @@ class _ReviewStep extends StatelessWidget {
             ),
           ],
         ),
+        const SizedBox(height: AppSpacing.xl),
+        InsetGroupedSection(
+          header: 'Toko',
+          footer: hasStock
+              ? 'Kolom Stok mengisi stok toko ini. Harga jual di file menjadi '
+                    'harga default semua toko.'
+              : 'File tanpa kolom Stok: stok tidak berubah. Harga jual di '
+                    'file menjadi harga default semua toko.',
+          children: [
+            if (hasStock)
+              InsetGroupedTile(
+                title: 'Stok masuk ke toko',
+                value: stockStoreName ?? 'Pilih toko',
+                onPressed: onPickStockStore,
+              ),
+            if (!hasStock)
+              const InsetGroupedTile(
+                title: 'Stok',
+                value: 'Tidak diubah',
+                showChevron: false,
+              ),
+          ],
+        ),
         if (existingCount > 0) ...[
           const SizedBox(height: AppSpacing.xl),
           InsetGroupedSection(
@@ -663,7 +740,9 @@ class _ReviewStep extends StatelessWidget {
                 icon: CupertinoIcons.arrow_down_doc_fill,
                 size: AppButtonSize.large,
                 expand: true,
-                onPressed: toImport == 0 ? null : onRun,
+                onPressed: toImport == 0 || (hasStock && stockStoreName == null)
+                    ? null
+                    : onRun,
               ),
             ),
           ],

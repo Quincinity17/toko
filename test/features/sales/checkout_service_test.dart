@@ -8,9 +8,12 @@ import 'package:toko/core/database/app_database.dart';
 import 'package:toko/features/auth/data/auth_repository.dart';
 import 'package:toko/features/auth/data/user_repository.dart';
 import 'package:toko/features/auth/domain/app_user.dart';
+import 'package:toko/features/auth/domain/user_role.dart';
 import 'package:toko/features/payments/data/payment_method_repository.dart';
 import 'package:toko/features/payments/domain/payment_method.dart';
 import 'package:toko/features/products/data/product_repository.dart';
+import 'package:toko/features/receipt/data/receipt_settings_repository.dart';
+import 'package:toko/features/receipt/domain/receipt_template.dart';
 import 'package:toko/features/sales/data/checkout_service.dart';
 import 'package:toko/features/sales/data/sales_repository.dart';
 import 'package:toko/features/sales/domain/cart.dart';
@@ -74,6 +77,7 @@ void main() {
     final result = await service().checkout(
       cart: cart,
       cashier: kasir,
+      storeId: await mainStoreId(db),
       paymentMethodId: tunai.id,
       paid: 50000,
     );
@@ -96,6 +100,7 @@ void main() {
     final result = await service().checkout(
       cart: await cartOf('BRG005'),
       cashier: kasir,
+      storeId: await mainStoreId(db),
       paymentMethodId: qris.id,
       paid: 999999, // diabaikan untuk non-tunai
       paymentRef: ' QR-123 ',
@@ -113,6 +118,7 @@ void main() {
       service().checkout(
         cart: cart,
         cashier: kasir,
+        storeId: await mainStoreId(db),
         paymentMethodId: tunai.id,
         paid: 1000,
       ),
@@ -137,6 +143,7 @@ void main() {
       service().checkout(
         cart: await cartOf('BRG009'),
         cashier: kasir,
+        storeId: await mainStoreId(db),
         paymentMethodId: qris.id,
       ),
       throwsA(isA<CheckoutFailure>()),
@@ -148,6 +155,7 @@ void main() {
     Future<String> pay() async => (await service().checkout(
       cart: cart,
       cashier: kasir,
+      storeId: await mainStoreId(db),
       paymentMethodId: tunai.id,
       paid: 5000,
     )).invoiceNo;
@@ -162,6 +170,7 @@ void main() {
         final result = await service().checkout(
           cart: await cartOf('BRG001', qty: 2),
           cashier: kasir,
+          storeId: await mainStoreId(db),
           paymentMethodId: tunai.id,
           paid: 10000,
         );
@@ -187,6 +196,7 @@ void main() {
       final first = await service().checkout(
         cart: await cartOf('BRG009'),
         cashier: kasir,
+        storeId: await mainStoreId(db),
         paymentMethodId: tunai.id,
         paid: 5000,
       );
@@ -194,6 +204,7 @@ void main() {
       final second = await service().checkout(
         cart: await cartOf('BRG009'),
         cashier: kasir,
+        storeId: await mainStoreId(db),
         paymentMethodId: tunai.id,
         paid: 5000,
       );
@@ -278,6 +289,7 @@ void main() {
       await service().checkout(
         cart: await cartOf('BRG009'),
         cashier: kasir,
+        storeId: await mainStoreId(db),
         paymentMethodId: qris.id,
       );
       expect(
@@ -291,6 +303,7 @@ void main() {
     await service().checkout(
       cart: await cartOf('BRG010'),
       cashier: kasir,
+      storeId: await mainStoreId(db),
       paymentMethodId: tunai.id,
       paid: 10000,
     );
@@ -306,6 +319,7 @@ void main() {
     await service().checkout(
       cart: await cartOf('BRG010'),
       cashier: kasir,
+      storeId: await mainStoreId(db),
       paymentMethodId: tunai.id,
       paid: 10000,
     );
@@ -442,6 +456,137 @@ void main() {
       // Fitur voucher sudah dihapus, tapi data lama di tabel tetap utuh.
       final vouchers = await upgraded.select(upgraded.vouchers).get();
       expect(vouchers.single.code, 'LAMA');
+    });
+
+    test('v4 (skema asli) → v5: faktur tetap, tabel transaksi tertahan '
+        'dibuat', () async {
+      final schema = File('test/fixtures/schema_v4.sql').readAsStringSync();
+      final legacy = NativeDatabase.memory(
+        setup: (Database raw) {
+          for (final stmt in schema.split(';\n')) {
+            if (stmt.trim().isNotEmpty) raw.execute(stmt);
+          }
+          raw.execute(
+            "INSERT INTO users (username, full_name, password_hash, role, "
+            "uuid) VALUES ('kasir', 'Kasir', 'x', 'kasir', 'u-1')",
+          );
+          raw.execute(
+            "INSERT INTO sales (invoice_no, sale_date, user_id, item_count, "
+            "subtotal, discount, total, paid, change_amount, payment_method, "
+            "uuid, terminal_code) VALUES ('INV-K01-20261001-0001', "
+            "1790000000, 1, 1, 3500, 0, 3500, 5000, 1500, 'Tunai', 's-1', "
+            "'K01')",
+          );
+          raw.userVersion = 4;
+        },
+      );
+      final upgraded = AppDatabase(legacy);
+      addTearDown(upgraded.close);
+
+      final sale = (await upgraded.select(upgraded.sales).get()).single;
+      expect(sale.invoiceNo, 'INV-K01-20261001-0001');
+      expect(sale.uuid, 's-1');
+      expect(await upgraded.select(upgraded.heldCarts).get(), isEmpty);
+    });
+
+    test('v5 (skema asli) → v6: data lama masuk Toko Utama, stok dipindah '
+        'ke stok toko', () async {
+      final schema = File('test/fixtures/schema_v5.sql').readAsStringSync();
+      final legacy = NativeDatabase.memory(
+        setup: (Database raw) {
+          for (final stmt in schema.split(';\n')) {
+            if (stmt.trim().isNotEmpty) raw.execute(stmt);
+          }
+          raw.execute(
+            "INSERT INTO users (username, full_name, password_hash, role, "
+            "uuid) VALUES ('admin', 'Admin', 'x', 'admin', 'u-1'), "
+            "('kasir', 'Kasir', 'x', 'kasir', 'u-2')",
+          );
+          raw.execute(
+            "INSERT INTO products (code, name, selling_price, stock, uuid) "
+            "VALUES ('A1', 'Barang A', 5000, 12.5, 'p-1')",
+          );
+          raw.execute(
+            "INSERT INTO sales (invoice_no, sale_date, user_id, item_count, "
+            "subtotal, discount, total, paid, change_amount, payment_method, "
+            "uuid) VALUES ('INV-K01-20261001-0001', 1790000000, 2, 1, 5000, "
+            "0, 5000, 5000, 0, 'Tunai', 's-1')",
+          );
+          raw.execute(
+            "INSERT INTO stock_movements (product_id, type, qty_change, uuid) "
+            "VALUES (1, 'sale', -1, 'm-1')",
+          );
+          raw.execute(
+            "INSERT INTO held_carts (user_id, items, item_count, total, "
+            "created_at) VALUES (2, '[]', 0, 0, 1790000000)",
+          );
+          raw.userVersion = 5;
+        },
+      );
+      final db = AppDatabase(legacy);
+      addTearDown(db.close);
+
+      final store = (await db.select(db.stores).get()).single;
+      expect(store.name, 'Toko Utama');
+      final users = await db.select(db.users).get();
+      expect(users.firstWhere((u) => u.username == 'admin').storeId, isNull);
+      expect(users.firstWhere((u) => u.username == 'kasir').storeId, store.id);
+      expect((await db.select(db.sales).getSingle()).storeId, store.id);
+      expect(
+        (await db.select(db.stockMovements).getSingle()).storeId,
+        store.id,
+      );
+      expect((await db.select(db.heldCarts).getSingle()).storeId, store.id);
+      final entry = await db.select(db.storeProducts).getSingle();
+      expect(entry.stock, 12.5);
+      expect(entry.sellingPrice, isNull);
+      expect(entry.uuid, isNotNull);
+      final p = (await ProductRepository(db)
+          .findByCodeOrBarcode('A1', storeId: store.id))!;
+      expect(p.stock, 12.5);
+      expect(p.sellingPrice, 5000);
+    });
+
+    test('v6 (skema asli) → v7: toko lama memakai struk bawaan, bentuk '
+        'struk bisa disimpan per toko', () async {
+      final schema = File('test/fixtures/schema_v6.sql').readAsStringSync();
+      final legacy = NativeDatabase.memory(
+        setup: (Database raw) {
+          for (final stmt in schema.split(';\n')) {
+            if (stmt.trim().isNotEmpty) raw.execute(stmt);
+          }
+          raw.execute(
+            "INSERT INTO stores (name, address, uuid) "
+            "VALUES ('Toko Lama', 'Jl. Lama', 't-1')",
+          );
+          raw.execute(
+            "INSERT INTO users (username, full_name, password_hash, role, "
+            "uuid) VALUES ('admin', 'Admin', 'x', 'admin', 'u-1')",
+          );
+          raw.userVersion = 6;
+        },
+      );
+      final db = AppDatabase(legacy);
+      addTearDown(db.close);
+
+      final store = await db.select(db.stores).getSingle();
+      expect(store.name, 'Toko Lama');
+      expect(store.receiptTemplate, isNull);
+      final repo = ReceiptSettingsRepository(db);
+      expect(await repo.templateFor(store.id), const ReceiptTemplate());
+
+      final admin = AppUser(
+        id: 1,
+        username: 'admin',
+        fullName: 'Admin',
+        role: UserRole.admin,
+      );
+      await repo.saveTemplate(
+        admin,
+        const ReceiptTemplate(html: '<p>baru</p>'),
+        storeId: store.id,
+      );
+      expect((await repo.templateFor(store.id)).html, '<p>baru</p>');
     });
   });
 }

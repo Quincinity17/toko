@@ -16,6 +16,7 @@ void main() {
   late ProductRepository repo;
   late AppUser admin;
   late AppUser kasir;
+  late int store;
 
   setUp(() async {
     db = await createSeededDb();
@@ -23,6 +24,7 @@ void main() {
     final auth = AuthRepository(db, testHasher);
     admin = await auth.login('admin', 'admin123');
     kasir = await auth.login('kasir', 'kasir123');
+    store = await mainStoreId(db);
   });
 
   tearDown(() => db.close());
@@ -35,7 +37,6 @@ void main() {
     String? unit = 'btl',
     int buy = 9000,
     int sell = 11000,
-    double stock = 12,
     double min = 3,
   }) => ProductDraft(
     code: code,
@@ -45,12 +46,16 @@ void main() {
     unitName: unit,
     purchasePrice: buy,
     sellingPrice: sell,
-    stock: stock,
     minStock: min,
   );
 
+  /// Stok (dan harga khusus) di Toko Utama.
+  List<StoreProductValues> at(double stock, {int? price}) => [
+    StoreProductValues(storeId: store, stock: stock, price: price),
+  ];
+
   test('tambah barang: kategori baru dibuat, satuan dipakai ulang', () async {
-    final p = await repo.save(actor: admin, draft: draft());
+    final p = await repo.save(actor: admin, draft: draft(), stores: at(12));
     expect(p.categoryName, 'Bumbu');
     expect(p.unitName, 'BTL'); // "btl" → satuan BTL yang sudah ada
     final units = await db.select(db.units).get();
@@ -110,8 +115,8 @@ void main() {
   });
 
   test('ubah stok mencatat selisih sebagai penyesuaian', () async {
-    final p = await repo.save(actor: admin, draft: draft(stock: 10));
-    await repo.save(actor: admin, id: p.id, draft: draft(stock: 7));
+    final p = await repo.save(actor: admin, draft: draft(), stores: at(10));
+    await repo.save(actor: admin, id: p.id, draft: draft(), stores: at(7));
     final moves = await (db.select(
       db.stockMovements,
     )..where((m) => m.productId.equals(p.id))).get();
@@ -120,7 +125,8 @@ void main() {
     await repo.save(
       actor: admin,
       id: p.id,
-      draft: draft(stock: 7, sell: 12000),
+      draft: draft(sell: 12000),
+      stores: at(7),
     );
     expect(
       await (db.select(
@@ -143,6 +149,7 @@ void main() {
     await CheckoutService(db).checkout(
       cart: const Cart().add(aqua),
       cashier: kasir,
+      storeId: await mainStoreId(db),
       paymentMethodId: tunai.id,
       paid: 5000,
     );

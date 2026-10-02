@@ -8,6 +8,7 @@ import '../../features/auth/domain/app_user.dart';
 import '../../features/auth/presentation/auth_controller.dart';
 import '../../features/auth/presentation/password_sheet.dart';
 import '../../features/auth/presentation/widgets/user_avatar.dart';
+import '../../features/stores/presentation/store_scope.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_dialogs.dart';
 import '../widgets/pressable_scale.dart';
@@ -46,6 +47,12 @@ const appDestinations = [
     path: AppRoutes.produk,
   ),
   SidebarDestination(
+    label: 'Stok',
+    icon: CupertinoIcons.archivebox,
+    selectedIcon: CupertinoIcons.archivebox_fill,
+    path: AppRoutes.stok,
+  ),
+  SidebarDestination(
     label: 'Laporan',
     icon: CupertinoIcons.chart_bar,
     selectedIcon: CupertinoIcons.chart_bar_fill,
@@ -65,13 +72,14 @@ const _digitKeys = [
   LogicalKeyboardKey.digit3,
   LogicalKeyboardKey.digit4,
   LogicalKeyboardKey.digit5,
+  LogicalKeyboardKey.digit6,
 ];
 
 /// Kerangka utama: sidebar di kiri, halaman aktif di kanan.
 ///
 /// Menu sidebar disaring sesuai peran user yang login.
 ///
-/// Shortcut: Ctrl+1..5 pindah halaman, Ctrl+\ ciutkan sidebar.
+/// Shortcut: Ctrl+1..6 pindah halaman, Ctrl+\ ciutkan sidebar.
 class AppShell extends ConsumerWidget {
   const AppShell({super.key, required this.location, required this.child});
 
@@ -119,7 +127,7 @@ class AppShell extends ConsumerWidget {
                 collapsed: collapsed,
                 onToggleCollapsed: () =>
                     ref.read(sidebarCollapsedProvider.notifier).toggle(),
-                header: const _StoreHeader(),
+                header: _StoreHeader(user: user),
                 footer: _UserFooter(user: user, collapsed: collapsed),
               ),
               Expanded(child: ClipRect(child: child)),
@@ -131,13 +139,19 @@ class AppShell extends ConsumerWidget {
   }
 }
 
-class _StoreHeader extends StatelessWidget {
-  const _StoreHeader();
+/// Nama toko yang sedang dipakai. Admin bisa mengklik untuk berpindah toko
+/// (atau "Semua toko"); supervisor/kasir selalu di tokonya sendiri.
+class _StoreHeader extends ConsumerWidget {
+  const _StoreHeader({required this.user});
+
+  final AppUser user;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final c = context.colors;
-    return Row(
+    final store = ref.watch(activeStoreProvider);
+    final name = store?.name ?? (user.isAdmin ? 'Semua Toko' : 'Toko');
+    final row = Row(
       children: [
         Container(
           width: 30,
@@ -155,14 +169,30 @@ class _StoreHeader extends StatelessWidget {
         const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: Text(
-            'Toko',
+            name,
             maxLines: 1,
-            overflow: TextOverflow.clip,
+            overflow: TextOverflow.ellipsis,
             softWrap: false,
             style: AppTypography.headline.copyWith(color: c.label),
           ),
         ),
+        if (user.isAdmin)
+          Icon(
+            CupertinoIcons.chevron_up_chevron_down,
+            size: 14,
+            color: c.labelSecondary,
+          ),
       ],
+    );
+    if (!user.isAdmin) return row;
+    return Tooltip(
+      message: 'Pilih toko',
+      child: PressableScale(
+        onPressed: () => pickStoreScope(context, ref),
+        pressedScale: 0.97,
+        borderRadius: AppRadius.smAll,
+        child: row,
+      ),
     );
   }
 }

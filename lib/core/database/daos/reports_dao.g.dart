@@ -4,6 +4,7 @@ part of 'reports_dao.dart';
 
 // ignore_for_file: type=lint
 mixin _$ReportsDaoMixin on DatabaseAccessor<AppDatabase> {
+  $StoresTable get stores => attachedDatabase.stores;
   $UsersTable get users => attachedDatabase.users;
   $VouchersTable get vouchers => attachedDatabase.vouchers;
   $PaymentMethodsTable get paymentMethods => attachedDatabase.paymentMethods;
@@ -12,12 +13,15 @@ mixin _$ReportsDaoMixin on DatabaseAccessor<AppDatabase> {
   $UnitsTable get units => attachedDatabase.units;
   $ProductsTable get products => attachedDatabase.products;
   $SaleItemsTable get saleItems => attachedDatabase.saleItems;
+  $StoreProductsTable get storeProducts => attachedDatabase.storeProducts;
   ReportsDaoManager get managers => ReportsDaoManager(this);
 }
 
 class ReportsDaoManager {
   final _$ReportsDaoMixin _db;
   ReportsDaoManager(this._db);
+  $$StoresTableTableManager get stores =>
+      $$StoresTableTableManager(_db.attachedDatabase, _db.stores);
   $$UsersTableTableManager get users =>
       $$UsersTableTableManager(_db.attachedDatabase, _db.users);
   $$VouchersTableTableManager get vouchers =>
@@ -37,4 +41,6 @@ class ReportsDaoManager {
       $$ProductsTableTableManager(_db.attachedDatabase, _db.products);
   $$SaleItemsTableTableManager get saleItems =>
       $$SaleItemsTableTableManager(_db.attachedDatabase, _db.saleItems);
+  $$StoreProductsTableTableManager get storeProducts =>
+      $$StoreProductsTableTableManager(_db.attachedDatabase, _db.storeProducts);
 }

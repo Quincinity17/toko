@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/product_repository.dart';
+import '../../stores/presentation/store_scope.dart';
 import '../domain/product.dart';
 
 const productPageSize = 50;
@@ -30,5 +31,7 @@ final unitNamesProvider = StreamProvider.autoDispose<List<String>>(
 /// Saran nama mirip saat pencarian di halaman Produk kosong.
 final productSuggestionsProvider = FutureProvider.autoDispose
     .family<List<Product>, String>(
-      (ref, text) => ref.watch(productRepositoryProvider).suggest(text),
+      (ref, text) => ref
+          .watch(productRepositoryProvider)
+          .suggest(text, storeId: ref.watch(storeScopeProvider)),
     );

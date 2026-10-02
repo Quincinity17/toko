@@ -7,12 +7,14 @@ mixin _$ProductsDaoMixin on DatabaseAccessor<AppDatabase> {
   $CategoriesTable get categories => attachedDatabase.categories;
   $UnitsTable get units => attachedDatabase.units;
   $ProductsTable get products => attachedDatabase.products;
+  $StoresTable get stores => attachedDatabase.stores;
   $UsersTable get users => attachedDatabase.users;
   $VouchersTable get vouchers => attachedDatabase.vouchers;
   $PaymentMethodsTable get paymentMethods => attachedDatabase.paymentMethods;
   $SalesTable get sales => attachedDatabase.sales;
   $SaleItemsTable get saleItems => attachedDatabase.saleItems;
   $StockMovementsTable get stockMovements => attachedDatabase.stockMovements;
+  $StoreProductsTable get storeProducts => attachedDatabase.storeProducts;
   ProductsDaoManager get managers => ProductsDaoManager(this);
 }
 
@@ -25,6 +27,8 @@ class ProductsDaoManager {
       $$UnitsTableTableManager(_db.attachedDatabase, _db.units);
   $$ProductsTableTableManager get products =>
       $$ProductsTableTableManager(_db.attachedDatabase, _db.products);
+  $$StoresTableTableManager get stores =>
+      $$StoresTableTableManager(_db.attachedDatabase, _db.stores);
   $$UsersTableTableManager get users =>
       $$UsersTableTableManager(_db.attachedDatabase, _db.users);
   $$VouchersTableTableManager get vouchers =>
@@ -43,4 +47,6 @@ class ProductsDaoManager {
         _db.attachedDatabase,
         _db.stockMovements,
       );
+  $$StoreProductsTableTableManager get storeProducts =>
+      $$StoreProductsTableTableManager(_db.attachedDatabase, _db.storeProducts);
 }

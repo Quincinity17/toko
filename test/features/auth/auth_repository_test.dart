@@ -20,7 +20,10 @@ void main() {
 
   test('seed membuat 1 admin dan 1 kasir dengan password ter-hash', () async {
     final rows = await db.select(db.users).get();
-    expect(rows.map((r) => r.role), unorderedEquals(UserRole.values));
+    expect(
+      rows.map((r) => r.role),
+      unorderedEquals([UserRole.admin, UserRole.kasir]),
+    );
     for (final r in rows) {
       expect(r.passwordHash, startsWith(r'$2a$'));
       expect(r.passwordHash, isNot(contains('123')));

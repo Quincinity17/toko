@@ -8,11 +8,19 @@ import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_card.dart';
 import '../../../../core/widgets/app_dialogs.dart';
 import '../../../../core/widgets/app_text_field.dart';
+import '../../../auth/presentation/auth_controller.dart';
 import '../../../products/data/product_repository.dart';
 import '../../../products/domain/product.dart';
+import '../../../receipt/data/printer_failure.dart';
+import '../../../receipt/data/receipt_printer.dart';
+import '../../../receipt/data/receipt_settings_repository.dart';
+import '../../../stores/presentation/store_scope.dart';
+import '../../data/held_cart_repository.dart';
+import '../../domain/held_cart.dart';
 import '../cart_controller.dart';
 import 'cart_summary_panel.dart';
 import 'cart_table.dart';
+import 'held_carts_dialog.dart';
 import 'payment_dialog.dart';
 import 'product_search_sheet.dart';
 
@@ -20,7 +28,8 @@ import 'product_search_sheet.dart';
 ///
 /// Kolom kode selalu kembali fokus supaya scanner barcode USB (yang mengetik
 /// seperti keyboard lalu menekan Enter) bisa langsung dipakai.
-/// Shortcut: F2 / End = bayar, F3 = cari barang.
+/// Shortcut: F2 / End = bayar, F3 = cari barang, F4 = tahan transaksi,
+/// F5 = daftar transaksi tertahan, F6 = buka laci.
 class CheckoutView extends ConsumerStatefulWidget {
   const CheckoutView({super.key});
 
@@ -54,6 +63,9 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
 
   CartController get _cart => ref.read(cartControllerProvider.notifier);
 
+  /// Halaman Kasir hanya menampilkan view ini bila toko sudah dipilih.
+  int get _storeId => ref.read(storeScopeProvider)!;
+
   void _addProduct(Product product) {
     final qty = parseIdNumber(_qty.text);
     _cart.add(product, qty: qty == null || qty <= 0 ? 1 : qty);
@@ -81,7 +93,7 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
     if (text.isEmpty || _busy) return;
     final product = await ref
         .read(productRepositoryProvider)
-        .findByCodeOrBarcode(text);
+        .findByCodeOrBarcode(text, storeId: _storeId);
     if (!mounted) return;
     if (product != null) {
       _addProduct(product);
@@ -124,6 +136,100 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
       await showCheckoutSuccessDialog(context, result);
     }
     _busy = false;
+    focusEntry();
+  }
+
+  /// Menahan keranjang (pelanggan masih lihat-lihat) lalu mengosongkannya
+  /// untuk antrian berikutnya.
+  Future<void> _hold() async {
+    final cart = ref.read(cartControllerProvider);
+    if (cart.isEmpty || _busy) return;
+    _busy = true;
+    final note = await showHoldDialog(context, cart);
+    if (note != null && mounted) {
+      await ref
+          .read(heldCartRepositoryProvider)
+          .hold(
+            cart: cart,
+            cashier: ref.read(authControllerProvider)!,
+            storeId: _storeId,
+            note: note,
+          );
+      _cart.clear();
+      setState(() => _selected = null);
+    }
+    _busy = false;
+    focusEntry();
+  }
+
+  /// Membuka daftar tertahan; transaksi yang dipilih dimuat ke keranjang.
+  /// Keranjang yang sedang terisi ditahan dulu (tanpa catatan).
+  Future<void> _showHeld() async {
+    if (_busy) return;
+    _busy = true;
+    try {
+      final id = await showHeldCartsDialog(context, _storeId);
+      if (id == null || !mounted) return;
+      final repo = ref.read(heldCartRepositoryProvider);
+      final current = ref.read(cartControllerProvider);
+      if (!current.isEmpty) {
+        final ok = await AppDialogs.confirm(
+          context,
+          title: 'Tahan keranjang sekarang?',
+          message:
+              'Keranjang berisi ${current.lines.length} barang. Keranjang ini '
+              'ditahan dulu (tanpa catatan), lalu transaksi yang dipilih '
+              'dibuka.',
+          confirmLabel: 'Tahan & Lanjutkan',
+        );
+        if (!ok || !mounted) return;
+        await repo.hold(
+          cart: current,
+          cashier: ref.read(authControllerProvider)!,
+          storeId: _storeId,
+        );
+      }
+      final ResumedCart resumed;
+      try {
+        resumed = await repo.resume(id);
+      } on HeldCartFailure catch (e) {
+        _cart.clear();
+        if (mounted) {
+          await AppDialogs.alert(context, title: 'Gagal', message: e.message);
+        }
+        return;
+      }
+      _cart.replace(resumed.cart);
+      if (mounted) setState(() => _selected = null);
+      if (resumed.skipped.isNotEmpty && mounted) {
+        await AppDialogs.alert(
+          context,
+          title: 'Sebagian barang tidak dimasukkan',
+          message:
+              '${resumed.skipped.join(', ')} sudah dihapus atau '
+              'dinonaktifkan sejak transaksi ditahan.',
+        );
+      }
+    } finally {
+      _busy = false;
+      focusEntry();
+    }
+  }
+
+  Future<void> _openDrawer() async {
+    if (_busy) return;
+    if (!(ref.read(printerConfigProvider).value?.isReady ?? false)) return;
+    try {
+      await ref.read(receiptPrinterProvider).openDrawer();
+    } on PrinterFailure catch (e) {
+      if (mounted) {
+        await AppDialogs.alert(
+          context,
+          title: 'Laci tidak terbuka',
+          message: e.message,
+        );
+      }
+    }
     focusEntry();
   }
 
@@ -182,8 +288,14 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
 
     final summary = CartSummaryPanel(
       cart: cart,
+      heldCount: ref.watch(heldCartsProvider(_storeId)).value?.length ?? 0,
       onPay: _pay,
+      onHold: _hold,
+      onShowHeld: _showHeld,
       onClear: _confirmClear,
+      onOpenDrawer: ref.watch(printerConfigProvider).value?.isReady ?? false
+          ? _openDrawer
+          : null,
     );
 
     return CallbackShortcuts(
@@ -191,6 +303,9 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
         const SingleActivator(LogicalKeyboardKey.f2): _pay,
         const SingleActivator(LogicalKeyboardKey.end): _pay,
         const SingleActivator(LogicalKeyboardKey.f3): () => _openSearch(),
+        const SingleActivator(LogicalKeyboardKey.f4): _hold,
+        const SingleActivator(LogicalKeyboardKey.f5): _showHeld,
+        const SingleActivator(LogicalKeyboardKey.f6): _openDrawer,
       },
       child: Padding(
         padding: const EdgeInsets.fromLTRB(

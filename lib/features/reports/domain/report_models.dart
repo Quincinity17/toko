@@ -345,6 +345,7 @@ class ReportBundle {
     required this.payments,
     required this.cashiers,
     required this.terminals,
+    this.stores = const [],
   });
 
   final ReportRange range;
@@ -360,6 +361,9 @@ class ReportBundle {
   final List<GroupPerformance> payments;
   final List<GroupPerformance> cashiers;
   final List<GroupPerformance> terminals;
+
+  /// Per toko; hanya berarti saat melihat semua toko.
+  final List<GroupPerformance> stores;
 
   /// Jam dengan omzet terbesar, atau `null` jika belum ada penjualan.
   BucketPoint? get busiestHour => _max(byHour);

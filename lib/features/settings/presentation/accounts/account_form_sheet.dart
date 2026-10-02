@@ -14,6 +14,10 @@ import '../../../auth/domain/app_user.dart';
 import '../../../auth/domain/user_role.dart';
 import '../../../auth/presentation/auth_controller.dart';
 import '../../../auth/presentation/password_sheet.dart';
+import '../../../../core/widgets/option_picker.dart';
+import '../../../stores/data/store_repository.dart';
+import '../../../stores/domain/store.dart';
+import '../../../stores/presentation/store_scope.dart';
 
 /// Membuka form tambah akun (`existing == null`) atau ubah akun.
 Future<void> showAccountFormSheet(BuildContext context, {AppUser? existing}) {
@@ -42,6 +46,40 @@ class _AccountFormState extends ConsumerState<_AccountForm> {
   late UserRole _role = widget.existing?.role ?? UserRole.kasir;
   late bool _active = widget.existing?.isActive ?? true;
 
+  /// Toko supervisor/kasir yang dipilih. Akun baru: toko yang sedang dipilih
+  /// di sidebar (lihat juga [_effectiveStoreId]).
+  late int? _storeId = widget.existing?.storeId ?? ref.read(storeScopeProvider);
+  String? _storeError;
+
+  /// Pilihan user, atau satu-satunya toko aktif bila belum memilih.
+  int? get _effectiveStoreId {
+    if (_storeId != null) return _storeId;
+    final active = _activeStores.where((s) => s.isActive).toList();
+    return active.length == 1 ? active.first.id : null;
+  }
+
+  List<Store> get _activeStores =>
+      (ref.read(storesProvider).value ?? const <Store>[])
+          .where((s) => s.isActive || s.id == _storeId)
+          .toList();
+
+  Future<void> _pickStore() async {
+    final stores = _activeStores;
+    final current = stores.where((s) => s.id == _effectiveStoreId).firstOrNull;
+    final pick = await showOptionPicker(
+      context,
+      title: 'Toko',
+      options: [for (final s in stores) s.name],
+      selected: current?.name,
+    );
+    final name = pick?.value;
+    if (name == null) return;
+    setState(() {
+      _storeId = stores.firstWhere((s) => s.name == name).id;
+      _storeError = null;
+    });
+  }
+
   String? _fullNameError, _usernameError, _passwordError, _confirmError;
   String? _error;
   bool _saving = false;
@@ -65,9 +103,13 @@ class _AccountFormState extends ConsumerState<_AccountForm> {
       _confirmError = _isNew
           ? AccountRules.confirmPassword(_password.text, _confirm.text)
           : null;
+      _storeError = _role.needsStore && _effectiveStoreId == null
+          ? 'Pilih toko untuk ${_role.label.toLowerCase()}.'
+          : null;
       _error = null;
     });
     return [
+      _storeError,
       _fullNameError,
       _usernameError,
       _passwordError,
@@ -101,6 +143,7 @@ class _AccountFormState extends ConsumerState<_AccountForm> {
           username: _username.text,
           fullName: _fullName.text,
           role: _role,
+          storeId: _effectiveStoreId,
           password: _password.text,
         );
       } else {
@@ -109,6 +152,7 @@ class _AccountFormState extends ConsumerState<_AccountForm> {
           id: widget.existing!.id,
           fullName: _fullName.text,
           role: _role,
+          storeId: _effectiveStoreId,
           isActive: _active,
         );
         ref.read(authControllerProvider.notifier).refreshIfCurrent(updated);
@@ -142,6 +186,11 @@ class _AccountFormState extends ConsumerState<_AccountForm> {
     final c = context.colors;
     final me = ref.watch(authControllerProvider);
     final isSelf = !_isNew && widget.existing!.id == me?.id;
+    final stores = ref.watch(storesProvider).value ?? const <Store>[];
+    final storeName = stores
+        .where((s) => s.id == _effectiveStoreId)
+        .firstOrNull
+        ?.name;
 
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(
@@ -167,6 +216,23 @@ class _AccountFormState extends ConsumerState<_AccountForm> {
                 style: AppTypography.footnote.copyWith(color: c.labelSecondary),
               ),
             ),
+          if (_role.needsStore) ...[
+            const SizedBox(height: AppSpacing.lg),
+            InsetGroupedSection(
+              footer: _storeError,
+              children: [
+                InsetGroupedTile(
+                  leading: TileIcon(
+                    icon: CupertinoIcons.building_2_fill,
+                    color: _storeError == null ? c.accent : c.danger,
+                  ),
+                  title: 'Toko',
+                  value: storeName ?? 'Pilih toko',
+                  onPressed: _saving ? null : _pickStore,
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: AppSpacing.lg),
           AppTextField(
             controller: _fullName,
@@ -276,9 +342,12 @@ class _RolePicker extends StatelessWidget {
 
   static const _descriptions = {
     UserRole.admin:
-        'Akses semua menu, termasuk produk, laporan, dan pengaturan.',
+        'Semua toko dan semua menu, termasuk produk, laporan, dan pengaturan.',
+    UserRole.supervisor:
+        'Kasir dan Stok di tokonya: bisa menambah, mengurangi, dan '
+        'menghitung ulang stok.',
     UserRole.kasir:
-        'Hanya layar Kasir: transaksi dan daftar pembayaran hari ini.',
+        'Hanya layar Kasir di tokonya: transaksi dan pembayaran hari ini.',
   };
 
   @override
@@ -312,13 +381,16 @@ class _RolePicker extends StatelessWidget {
                       children: [
                         Row(
                           children: [
-                            Text(
-                              role.label,
-                              style: AppTypography.headline.copyWith(
-                                color: c.label,
+                            Expanded(
+                              child: Text(
+                                role.label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTypography.headline.copyWith(
+                                  color: c.label,
+                                ),
                               ),
                             ),
-                            const Spacer(),
                             Icon(
                               value == role
                                   ? CupertinoIcons.checkmark_circle_fill
