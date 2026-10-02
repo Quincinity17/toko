@@ -141,6 +141,53 @@ void main() {
       expect(filesIn(dir), hasLength(4));
     });
 
+    test('jumlah file & jarak hari bisa diatur admin (dengan batas)', () async {
+      expect(() => service().setKeep(kasir, 5), throwsA(isA<BackupFailure>()));
+      expect(
+        () => service().setIntervalDays(kasir, 1),
+        throwsA(isA<BackupFailure>()),
+      );
+
+      // Simpan 3 file: backup ke-4 menghapus yang paling lama saja.
+      await service().setKeep(admin, 3);
+      for (final day in [1, 2, 3, 4]) {
+        now = DateTime(2026, 10, day, 9);
+        await service().run();
+      }
+      expect(filesIn(dir).where((n) => n.endsWith('.sqlite')), [
+        'toko-database-20261002-090000.sqlite',
+        'toko-database-20261003-090000.sqlite',
+        'toko-database-20261004-090000.sqlite',
+      ]);
+
+      // Dikurangi jadi 1: berlaku pada backup berikutnya.
+      await service().setKeep(admin, 1);
+      now = DateTime(2026, 10, 5, 9);
+      await service().run();
+      expect(filesIn(dir), [
+        'toko-barang-20261005-090000.xlsx',
+        'toko-database-20261005-090000.sqlite',
+      ]);
+
+      // Backup harian.
+      await service().setIntervalDays(admin, 1);
+      now = DateTime(2026, 10, 6, 8, 59);
+      expect(await service().runIfDue(), isFalse);
+      now = DateTime(2026, 10, 6, 9);
+      expect(await service().runIfDue(), isTrue);
+      final status = await service().status();
+      expect(status.intervalDays, 1);
+      expect(status.keep, 1);
+      expect(status.nextAt, DateTime(2026, 10, 7, 9));
+
+      // Di luar batas dipotong: 1–30 hari, 1–10 file.
+      await service().setIntervalDays(admin, 99);
+      await service().setKeep(admin, 0);
+      final clamped = await service().status();
+      expect(clamped.intervalDays, 30);
+      expect(clamped.keep, 1);
+    });
+
     test('folder pilihan admin; gagal ditulis dicatat', () async {
       expect(
         () => service().setFolder(kasir, dir.path),

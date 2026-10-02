@@ -25,8 +25,8 @@ class BackupFailure implements Exception {
 
 /// Backup komputer ini: salinan database (`VACUUM INTO`) + Excel barang per
 /// toko, ke folder bawaan (`Documents/Toko Backup`) atau folder pilihan admin.
-/// Otomatis seminggu sekali ([runIfDue]); hanya [BackupPolicy.keep] terbaru
-/// per jenis yang disimpan.
+/// Otomatis tiap N hari ([runIfDue]); hanya N terbaru per jenis yang
+/// disimpan (keduanya diatur admin, bawaan 7 hari & 2 file).
 class BackupService {
   BackupService(
     this._db, {
@@ -43,7 +43,24 @@ class BackupService {
   static const kLastAt = 'backup.last_at';
   static const kLastError = 'backup.last_error';
   static const kEnabled = 'backup.enabled';
-  static const _keys = [kFolder, kLastAt, kLastError, kEnabled];
+  static const kIntervalDays = 'backup.interval_days';
+  static const kKeep = 'backup.keep';
+  static const _keys = [
+    kFolder,
+    kLastAt,
+    kLastError,
+    kEnabled,
+    kIntervalDays,
+    kKeep,
+  ];
+
+  static int _intervalOf(Map<String, String> s) => BackupPolicy.clampInterval(
+    int.tryParse(s[kIntervalDays] ?? '') ?? BackupPolicy.defaultIntervalDays,
+  );
+
+  static int _keepOf(Map<String, String> s) => BackupPolicy.clampKeep(
+    int.tryParse(s[kKeep] ?? '') ?? BackupPolicy.defaultKeep,
+  );
 
   /// Mencegah dua backup berjalan bersamaan (otomatis + tombol).
   static Future<List<BackupFile>>? _running;
@@ -83,6 +100,8 @@ class BackupService {
       enabled: s[kEnabled] != 'false',
       folder: dir.path,
       isCustomFolder: custom.isNotEmpty,
+      intervalDays: _intervalOf(s),
+      keep: _keepOf(s),
       lastAt: DateTime.tryParse(s[kLastAt] ?? ''),
       lastError: error.isEmpty ? null : error,
       files: await _listFiles(dir),
@@ -119,6 +138,22 @@ class BackupService {
     return _db.settingsDao.set(kEnabled, '$enabled');
   }
 
+  /// Backup otomatis tiap [days] hari (1–30).
+  Future<void> setIntervalDays(AppUser actor, int days) {
+    _requireAdmin(actor);
+    return _db.settingsDao.set(
+      kIntervalDays,
+      '${BackupPolicy.clampInterval(days)}',
+    );
+  }
+
+  /// Simpan [count] backup terbaru per jenis (1–10). File lebih lama dari
+  /// itu dihapus pada backup berikutnya.
+  Future<void> setKeep(AppUser actor, int count) {
+    _requireAdmin(actor);
+    return _db.settingsDao.set(kKeep, '${BackupPolicy.clampKeep(count)}');
+  }
+
   /// [path] `null` = kembali ke folder bawaan.
   Future<void> setFolder(AppUser actor, String? path) {
     _requireAdmin(actor);
@@ -133,12 +168,13 @@ class BackupService {
 
   // ── Menjalankan ──
 
-  /// Backup otomatis: hanya jika aktif dan sudah seminggu sejak yang
-  /// terakhir. Gagal dicatat (tampil di Pengaturan), tidak dilempar.
+  /// Backup otomatis: hanya jika aktif dan sudah lewat jarak hari yang
+  /// diatur sejak yang terakhir. Gagal dicatat (tampil di Pengaturan), tidak dilempar.
   Future<bool> runIfDue() async {
     final s = await _settings();
     if (s[kEnabled] == 'false') return false;
-    if (!BackupPolicy.isDue(DateTime.tryParse(s[kLastAt] ?? ''), _clock())) {
+    final last = DateTime.tryParse(s[kLastAt] ?? '');
+    if (!BackupPolicy.isDue(last, _clock(), intervalDays: _intervalOf(s))) {
       return false;
     }
     try {
@@ -161,6 +197,7 @@ class BackupService {
   Future<List<BackupFile>> _run() async {
     final now = _clock();
     final dir = await folder();
+    final keep = _keepOf(await _settings());
     try {
       await dir.create(recursive: true);
 
@@ -199,13 +236,14 @@ class BackupService {
       );
       await File(xlsxPath).writeAsBytes(bytes, flush: true);
 
-      // 3. Simpan 2 terbaru per jenis; sisanya (yang paling lama) dihapus.
+      // 3. Simpan [keep] terbaru per jenis; sisanya (yang paling lama)
+      //    dihapus.
       final names = [
         await for (final e in dir.list())
           if (e is File) p.basename(e.path),
       ];
       for (final kind in BackupKind.values) {
-        for (final old in BackupPolicy.toDelete(names, kind)) {
+        for (final old in BackupPolicy.toDelete(names, kind, keep: keep)) {
           await File(p.join(dir.path, old)).delete();
         }
       }

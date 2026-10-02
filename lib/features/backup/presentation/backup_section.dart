@@ -105,7 +105,7 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
       header: 'Backup',
       footer:
           'Berisi salinan database lengkap dan daftar barang per toko (Excel, '
-          'bisa di-import ulang). Hanya ${BackupPolicy.keep} backup terbaru '
+          'bisa di-import ulang). Hanya ${status.keep} backup terbaru '
           'yang disimpan; backup baru menggantikan yang paling lama. Backup '
           'dibuat di komputer ini saat aplikasi terbuka. Sesekali salin ke '
           'flashdisk atau penyimpanan lain.',
@@ -116,11 +116,49 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
             icon: CupertinoIcons.arrow_clockwise_circle_fill,
             color: c.success,
           ),
-          title: 'Backup otomatis tiap minggu',
+          title: 'Backup otomatis',
           trailing: CupertinoSwitch(
             value: status.enabled,
             activeTrackColor: c.success,
             onChanged: (v) => _service.setEnabled(user, v),
+          ),
+        ),
+        InsetGroupedTile(
+          leading: TileIcon(
+            icon: CupertinoIcons.calendar,
+            color: c.labelSecondary,
+          ),
+          title: 'Backup tiap',
+          subtitle: status.intervalDays == 7
+              ? 'Seminggu sekali'
+              : status.intervalDays == 1
+              ? 'Setiap hari'
+              : null,
+          trailing: _Stepper(
+            key: const ValueKey('backup-interval'),
+            value: status.intervalDays,
+            min: BackupPolicy.intervalRange.min,
+            max: BackupPolicy.intervalRange.max,
+            unit: 'hari',
+            onChanged: (v) => _service.setIntervalDays(user, v),
+          ),
+        ),
+        InsetGroupedTile(
+          leading: TileIcon(
+            icon: CupertinoIcons.square_stack_3d_up_fill,
+            color: c.labelSecondary,
+          ),
+          title: 'Simpan maksimal',
+          subtitle:
+              'Per jenis (database & Excel); yang lebih lama dihapus '
+              'saat backup berikutnya',
+          trailing: _Stepper(
+            key: const ValueKey('backup-keep'),
+            value: status.keep,
+            min: BackupPolicy.keepRange.min,
+            max: BackupPolicy.keepRange.max,
+            unit: 'file',
+            onChanged: (v) => _service.setKeep(user, v),
           ),
         ),
         InsetGroupedTile(
@@ -182,6 +220,52 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
               ),
             ],
           ),
+        ),
+      ],
+    );
+  }
+}
+
+class _Stepper extends StatelessWidget {
+  const _Stepper({
+    super.key,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.unit,
+    required this.onChanged,
+  });
+
+  final int value;
+  final int min;
+  final int max;
+  final String unit;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AppIconButton(
+          icon: CupertinoIcons.minus,
+          onPressed: value > min ? () => onChanged(value - 1) : null,
+        ),
+        SizedBox(
+          width: 64,
+          child: Text(
+            '$value $unit',
+            textAlign: TextAlign.center,
+            style: AppTypography.body.copyWith(
+              color: c.label,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ),
+        AppIconButton(
+          icon: CupertinoIcons.plus,
+          onPressed: value < max ? () => onChanged(value + 1) : null,
         ),
       ],
     );

@@ -1,19 +1,32 @@
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 
-/// Aturan backup otomatis (permintaan user): seminggu sekali, hanya 2 backup
-/// terbaru per jenis yang disimpan; backup baru menggantikan yang paling lama.
+/// Aturan backup otomatis (permintaan user): tiap [defaultIntervalDays] hari,
+/// hanya [defaultKeep] backup terbaru per jenis yang disimpan; backup baru
+/// menggantikan yang paling lama. Keduanya bisa diatur admin dalam batas
+/// [intervalRange] dan [keepRange].
 class BackupPolicy {
   const BackupPolicy._();
 
-  static const interval = Duration(days: 7);
-  static const keep = 2;
+  static const defaultIntervalDays = 7;
+  static const defaultKeep = 2;
+  static const intervalRange = (min: 1, max: 30);
+  static const keepRange = (min: 1, max: 10);
+
+  static int clampInterval(int days) =>
+      days.clamp(intervalRange.min, intervalRange.max);
+  static int clampKeep(int n) => n.clamp(keepRange.min, keepRange.max);
 
   static final _stamp = DateFormat('yyyyMMdd-HHmmss');
 
-  /// Sudah waktunya backup: belum pernah, atau terakhir ≥ [interval] lalu.
-  static bool isDue(DateTime? lastAt, DateTime now) =>
-      lastAt == null || !now.isBefore(lastAt.add(interval));
+  /// Sudah waktunya backup: belum pernah, atau terakhir ≥ [intervalDays]
+  /// hari lalu.
+  static bool isDue(
+    DateTime? lastAt,
+    DateTime now, {
+    int intervalDays = defaultIntervalDays,
+  }) =>
+      lastAt == null || !now.isBefore(lastAt.add(Duration(days: intervalDays)));
 
   static String fileName(BackupKind kind, DateTime at) =>
       '${kind.prefix}${_stamp.format(at)}.${kind.extension}';
@@ -23,7 +36,7 @@ class BackupPolicy {
   static List<String> toDelete(
     Iterable<String> names,
     BackupKind kind, {
-    int keep = keep,
+    int keep = defaultKeep,
   }) {
     final mine = names.where(kind.matches).toList()
       ..sort((a, b) => b.compareTo(a));
@@ -73,6 +86,8 @@ class BackupStatus {
     required this.enabled,
     required this.folder,
     required this.isCustomFolder,
+    this.intervalDays = BackupPolicy.defaultIntervalDays,
+    this.keep = BackupPolicy.defaultKeep,
     this.lastAt,
     this.lastError,
     this.files = const [],
@@ -83,11 +98,17 @@ class BackupStatus {
 
   /// Folder dipilih admin (bukan folder bawaan Documents).
   final bool isCustomFolder;
+
+  /// Backup otomatis tiap sekian hari.
+  final int intervalDays;
+
+  /// Jumlah backup terbaru yang disimpan per jenis.
+  final int keep;
   final DateTime? lastAt;
 
   /// Pesan gagal backup otomatis terakhir (mis. flashdisk dicabut).
   final String? lastError;
   final List<BackupFile> files;
 
-  DateTime? get nextAt => lastAt?.add(BackupPolicy.interval);
+  DateTime? get nextAt => lastAt?.add(Duration(days: intervalDays));
 }

@@ -203,14 +203,17 @@ tab **Transaksi Baru** dan **Hari Ini**.
 
 ## Backup (`features/backup`, Pengaturan › Backup, admin)
 
-- **Otomatis tiap minggu, simpan 2 terbaru per jenis** (permintaan user): backup
-  baru menggantikan yang paling lama (`BackupPolicy`, nama file memuat waktu
+- **Otomatis tiap N hari, simpan N terbaru per jenis** (permintaan user; bisa
+  diatur admin: 1–30 hari, bawaan 7; 1–10 file, bawaan 2; settings
+  `backup.interval_days` / `backup.keep`, nilai di luar batas dipotong). Backup
+  baru menggantikan yang paling lama; jumlah dikurangi berlaku saat backup
+  berikutnya (`BackupPolicy`, nama file memuat waktu
   `yyyyMMdd-HHmmss` → urutan nama = urutan waktu).
 - Isi: `toko-database-*.sqlite` (salinan lengkap lewat `VACUUM INTO`, aman saat
   aplikasi dipakai) + `toko-barang-*.xlsx` (`exportProductsWorkbook`: satu sheet
   per toko, stok & harga toko itu, kolom sama dengan export → bisa di-import).
 - `BackupScheduler` dimulai di `main()`: cek 30 detik setelah buka lalu tiap
-  jam; jalan bila aktif dan backup terakhir ≥ 7 hari. Gagal (mis. flashdisk
+  jam; jalan bila aktif dan backup terakhir ≥ jarak hari yang diatur. Gagal (mis. flashdisk
   dicabut) dicatat di `backup.last_error` dan tampil di Pengaturan.
 - Settings: `backup.dir` (kosong = `Documents/Toko Backup`), `backup.enabled`,
   `backup.last_at`. Per komputer. Tombol Backup Sekarang & Buka Folder.

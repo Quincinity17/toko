@@ -854,9 +854,22 @@ void main() {
     await login(tester, 'admin', 'admin123');
     await tester.tap(find.text('Pengaturan'));
     await settle(tester);
-    await waitFor(find.text('Backup otomatis tiap minggu'));
-    expect(find.text('Backup otomatis tiap minggu'), findsOneWidget);
+    await waitFor(find.text('Backup otomatis'));
+    expect(find.text('Backup otomatis'), findsOneWidget);
     expect(find.text('Belum pernah'), findsOneWidget);
+    expect(find.text('7 hari'), findsOneWidget);
+    expect(find.text('2 file'), findsOneWidget);
+
+    // Simpan maksimal 2 → 3 file.
+    await tapCentered(
+      tester,
+      find.descendant(
+        of: find.byKey(const ValueKey('backup-keep')),
+        matching: find.byIcon(CupertinoIcons.plus),
+      ),
+    );
+    await waitFor(find.text('3 file'));
+    expect(find.text('3 file'), findsOneWidget);
 
     await tapCentered(tester, find.text('Backup Sekarang'));
     await waitFor(find.text('Backup selesai'));
