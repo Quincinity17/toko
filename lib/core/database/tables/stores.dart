@@ -40,6 +40,9 @@ class StoreProducts extends Table {
   /// Harga jual khusus toko ini; `null` = harga default `products.selling_price`.
   IntColumn get sellingPrice => integer().nullable()();
 
+  /// v12: segel (`Sealer`) atas toko, barang, stok, harga.
+  TextColumn get seal => text().nullable()();
+
   @override
   List<Set<Column>> get uniqueKeys => [
     {storeId, productId},

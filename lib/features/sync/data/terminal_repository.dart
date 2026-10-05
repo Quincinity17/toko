@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../../core/database/tables/audit.dart';
 import '../../../core/database/uuid.dart';
 import '../../auth/domain/app_user.dart';
 import '../domain/terminal.dart';
@@ -51,7 +52,14 @@ class TerminalRepository {
     }
     final error = Terminal.validateCode(code);
     if (error != null) throw TerminalFailure(error);
+    final old = await _db.settingsDao.get(kCode);
     await _db.settingsDao.set(kCode, Terminal.normalizeCode(code));
+    await _db.auditDao.append(
+      type: AuditType.terminalChanged,
+      summary: 'Kode terminal $old → ${Terminal.normalizeCode(code)}',
+      userId: actor.id,
+      userName: actor.fullName,
+    );
   }
 
   Terminal _build(String? id, String? code, String? mode) => Terminal(

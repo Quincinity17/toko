@@ -6,13 +6,16 @@ import '../../../../core/utils/formatters.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_dialogs.dart';
 import '../../../../core/widgets/state_views.dart';
+import '../../../auth/presentation/auth_controller.dart';
 import '../../../receipt/data/printer_failure.dart';
 import '../../../receipt/data/receipt_printer.dart';
 import '../../../receipt/data/receipt_settings_repository.dart';
+import '../../data/return_service.dart';
 import '../../data/sales_repository.dart';
 import '../../domain/sale.dart';
+import 'return_dialog.dart';
 
-/// Rincian satu faktur: barang, potongan, pembayaran.
+/// Rincian satu faktur: barang, potongan, pembayaran, retur.
 Future<void> showSaleDetailSheet(BuildContext context, SaleSummary sale) {
   return AppDialogs.sheet<void>(
     context,
@@ -47,8 +50,8 @@ class _SaleDetail extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         children: [
-          Text(label, style: style ?? muted),
-          const Spacer(),
+          Expanded(child: Text(label, style: style ?? muted)),
+          const SizedBox(width: AppSpacing.sm),
           Text(value, style: style ?? body),
         ],
       ),
@@ -66,9 +69,14 @@ class _SaleDetail extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            '${Fmt.dateTime(sale.date)} · Kasir: ${sale.cashierName}',
+            '${Fmt.dateTime(sale.date)} · '
+            '${sale.isReturn ? 'Diproses' : 'Kasir'}: ${sale.cashierName}',
             style: muted,
           ),
+          if (sale.isReturn || sale.returnedAmount > 0) ...[
+            const SizedBox(height: AppSpacing.sm),
+            _ReturnBanner(sale: sale),
+          ],
           const SizedBox(height: AppSpacing.md),
           Container(
             decoration: BoxDecoration(
@@ -141,13 +149,90 @@ class _SaleDetail extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
             child: Container(height: 0.5, color: c.separator),
           ),
-          row('Dibayar (${sale.paymentMethod})', Fmt.rupiah(sale.paid)),
-          if (sale.paymentRef != null) row('No. referensi', sale.paymentRef!),
-          if (sale.change > 0) row('Kembalian', Fmt.rupiah(sale.change)),
-          if (ref.watch(printerConfigProvider).value?.isReady ?? false) ...[
+          if (sale.isReturn)
+            row('Dikembalikan (${sale.paymentMethod})', Fmt.rupiah(-sale.total))
+          else ...[
+            row('Dibayar (${sale.paymentMethod})', Fmt.rupiah(sale.paid)),
+            if (sale.paymentRef != null) row('No. referensi', sale.paymentRef!),
+            if (sale.change > 0) row('Kembalian', Fmt.rupiah(sale.change)),
+            if (sale.returnedAmount > 0)
+              row('Sudah diretur', '− ${Fmt.rupiah(sale.returnedAmount)}'),
+          ],
+          if (!sale.isReturn &&
+              !sale.isFullyReturned &&
+              ReturnService.canReturn(
+                ref.watch(authControllerProvider)!,
+                sale.storeId,
+              )) ...[
             const SizedBox(height: AppSpacing.lg),
+            AppButton(
+              label: 'Retur / Batalkan',
+              icon: CupertinoIcons.arrow_uturn_left,
+              variant: AppButtonVariant.gray,
+              destructive: true,
+              expand: true,
+              onPressed: () => _return(context, sale),
+            ),
+          ],
+          // Nota retur tidak dicetak ulang sebagai struk penjualan.
+          if (!sale.isReturn &&
+              (ref.watch(printerConfigProvider).value?.isReady ?? false)) ...[
+            const SizedBox(height: AppSpacing.sm),
             _ReprintButton(saleId: sale.id),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+Future<void> _return(BuildContext context, SaleSummary sale) async {
+  final result = await showReturnDialog(context, sale);
+  if (result == null || !context.mounted) return;
+  Navigator.pop(context); // tutup rincian (datanya sudah berubah)
+  await AppDialogs.alert(
+    context,
+    title: 'Retur tersimpan',
+    message:
+        '${result.invoiceNo}\nKembalikan ${Fmt.rupiah(result.refund)} ke '
+        'pelanggan (${result.paymentMethod}).',
+  );
+}
+
+/// Keterangan retur: nota retur (alasan) atau faktur yang sudah diretur.
+class _ReturnBanner extends StatelessWidget {
+  const _ReturnBanner({required this.sale});
+
+  final SaleSummary sale;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final color = sale.isReturn || sale.isFullyReturned ? c.danger : c.warning;
+    final text = sale.isReturn
+        ? 'Nota retur. Alasan: ${sale.returnReason ?? '–'}'
+        : sale.isFullyReturned
+        ? 'Faktur ini sudah dibatalkan (semua barang diretur).'
+        : 'Sebagian barang sudah diretur (${Fmt.rupiah(sale.returnedAmount)}).';
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: AppRadius.mdAll,
+      ),
+      child: Row(
+        children: [
+          Icon(CupertinoIcons.arrow_uturn_left, size: 16, color: color),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              text,
+              style: AppTypography.footnote.copyWith(color: color),
+            ),
+          ),
         ],
       ),
     );

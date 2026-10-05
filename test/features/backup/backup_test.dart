@@ -95,7 +95,7 @@ void main() {
         );
         expect(book.tables.keys, containsAll(['Toko Utama', 'Toko B']));
         final main = book.tables['Toko Utama']!;
-        expect(main.rows.first.first?.value.toString(), 'Kode');
+        expect(main.rows.first.first?.value.toString(), 'Barcode');
         expect(main.maxRows, count + 1);
         final indomie = (await ProductRepository(db)
             .findByCodeOrBarcode('BRG001', storeId: await mainStoreId(db)))!;

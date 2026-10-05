@@ -60,47 +60,93 @@ class _PosPageState extends ConsumerState<PosPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.xl,
-              AppSpacing.xl,
-              AppSpacing.xl,
-              AppSpacing.md,
-            ),
-            child: Row(
-              children: [
-                Text(
-                  'Kasir',
-                  style: AppTypography.largeTitle.copyWith(color: c.label),
-                ),
-                const SizedBox(width: AppSpacing.xl),
-                if (hasStore)
-                  CupertinoSlidingSegmentedControl<_PosTab>(
-                    groupValue: _tab,
-                    padding: const EdgeInsets.all(3),
-                    onValueChanged: (t) {
-                      if (t != null) _setTab(t);
-                    },
-                    children: const {
-                      _PosTab.checkout: _Seg('Transaksi Baru'),
-                      _PosTab.today: _Seg('Hari Ini'),
-                    },
+          if (AppBreakpoints.isCompact(context))
+            // HP: judul + printer (ikon), tab di baris sendiri.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.pageGutterCompact,
+                AppSpacing.xs,
+                AppSpacing.pageGutterCompact,
+                AppSpacing.sm,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Kasir',
+                          style: AppTypography.title1.copyWith(color: c.label),
+                        ),
+                      ),
+                      AppIconButton(
+                        icon: CupertinoIcons.printer,
+                        tooltip: printerReady ? 'Printer Nota' : 'Atur Printer',
+                        filled: true,
+                        onPressed: _openPrinterSettings,
+                      ),
+                    ],
                   ),
-                const SizedBox(width: AppSpacing.md),
-                const Expanded(child: _InfoBar()),
-                const SizedBox(width: AppSpacing.md),
-                // Printer menempel ke komputer kasir, jadi semua peran boleh
-                // mengaturnya dari sini (bentuk struk tetap diatur admin).
-                AppButton(
-                  label: printerReady ? 'Printer Nota' : 'Atur Printer',
-                  icon: CupertinoIcons.printer,
-                  variant: AppButtonVariant.tinted,
-                  size: AppButtonSize.small,
-                  onPressed: _openPrinterSettings,
-                ),
-              ],
+                  if (hasStore) ...[
+                    const SizedBox(height: AppSpacing.xs),
+                    CupertinoSlidingSegmentedControl<_PosTab>(
+                      groupValue: _tab,
+                      padding: const EdgeInsets.all(3),
+                      onValueChanged: (t) {
+                        if (t != null) _setTab(t);
+                      },
+                      children: const {
+                        _PosTab.checkout: _Seg('Transaksi Baru'),
+                        _PosTab.today: _Seg('Hari Ini'),
+                      },
+                    ),
+                  ],
+                ],
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.xl,
+                AppSpacing.xl,
+                AppSpacing.xl,
+                AppSpacing.md,
+              ),
+              child: Row(
+                children: [
+                  Text(
+                    'Kasir',
+                    style: AppTypography.largeTitle.copyWith(color: c.label),
+                  ),
+                  const SizedBox(width: AppSpacing.xl),
+                  if (hasStore)
+                    CupertinoSlidingSegmentedControl<_PosTab>(
+                      groupValue: _tab,
+                      padding: const EdgeInsets.all(3),
+                      onValueChanged: (t) {
+                        if (t != null) _setTab(t);
+                      },
+                      children: const {
+                        _PosTab.checkout: _Seg('Transaksi Baru'),
+                        _PosTab.today: _Seg('Hari Ini'),
+                      },
+                    ),
+                  const SizedBox(width: AppSpacing.md),
+                  const Expanded(child: _InfoBar()),
+                  const SizedBox(width: AppSpacing.md),
+                  // Printer menempel ke komputer kasir, jadi semua peran boleh
+                  // mengaturnya dari sini (bentuk struk tetap diatur admin).
+                  AppButton(
+                    label: printerReady ? 'Printer Nota' : 'Atur Printer',
+                    icon: CupertinoIcons.printer,
+                    variant: AppButtonVariant.tinted,
+                    size: AppButtonSize.small,
+                    onPressed: _openPrinterSettings,
+                  ),
+                ],
+              ),
             ),
-          ),
           Expanded(
             child: hasStore
                 ? IndexedStack(

@@ -21,9 +21,12 @@ class FuzzyMatch {
 
   /// Kemiripan [query] dengan nama barang [name] (0–1). Setiap kata di query
   /// dicari padanan terbaiknya di nama, lalu dirata-rata.
-  static double score(String query, String name) {
-    final q = tokens(query);
-    final n = tokens(name);
+  static double score(String query, String name) =>
+      scoreTokens(tokens(query), tokens(name));
+
+  /// [score] untuk kata yang sudah dipecah ([tokens]); dipakai saat
+  /// membandingkan banyak nama supaya tidak memecah ulang.
+  static double scoreTokens(List<String> q, List<String> n) {
     if (q.isEmpty || n.isEmpty) return 0;
 
     // Query yang ditulis tanpa spasi, mis. "indomiegoreng".

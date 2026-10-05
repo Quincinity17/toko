@@ -1,22 +1,25 @@
 import 'package:drift/drift.dart';
-import 'package:drift_flutter/drift_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../../features/auth/domain/user_role.dart';
 import '../../features/payments/domain/payment_method.dart';
+import '../security/device_keys.dart';
+import '../security/sealer.dart';
+import 'daos/audit_dao.dart';
 import 'daos/held_carts_dao.dart';
 import 'daos/payment_methods_dao.dart';
 import 'daos/outbox_dao.dart';
 import 'daos/products_dao.dart';
 import 'daos/reports_dao.dart';
 import 'daos/sales_dao.dart';
+import 'daos/seals_dao.dart';
 import 'daos/settings_dao.dart';
 import 'daos/stores_dao.dart';
 import 'daos/tags_dao.dart';
 import 'daos/users_dao.dart';
 import 'sample_products.dart';
 import 'uuid.dart';
+import 'tables/audit.dart';
 import 'tables/held_carts.dart';
 import 'tables/payment_methods.dart';
 import 'tables/products.dart';
@@ -62,6 +65,7 @@ part 'app_database.g.dart';
     StoreProducts,
     Tags,
     ProductTags,
+    AuditLog,
   ],
   daos: [
     UsersDao,
@@ -74,13 +78,28 @@ part 'app_database.g.dart';
     HeldCartsDao,
     TagsDao,
     StoresDao,
+    SealsDao,
+    AuditDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
-  AppDatabase([QueryExecutor? executor]) : super(executor ?? _openDefault());
+  /// Di aplikasi dibuka lewat `openDeviceDatabase()` (terenkripsi, [keys]
+  /// dari perangkat); tes memakai `NativeDatabase.memory()` dan kunci segel
+  /// tetap.
+  AppDatabase(super.executor, {this.keys})
+    : sealer = Sealer((keys ?? DeviceKeys.forTests()).sealKey);
+
+  /// Kunci perangkat; `null` = database tidak dienkripsi (tes).
+  final DeviceKeys? keys;
+
+  /// Segel data & catatan aktivitas (lihat [SealsDao], [AuditDao]).
+  final Sealer sealer;
+
+  /// Versi skema sekarang (juga dipakai pemeriksa file backup).
+  static const currentSchemaVersion = 12;
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => currentSchemaVersion;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -91,6 +110,7 @@ class AppDatabase extends _$AppDatabase {
       await _assignDefaultStore();
       await insertSampleTags(this);
       await _categoriesToTags();
+      await _baselineSeals('Database baru');
     },
     onUpgrade: (m, from, to) async {
       // Catatan: createTable selalu memakai definisi tabel TERBARU. Karena itu
@@ -187,6 +207,27 @@ class AppDatabase extends _$AppDatabase {
         // Kategori & tag dilebur jadi satu konsep "Kategori" (keputusan
         // user): kategori lama tiap barang menjadi tag barang itu.
         await _categoriesToTags();
+      }
+      if (from < 11) {
+        // Retur/batal faktur = nota retur bernilai negatif. Idempoten: tabel
+        // sales/sale_items dari cabang v1 di atas sudah punya kolomnya.
+        await _ensureColumn(m, sales, sales.returnOfId);
+        await _ensureColumn(m, sales, sales.returnReason);
+        await _ensureColumn(m, saleItems, saleItems.returnOfItemId);
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_sales_return_of '
+          'ON sales (return_of_id)',
+        );
+      }
+      if (from < 12) {
+        // Catatan aktivitas berantai + segel data (keamanan). Idempoten:
+        // tabel dari cabang awal sudah punya kolom seal.
+        await m.createTable(auditLog);
+        await m.createIndex(idxAuditLogCreated);
+        await _ensureColumn(m, users, users.seal);
+        await _ensureColumn(m, products, products.seal);
+        await _ensureColumn(m, storeProducts, storeProducts.seal);
+        await _baselineSeals('Pembaruan aplikasi (v12)');
       }
     },
     beforeOpen: (details) async {
@@ -338,12 +379,13 @@ class AppDatabase extends _$AppDatabase {
 
   /// File `toko.sqlite` di folder data aplikasi
   /// (Windows: %APPDATA%\id.toko\toko).
-  static QueryExecutor _openDefault() {
-    return driftDatabase(
-      name: 'toko',
-      native: const DriftNativeOptions(
-        databaseDirectory: getApplicationSupportDirectory,
-      ),
+  /// Menyegel semua baris dan memulai rantai catatan aktivitas (database
+  /// baru, migrasi v12, setelah memulihkan backup).
+  Future<void> _baselineSeals(String reason) async {
+    await sealsDao.resealAll();
+    await auditDao.append(
+      type: AuditType.sealsRebuilt,
+      summary: 'Segel data dibuat: $reason',
     );
   }
 }

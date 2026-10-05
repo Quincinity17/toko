@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:excel/excel.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -205,6 +206,23 @@ void main() {
     expect(status['BRG005']!.daysOfCover, isNull);
   });
 
+  test('omzet barang tanpa harga beli ditandai', () async {
+    await seedSales();
+    final range = ReportRange.preset(RangePreset.today, at(0, 20));
+    expect((await repo().summary(range)).hasMissingCost, isFalse);
+
+    // Harga beli Aqua dikosongkan (0), lalu terjual 2 × 3.500.
+    final aqua = (await products.findByCodeOrBarcode('BRG009'))!;
+    await (db.update(db.products)..where((p) => p.id.equals(aqua.id))).write(
+      const ProductsCompanion(purchasePrice: Value(0)),
+    );
+    await sell(at(0, 16), {'BRG009': 2});
+
+    final s = await repo().summary(range);
+    expect(s.revenueWithoutCost, 7000);
+    expect(s.hasMissingCost, isTrue);
+  });
+
   test('dashboard ikut berubah saat ada transaksi baru', () async {
     final r = repo();
     final range = ReportRange.preset(RangePreset.today, at(0, 20));
@@ -216,6 +234,20 @@ void main() {
     await sub.cancel();
     expect(values.first, 0);
     expect(values.last, 7000);
+  });
+
+  test('dashboard per toko ikut berubah saat ada transaksi baru', () async {
+    final range = ReportRange.preset(RangePreset.today, at(0, 20));
+    final values = <List<GroupPerformance>>[];
+    final sub = repo().watchStoreSales(range).listen(values.add);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    await sell(at(0, 11), {'BRG009': 2});
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    await sub.cancel();
+    expect(values.first, isEmpty);
+    expect(values.last.single.name, 'Toko Utama');
+    expect(values.last.single.revenue, 7000);
+    expect(values.last.single.transactions, 1);
   });
 
   group('rentang', () {

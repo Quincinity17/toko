@@ -79,7 +79,10 @@ void main() {
     expect(UserRole.kasir.canAccess('/kasir'), isTrue);
     expect(UserRole.kasir.canAccess('/dashboard'), isFalse);
     expect(UserRole.kasir.canAccess('/produk'), isFalse);
-    expect(UserRole.kasir.canAccess('/pengaturan'), isFalse);
+    expect(UserRole.kasir.canAccess('/pengaturan'), isTrue); // ringkas
+    expect(UserRole.kasir.canAccess('/pengaturan/akun'), isFalse);
+    expect(UserRole.supervisor.canAccess('/pengaturan'), isTrue);
+    expect(UserRole.supervisor.canAccess('/pengaturan/struk'), isFalse);
     expect(UserRole.admin.canAccess('/pengaturan'), isTrue);
   });
 }

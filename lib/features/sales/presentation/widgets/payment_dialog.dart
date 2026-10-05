@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/utils/device.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/utils/number_input.dart';
@@ -428,11 +429,15 @@ class _MethodChip extends StatelessWidget {
               color: selected ? c.accent : c.labelSecondary,
             ),
             const SizedBox(width: AppSpacing.xs),
-            Text(
-              method.name,
-              style: AppTypography.subheadline.copyWith(
-                color: c.label,
-                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+            Flexible(
+              child: Text(
+                method.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.subheadline.copyWith(
+                  color: c.label,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                ),
               ),
             ),
           ],
@@ -646,7 +651,7 @@ class _SuccessViewState extends ConsumerState<_SuccessView> {
               ],
               const SizedBox(height: AppSpacing.xl),
               AppButton(
-                label: 'Transaksi Baru  (Enter)',
+                label: Device.withShortcut('Transaksi Baru', 'Enter'),
                 size: AppButtonSize.large,
                 expand: true,
                 onPressed: close,

@@ -22,7 +22,11 @@ class Product {
   }) : defaultSellingPrice = defaultSellingPrice ?? sellingPrice;
 
   final int id;
+
+  /// Di layar disebut "Barcode" (wajib, unik; mis. BMM0000001).
   final String code;
+
+  /// Di layar disebut "Barcode bawaan" (opsional; barcode pabrik di kemasan).
   final String? barcode;
   final String name;
   final int? unitId;
@@ -114,16 +118,18 @@ class ProductRules {
 
   static String? code(String v) {
     final c = v.trim();
-    if (c.isEmpty) return 'Kode wajib diisi.';
-    if (c.length > 40) return 'Kode maksimal 40 karakter.';
+    if (c.isEmpty) return 'Barcode wajib diisi.';
+    if (c.length > 40) return 'Barcode maksimal 40 karakter.';
     return null;
   }
 
   static String? barcode(String? v) {
     final b = v?.trim() ?? '';
     if (b.isEmpty) return null;
-    if (b.length > 40) return 'Barcode maksimal 40 karakter.';
-    if (b.contains(RegExp(r'\s'))) return 'Barcode tidak boleh berisi spasi.';
+    if (b.length > 40) return 'Barcode bawaan maksimal 40 karakter.';
+    if (b.contains(RegExp(r'\s'))) {
+      return 'Barcode bawaan tidak boleh berisi spasi.';
+    }
     return null;
   }
 
@@ -156,7 +162,7 @@ class ProductRules {
 
 enum ProductSort {
   name('Nama A–Z'),
-  code('Kode'),
+  code('Barcode'),
   stockLow('Stok terkecil'),
   priceHigh('Harga jual tertinggi'),
   updated('Terakhir diubah');

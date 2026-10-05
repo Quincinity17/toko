@@ -1,6 +1,21 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Printer jaringan (LAN/WiFi, port 9100). -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Printer Bluetooth (SPP) yang sudah dipasangkan: Android 12+ butuh
+         BLUETOOTH_CONNECT, versi lama BLUETOOTH. Tidak memindai perangkat. -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-feature
+        android:name="android.hardware.bluetooth"
+        android:required="false" />
+
     <application
-        android:label="toko"
+        android:label="Toko"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

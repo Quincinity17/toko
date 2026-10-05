@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/utils/device.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/number_input.dart';
 import '../../../../core/widgets/app_button.dart';
@@ -15,6 +18,7 @@ import '../../../receipt/data/printer_failure.dart';
 import '../../../receipt/data/receipt_printer.dart';
 import '../../../receipt/data/receipt_settings_repository.dart';
 import '../../../stores/presentation/store_scope.dart';
+import '../../data/cashier_audit.dart';
 import '../../data/held_cart_repository.dart';
 import '../../domain/held_cart.dart';
 import '../cart_controller.dart';
@@ -57,8 +61,16 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
     super.dispose();
   }
 
-  void focusEntry() {
-    if (mounted) _codeFocus.requestFocus();
+  /// HP/tablet: kolom barcode tidak difokuskan otomatis, karena keyboard
+  /// layar akan muncul dan menutupi keranjang. Fokus hanya dipertahankan
+  /// setelah scan/ketik barcode ([force]), supaya scanner Bluetooth tetap
+  /// bisa dipakai beruntun.
+  static bool get _touch => Device.isTouch;
+
+  /// Kolom barcode selalu kembali fokus (scanner USB di komputer kasir).
+  void focusEntry({bool force = false}) {
+    if (!mounted || (_touch && !force)) return;
+    _codeFocus.requestFocus();
   }
 
   CartController get _cart => ref.read(cartControllerProvider.notifier);
@@ -97,7 +109,7 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
     if (!mounted) return;
     if (product != null) {
       _addProduct(product);
-      focusEntry();
+      focusEntry(force: true);
       return;
     }
     // Bukan kode/barcode persis: buka pencarian dengan teks yang sama.
@@ -221,6 +233,7 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
     if (!(ref.read(printerConfigProvider).value?.isReady ?? false)) return;
     try {
       await ref.read(receiptPrinterProvider).openDrawer();
+      unawaited(ref.read(cashierAuditProvider).drawerOpened());
     } on PrinterFailure catch (e) {
       if (mounted) {
         await AppDialogs.alert(
@@ -243,6 +256,12 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
       destructive: true,
     );
     if (ok) {
+      // Tercatat: batal transaksi tidak meninggalkan faktur.
+      unawaited(
+        ref
+            .read(cashierAuditProvider)
+            .cartCleared(ref.read(cartControllerProvider)),
+      );
       _cart.clear();
       setState(() => _selected = null);
     }
@@ -258,12 +277,19 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
       initial: line.qty,
       suffix: line.product.unitName,
     );
-    if (qty != null) _cart.setQty(index, qty);
+    if (qty != null) {
+      unawaited(
+        ref.read(cashierAuditProvider).itemReduced(line, line.qty, qty),
+      );
+      _cart.setQty(index, qty);
+    }
     setState(() => _selected = qty == 0 ? null : index);
     focusEntry();
   }
 
   void _remove(int index) {
+    final line = ref.read(cartControllerProvider).lines[index];
+    unawaited(ref.read(cashierAuditProvider).itemReduced(line, line.qty, 0));
     _cart.removeAt(index);
     setState(() => _selected = null);
     focusEntry();
@@ -279,6 +305,10 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
       scrollController: _scroll,
       onSelect: (i) => setState(() => _selected = i),
       onQtyChanged: (i, q) {
+        final line = cart.lines[i];
+        unawaited(
+          ref.read(cashierAuditProvider).itemReduced(line, line.qty, q),
+        );
         _cart.setQty(i, q);
         if (q <= 0) setState(() => _selected = null);
       },
@@ -286,7 +316,9 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
       onRemove: _remove,
     );
 
+    final compact = AppBreakpoints.isCompact(context);
     final summary = CartSummaryPanel(
+      compact: compact,
       cart: cart,
       heldCount: ref.watch(heldCartsProvider(_storeId)).value?.length ?? 0,
       onPay: _pay,
@@ -308,18 +340,27 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
         const SingleActivator(LogicalKeyboardKey.f6): _openDrawer,
       },
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.xl,
-          0,
-          AppSpacing.xl,
-          AppSpacing.xl,
-        ),
+        padding: compact
+            ? const EdgeInsets.fromLTRB(
+                AppSpacing.pageGutterCompact,
+                0,
+                AppSpacing.pageGutterCompact,
+                AppSpacing.sm,
+              )
+            : const EdgeInsets.fromLTRB(
+                AppSpacing.xl,
+                0,
+                AppSpacing.xl,
+                AppSpacing.xl,
+              ),
         child: LayoutBuilder(
           builder: (context, constraints) {
             final wide = constraints.maxWidth >= 980;
             final left = Column(
               children: [
                 _EntryBar(
+                  autofocus: !_touch,
+                  compact: compact,
                   code: _code,
                   codeFocus: _codeFocus,
                   qty: _qty,
@@ -330,10 +371,20 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
                     if (_codeError != null) setState(() => _codeError = null);
                   },
                 ),
-                const SizedBox(height: AppSpacing.md),
+                SizedBox(height: compact ? AppSpacing.sm : AppSpacing.md),
                 Expanded(child: table),
               ],
             );
+            if (compact) {
+              // HP: keranjang mengisi layar, total + Bayar di bawah.
+              return Column(
+                children: [
+                  Expanded(child: left),
+                  const SizedBox(height: AppSpacing.sm),
+                  summary,
+                ],
+              );
+            }
             if (wide) {
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -360,6 +411,8 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
 
 class _EntryBar extends StatelessWidget {
   const _EntryBar({
+    this.autofocus = true,
+    this.compact = false,
     required this.code,
     required this.codeFocus,
     required this.qty,
@@ -369,6 +422,9 @@ class _EntryBar extends StatelessWidget {
     required this.onCodeChanged,
   });
 
+  /// HP: kolom jumlah lebih sempit, tombol cari berupa ikon.
+  final bool compact;
+  final bool autofocus;
   final TextEditingController code;
   final FocusNode codeFocus;
   final TextEditingController qty;
@@ -380,12 +436,12 @@ class _EntryBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppCard(
-      padding: const EdgeInsets.all(AppSpacing.md),
+      padding: EdgeInsets.all(compact ? AppSpacing.sm : AppSpacing.md),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 92,
+            width: compact ? 68 : 92,
             child: AppTextField(
               controller: qty,
               label: 'Jumlah',
@@ -400,9 +456,11 @@ class _EntryBar extends StatelessWidget {
             child: AppTextField(
               controller: code,
               focusNode: codeFocus,
-              autofocus: true,
-              label: 'Kode / Barcode',
-              placeholder: 'Scan barcode atau ketik kode, lalu Enter',
+              autofocus: autofocus,
+              label: 'Barcode',
+              placeholder: compact
+                  ? 'Scan / ketik barcode'
+                  : 'Scan atau ketik barcode, lalu Enter',
               prefixIcon: CupertinoIcons.barcode,
               errorText: codeError,
               textInputAction: TextInputAction.done,
@@ -413,13 +471,21 @@ class _EntryBar extends StatelessWidget {
           const SizedBox(width: AppSpacing.sm),
           Padding(
             // Sejajarkan tombol dengan field (melewati tinggi label).
-            padding: const EdgeInsets.only(top: 22),
-            child: AppButton(
-              label: 'Cari Barang  (F3)',
-              icon: CupertinoIcons.search,
-              variant: AppButtonVariant.tinted,
-              onPressed: onSearch,
-            ),
+            padding: EdgeInsets.only(top: compact ? 26 : 22),
+            child: compact
+                ? AppIconButton(
+                    icon: CupertinoIcons.search,
+                    tooltip: 'Cari barang',
+                    size: 44,
+                    filled: true,
+                    onPressed: onSearch,
+                  )
+                : AppButton(
+                    label: Device.withShortcut('Cari Barang', 'F3'),
+                    icon: CupertinoIcons.search,
+                    variant: AppButtonVariant.tinted,
+                    onPressed: onSearch,
+                  ),
           ),
         ],
       ),

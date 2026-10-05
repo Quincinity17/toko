@@ -2,9 +2,12 @@ import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../../core/database/tables/audit.dart';
 import '../../../core/database/tables/sales.dart';
 import '../../../core/database/tables/sync.dart';
 import '../../../core/database/uuid.dart';
+import '../../../core/utils/formatters.dart';
+import '../../audit/domain/sale_digest.dart';
 import '../../auth/domain/app_user.dart';
 import '../../payments/domain/payment_method.dart';
 import '../../sync/data/terminal_repository.dart';
@@ -156,6 +159,37 @@ class CheckoutService {
       // Masuk antrian kirim ke server di transaksi yang sama: jika faktur
       // tersimpan, antriannya pasti ada.
       await _db.outboxDao.enqueue(OutboxEntity.sale, saleUuid);
+
+      // Catatan aktivitas + sidik jari isi faktur (pemeriksaan keutuhan).
+      await _db.auditDao.append(
+        type: AuditType.sale,
+        summary:
+            '$invoiceNo · ${cart.lines.length} barang · ${Fmt.rupiah(total)} '
+            '(${methodRow.name})',
+        userId: cashier.id,
+        userName: cashier.fullName,
+        storeId: storeId,
+        data: {
+          'uuid': saleUuid,
+          'invoice': invoiceNo,
+          'total': total,
+          'digest': saleDigest(
+            uuid: saleUuid,
+            invoiceNo: invoiceNo,
+            total: total,
+            items: [
+              for (final l in cart.lines)
+                (
+                  productId: l.product.id,
+                  qty: l.qty,
+                  price: l.price,
+                  subtotal: l.total,
+                ),
+            ],
+          ),
+        },
+        at: now,
+      );
 
       return CheckoutResult(
         saleId: saleId,

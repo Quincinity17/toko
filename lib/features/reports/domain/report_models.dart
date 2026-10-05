@@ -96,6 +96,7 @@ class SalesSummary {
     this.discount = 0,
     this.cost = 0,
     this.quantity = 0,
+    this.revenueWithoutCost = 0,
   });
 
   final int transactions;
@@ -110,6 +111,13 @@ class SalesSummary {
   /// Harga pokok barang terjual (qty × harga beli saat terjual).
   final int cost;
   final double quantity;
+
+  /// Omzet dari barang yang terjual tanpa harga beli (harga beli opsional,
+  /// kosong = 0). Laba barang ini terhitung penuh, jadi laba kotor terlalu
+  /// tinggi bila nilainya > 0.
+  final int revenueWithoutCost;
+
+  bool get hasMissingCost => revenueWithoutCost > 0;
 
   int get grossProfit => revenue - cost;
 

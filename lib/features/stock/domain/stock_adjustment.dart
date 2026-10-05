@@ -47,5 +47,6 @@ class StockMovement {
     StockMovementType.sale => 'Penjualan',
     StockMovementType.import => 'Import',
     StockMovementType.adjust => 'Penyesuaian',
+    StockMovementType.saleReturn => 'Retur',
   };
 }

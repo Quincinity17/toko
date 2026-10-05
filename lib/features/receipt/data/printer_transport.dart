@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/printer_config.dart';
+import 'android_bluetooth.dart';
 import 'printer_failure.dart';
 import 'windows_serial.dart';
 import 'windows_spooler.dart';
@@ -26,7 +27,8 @@ abstract interface class PrinterTransport {
 
 /// - Printer terpasang: Windows lewat spooler (RAW), macOS/Linux lewat `lp`.
 /// - Jaringan: koneksi TCP langsung ke printer (biasanya port 9100).
-/// - Bluetooth/serial: port COM (Windows) atau `/dev/…` (macOS/Linux).
+/// - Bluetooth/serial: port COM (Windows) atau `/dev/…` (macOS/Linux);
+///   Android: printer Bluetooth yang dipasangkan ([AndroidBluetooth]).
 class DefaultPrinterTransport implements PrinterTransport {
   const DefaultPrinterTransport();
 
@@ -52,6 +54,7 @@ class DefaultPrinterTransport implements PrinterTransport {
 
   @override
   Future<List<String>> listSerialPorts() async {
+    if (Platform.isAndroid) return AndroidBluetooth.bondedDevices();
     if (Platform.isWindows) {
       // Daftar port COM dari registry (termasuk "Serial over Bluetooth").
       try {
@@ -185,6 +188,7 @@ class DefaultPrinterTransport implements PrinterTransport {
   }
 
   Future<void> _sendToSerial(String port, int baud, Uint8List data) async {
+    if (Platform.isAndroid) return AndroidBluetooth.send(port, data);
     if (Platform.isWindows) {
       return Isolate.run(() => windowsWriteSerial(port, baud, data));
     }

@@ -150,6 +150,27 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
+  /// Nama dan kode semua barang aktif, bahan pengecekan nama mirip.
+  Future<List<({String name, String code})>> activeNameCodes() {
+    final query = selectOnly(products)
+      ..addColumns([products.name, products.code])
+      ..where(products.isActive.equals(true));
+    return query
+        .map(
+          (r) => (name: r.read(products.name)!, code: r.read(products.code)!),
+        )
+        .get();
+  }
+
+  /// Kode semua barang (aktif maupun tidak), terbaru dulu; bahan nomor
+  /// barcode otomatis.
+  Future<List<String>> codesNewestFirst() {
+    final query = selectOnly(products)
+      ..addColumns([products.code])
+      ..orderBy([OrderingTerm.desc(products.id)]);
+    return query.map((r) => r.read(products.code)!).get();
+  }
+
   /// Barang berdasarkan id, mengikuti urutan [ids].
   Future<List<Product>> byIds(List<int> ids, {required int? storeId}) async {
     if (ids.isEmpty) return const [];
@@ -283,10 +304,17 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
     return row.read(count) ?? 0;
   }
 
-  Future<int> insertProduct(ProductsCompanion p) => into(products).insert(p);
+  // Setiap penulisan menyegel ulang baris (lihat SealsDao).
+  Future<int> insertProduct(ProductsCompanion p) async {
+    final id = await into(products).insert(p);
+    await attachedDatabase.sealsDao.resealProduct(id);
+    return id;
+  }
 
-  Future<void> updateProduct(int id, ProductsCompanion p) =>
-      (update(products)..where((t) => t.id.equals(id))).write(p);
+  Future<void> updateProduct(int id, ProductsCompanion p) async {
+    await (update(products)..where((t) => t.id.equals(id))).write(p);
+    await attachedDatabase.sealsDao.resealProduct(id);
+  }
 
   /// Menghapus barang beserta riwayat stok dan data per tokonya. Hanya untuk
   /// barang yang belum pernah terjual (dicek pemanggil).

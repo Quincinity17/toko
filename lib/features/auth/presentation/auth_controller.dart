@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../audit/data/audit_repository.dart';
+import '../../audit/domain/audit_entry.dart';
 import '../data/auth_repository.dart';
 import '../domain/app_user.dart';
 
@@ -14,7 +16,15 @@ class AuthController extends Notifier<AppUser?> {
     state = await ref.read(authRepositoryProvider).login(username, password);
   }
 
-  void logout() => state = null;
+  void logout() {
+    final user = state;
+    if (user != null) {
+      ref
+          .read(auditRepositoryProvider)
+          .record(AuditType.logout, 'Keluar ${user.fullName}', actor: user);
+    }
+    state = null;
+  }
 
   /// Menyegarkan data user yang login setelah akunnya diubah (misalnya nama).
   void refreshIfCurrent(AppUser updated) {

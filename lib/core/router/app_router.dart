@@ -6,6 +6,7 @@ import '../../features/auth/presentation/auth_controller.dart';
 import '../../features/auth/presentation/login_page.dart';
 import '../../features/dashboard/presentation/dashboard_page.dart';
 import '../../features/payments/presentation/payment_methods_page.dart';
+import '../../features/products/presentation/product_bulk_entry_page.dart';
 import '../../features/products/presentation/product_import_page.dart';
 import '../../features/products/presentation/products_page.dart';
 import '../../features/products/presentation/tags_page.dart';
@@ -53,7 +54,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           _page(
             AppRoutes.produk,
             const ProductsPage(),
-            routes: [_page('import', const ProductImportPage())],
+            routes: [
+              _page('import', const ProductImportPage()),
+              _page('tabel', const ProductBulkEntryPage()),
+            ],
           ),
           _page(AppRoutes.stok, const StockPage()),
           _page(AppRoutes.laporan, const ReportsPage()),

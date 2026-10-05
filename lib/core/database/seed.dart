@@ -49,5 +49,6 @@ class DatabaseSeeder {
         ),
     ];
     await _db.batch((b) => b.insertAll(_db.users, rows));
+    await _db.sealsDao.resealAll();
   }
 }

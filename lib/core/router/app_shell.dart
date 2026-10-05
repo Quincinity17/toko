@@ -116,23 +116,133 @@ class AppShell extends ConsumerWidget {
       },
       child: Focus(
         autofocus: true,
-        child: Scaffold(
-          backgroundColor: c.background,
-          body: Row(
-            children: [
-              AppSidebar(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
+            // HP: sidebar jadi laci (☰). Tablet tegak: ikon saja.
+            if (width < AppBreakpoints.compact) {
+              return _CompactShell(
+                user: user,
                 destinations: destinations,
-                selectedIndex: selected,
+                selected: selected,
                 onSelected: go,
-                collapsed: collapsed,
-                onToggleCollapsed: () =>
-                    ref.read(sidebarCollapsedProvider.notifier).toggle(),
-                header: _StoreHeader(user: user),
-                footer: _UserFooter(user: user, collapsed: collapsed),
+                child: child,
+              );
+            }
+            final narrow = collapsed || width < AppBreakpoints.medium;
+            return Scaffold(
+              backgroundColor: c.background,
+              body: Row(
+                children: [
+                  AppSidebar(
+                    destinations: destinations,
+                    selectedIndex: selected,
+                    onSelected: go,
+                    collapsed: narrow,
+                    onToggleCollapsed: () =>
+                        ref.read(sidebarCollapsedProvider.notifier).toggle(),
+                    header: _StoreHeader(user: user),
+                    footer: _UserFooter(user: user, collapsed: narrow),
+                  ),
+                  Expanded(child: ClipRect(child: child)),
+                ],
               ),
-              Expanded(child: ClipRect(child: child)),
-            ],
-          ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// Tata letak HP: bilah atas (☰ + nama toko) dan sidebar sebagai laci yang
+/// tertutup setelah memilih halaman.
+class _CompactShell extends StatelessWidget {
+  const _CompactShell({
+    required this.user,
+    required this.destinations,
+    required this.selected,
+    required this.onSelected,
+    required this.child,
+  });
+
+  final AppUser user;
+  final List<SidebarDestination> destinations;
+  final int selected;
+  final ValueChanged<int> onSelected;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Scaffold(
+      backgroundColor: c.background,
+      drawerScrimColor: CupertinoColors.black.withValues(alpha: 0.3),
+      drawer: Builder(
+        builder: (drawerContext) {
+          void close() => Navigator.of(drawerContext).pop();
+          return Drawer(
+            width: AppSizes.sidebarExpanded + 16,
+            backgroundColor: c.background,
+            shape: const RoundedRectangleBorder(),
+            child: AppSidebar(
+              destinations: destinations,
+              selectedIndex: selected,
+              onSelected: (i) {
+                close();
+                onSelected(i);
+              },
+              collapsed: false,
+              onToggleCollapsed: close,
+              header: _StoreHeader(user: user),
+              footer: _UserFooter(user: user, collapsed: false),
+            ),
+          );
+        },
+      ),
+      body: Builder(
+        builder: (scaffoldContext) => Column(
+          children: [
+            ColoredBox(
+              color: c.background,
+              child: SafeArea(
+                bottom: false,
+                child: SizedBox(
+                  height: 48,
+                  child: Row(
+                    children: [
+                      const SizedBox(width: AppSpacing.xs),
+                      Tooltip(
+                        message: 'Menu',
+                        child: PressableScale(
+                          onPressed: () =>
+                              Scaffold.of(scaffoldContext).openDrawer(),
+                          pressedScale: 0.9,
+                          borderRadius: AppRadius.smAll,
+                          child: SizedBox(
+                            width: 44,
+                            height: 44,
+                            child: Icon(
+                              CupertinoIcons.line_horizontal_3,
+                              size: 24,
+                              color: c.accent,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.xs),
+                      Expanded(child: _StoreHeader(user: user)),
+                      const SizedBox(width: AppSpacing.md),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            // Ruang aman bawah: garis navigasi gestur Android/iOS.
+            Expanded(
+              child: SafeArea(top: false, child: ClipRect(child: child)),
+            ),
+          ],
         ),
       ),
     );

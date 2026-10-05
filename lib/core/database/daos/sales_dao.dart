@@ -22,9 +22,15 @@ class SalesDao extends DatabaseAccessor<AppDatabase> with _$SalesDaoMixin {
     return row?.read(sales.invoiceNo);
   }
 
-  /// Faktur dalam rentang [start, end), terbaru dulu, beserta nama kasir.
-  /// [storeId] `null` = semua toko.
-  Stream<List<(SaleRow, String)>> watchSalesBetween(
+  /// Nilai yang sudah diretur dari faktur (positif), dari nota retur.
+  static final _returned = CustomExpression<int>(
+    '(SELECT COALESCE(-SUM(r.total), 0) FROM sales r '
+    'WHERE r.return_of_id = sales.id)',
+  );
+
+  /// Faktur dalam rentang [start, end), terbaru dulu, beserta nama kasir dan
+  /// nilai yang sudah diretur. [storeId] `null` = semua toko.
+  Stream<List<(SaleRow, String, int)>> watchSalesBetween(
     DateTime start,
     DateTime end, {
     int? storeId,
@@ -38,9 +44,16 @@ class SalesDao extends DatabaseAccessor<AppDatabase> with _$SalesDaoMixin {
                     ? const Constant(true)
                     : sales.storeId.equals(storeId)),
           )
-          ..orderBy([OrderingTerm.desc(sales.saleDate)]);
+          ..orderBy([OrderingTerm.desc(sales.saleDate)])
+          ..addColumns([_returned]);
     return query
-        .map((r) => (r.readTable(sales), r.readTable(users).fullName))
+        .map(
+          (r) => (
+            r.readTable(sales),
+            r.readTable(users).fullName,
+            r.read(_returned) ?? 0,
+          ),
+        )
         .watch();
   }
 
@@ -52,6 +65,27 @@ class SalesDao extends DatabaseAccessor<AppDatabase> with _$SalesDaoMixin {
     return query
         .map((r) => (r.readTable(sales), r.readTable(users).fullName))
         .getSingleOrNull();
+  }
+
+  /// Jumlah & nilai (positif) yang sudah diretur per baris faktur [saleId]:
+  /// `id baris asal → (qty, subtotal)`.
+  Future<Map<int, (double, int)>> returnedByItem(int saleId) async {
+    final rows = await customSelect(
+      'SELECT si.return_of_item_id AS item, -SUM(si.qty) AS qty, '
+      '-SUM(si.subtotal) AS subtotal '
+      'FROM sale_items si JOIN sales s ON s.id = si.sale_id '
+      'WHERE s.return_of_id = ? AND si.return_of_item_id IS NOT NULL '
+      'GROUP BY si.return_of_item_id',
+      variables: [Variable.withInt(saleId)],
+      readsFrom: {sales, saleItems},
+    ).get();
+    return {
+      for (final r in rows)
+        r.read<int>('item'): (
+          (r.data['qty'] as num).toDouble(),
+          (r.data['subtotal'] as num).toInt(),
+        ),
+    };
   }
 
   Future<List<SaleItemRow>> itemsOf(int saleId) {

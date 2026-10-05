@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../../core/database/tables/audit.dart';
 import '../../auth/domain/app_user.dart';
 import '../domain/payment_method.dart';
 
@@ -66,6 +67,7 @@ class PaymentMethodRepository {
             sortOrder: Value(await dao.nextSortOrder()),
           ),
         );
+        await _log(actor, 'Metode bayar baru "$trimmed"');
         return paymentMethodFromRow((await dao.findById(newId))!);
       }
 
@@ -85,6 +87,11 @@ class PaymentMethodRepository {
           kind: Value(kind),
           isActive: Value(isActive),
         ),
+      );
+      await _log(
+        actor,
+        'Metode bayar "${current.name}" diubah'
+        '${current.isActive != isActive ? (isActive ? ' (diaktifkan)' : ' (dinonaktifkan)') : ''}',
       );
       return paymentMethodFromRow((await dao.findById(id))!);
     });
@@ -108,8 +115,16 @@ class PaymentMethodRepository {
         );
       }
       await dao.deleteMethod(id);
+      await _log(actor, 'Metode bayar "${current.name}" dihapus');
     });
   }
+
+  Future<void> _log(AppUser actor, String summary) => _db.auditDao.append(
+    type: AuditType.paymentMethodChanged,
+    summary: summary,
+    userId: actor.id,
+    userName: actor.fullName,
+  );
 
   void _requireAdmin(AppUser actor) {
     if (!actor.isAdmin) {

@@ -38,12 +38,19 @@ class TodaySalesView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sales = ref.watch(todaySalesProvider);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.xl,
-        0,
-        AppSpacing.xl,
-        AppSpacing.xl,
-      ),
+      padding: AppBreakpoints.isCompact(context)
+          ? const EdgeInsets.fromLTRB(
+              AppSpacing.pageGutterCompact,
+              0,
+              AppSpacing.pageGutterCompact,
+              AppSpacing.sm,
+            )
+          : const EdgeInsets.fromLTRB(
+              AppSpacing.xl,
+              0,
+              AppSpacing.xl,
+              AppSpacing.xl,
+            ),
       child: sales.when(
         loading: () => const LoadingState(),
         error: (e, _) => ErrorBanner(message: 'Gagal memuat transaksi: $e'),
@@ -69,23 +76,31 @@ class _SalesTable extends StatelessWidget {
       fontWeight: FontWeight.w600,
       letterSpacing: 0.3,
     );
+    // HP: daftar ringkas tanpa baris judul kolom.
+    final compact = AppBreakpoints.isCompact(context);
     return AppCard(
       padding: EdgeInsets.zero,
       child: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
-            child: Row(
-              children: [
-                for (final (label, width, align) in _cols)
-                  _cell(
-                    width,
-                    Text(label.toUpperCase(), textAlign: align, style: header),
-                  ),
-              ],
+          if (!compact) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+              child: Row(
+                children: [
+                  for (final (label, width, align) in _cols)
+                    _cell(
+                      width,
+                      Text(
+                        label.toUpperCase(),
+                        textAlign: align,
+                        style: header,
+                      ),
+                    ),
+                ],
+              ),
             ),
-          ),
-          Container(height: 0.5, color: c.separator),
+            Container(height: 0.5, color: c.separator),
+          ],
           Expanded(
             child: sales.isEmpty
                 ? const EmptyState(
@@ -102,7 +117,9 @@ class _SalesTable extends StatelessWidget {
                       padding: const EdgeInsets.only(left: 16),
                       child: Container(height: 0.5, color: c.separator),
                     ),
-                    itemBuilder: (context, i) => _SaleRow(sale: sales[i]),
+                    itemBuilder: (context, i) => compact
+                        ? _CompactSaleRow(sale: sales[i])
+                        : _SaleRow(sale: sales[i]),
                   ),
           ),
         ],
@@ -138,9 +155,22 @@ class _SaleRow extends StatelessWidget {
           children: [
             _cell(
               _cols[0].$2,
-              Text(
-                sale.invoiceNo,
-                style: style.copyWith(fontWeight: FontWeight.w500),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    sale.invoiceNo,
+                    style: style.copyWith(fontWeight: FontWeight.w500),
+                  ),
+                  if (_status(sale) case final status?)
+                    Text(
+                      status,
+                      style: AppTypography.caption.copyWith(
+                        color: sale.isPartlyReturned ? c.warning : c.danger,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                ],
               ),
             ),
             _cell(
@@ -179,7 +209,13 @@ class _SaleRow extends StatelessWidget {
               Text(
                 Fmt.rupiah(sale.total),
                 textAlign: TextAlign.right,
-                style: style.copyWith(fontWeight: FontWeight.w600),
+                style: style.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: sale.isReturn ? c.danger : null,
+                  decoration: sale.isFullyReturned
+                      ? TextDecoration.lineThrough
+                      : null,
+                ),
               ),
             ),
             _cell(
@@ -199,3 +235,79 @@ class _SaleRow extends StatelessWidget {
     );
   }
 }
+
+/// Baris faktur versi HP.
+class _CompactSaleRow extends StatelessWidget {
+  const _CompactSaleRow({required this.sale});
+
+  final SaleSummary sale;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final status = _status(sale);
+    return PressableScale(
+      onPressed: () => showSaleDetailSheet(context, sale),
+      pressedScale: 1,
+      borderRadius: AppRadius.smAll,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    sale.invoiceNo,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.subheadline.copyWith(
+                      color: c.label,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  Text(
+                    '${DateFormat('HH:mm').format(sale.date)} · '
+                    '${sale.cashierName} · ${sale.paymentMethod}'
+                    '${status == null ? '' : ' · $status'}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.caption.copyWith(
+                      color: status == null
+                          ? c.labelSecondary
+                          : sale.isPartlyReturned
+                          ? c.warning
+                          : c.danger,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Text(
+              Fmt.rupiah(sale.total),
+              style: AppTypography.subheadline.copyWith(
+                color: sale.isReturn ? c.danger : c.label,
+                fontWeight: FontWeight.w600,
+                fontFeatures: const [FontFeature.tabularFigures()],
+                decoration: sale.isFullyReturned
+                    ? TextDecoration.lineThrough
+                    : null,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Label status retur di bawah nomor faktur.
+String? _status(SaleSummary sale) => sale.isReturn
+    ? 'Nota retur'
+    : sale.isFullyReturned
+    ? 'Dibatalkan'
+    : sale.isPartlyReturned
+    ? 'Diretur sebagian'
+    : null;

@@ -54,6 +54,9 @@ dependencies:
   flutter_widget_from_html_core: ^0.17.4
   mustache_template: ^2.0.6
   html: ^0.15.7
+  # Membaca file backup database tanpa membuka AppDatabase (restore).
+  sqlite3: ^3.7.0
+  crypto: ^3.0.7
 
 dev_dependencies:
   flutter_test:
@@ -67,7 +70,13 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   drift_dev: ^2.35.1
   build_runner: ^2.16.1
-  sqlite3: ^3.7.0
+
+# Database terenkripsi: SQLite3MultipleCiphers (PRAGMA key) menggantikan SQLite
+# biasa di semua platform (lihat lib/core/security/device_keys.dart).
+hooks:
+  user_defines:
+    sqlite3:
+      source: sqlite3mc
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

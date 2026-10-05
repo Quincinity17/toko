@@ -7,8 +7,12 @@ import 'tag.dart';
 /// Kolom data barang di file import/export. [label] juga menjadi judul kolom
 /// file export dan template, sehingga hasil export bisa langsung di-import.
 enum ProductField {
+  // Di layar: kode = "Barcode", barcode = "Barcode bawaan". Kolom "Barcode"
+  // hanya menjadi kode bila file tidak punya kolom kode (mis. Kode Item
+  // iPOS); jika ada, kolom "Barcode" menjadi barcode bawaan. Urutan sinonim
+  // penting: dicoba dari depan.
   code(
-    'Kode',
+    'Barcode',
     required: true,
     synonyms: [
       'kode',
@@ -20,17 +24,20 @@ enum ProductField {
       'sku',
       'plu',
       'id barang',
+      'barcode',
     ],
   ),
   barcode(
-    'Barcode',
+    'Barcode Bawaan',
     synonyms: [
-      'barcode',
+      'barcode bawaan',
+      'barcode pabrik',
       'kode barcode',
       'barcode 1',
       'ean',
       'upc',
       'kode scan',
+      'barcode',
     ],
   ),
   name(
@@ -295,7 +302,7 @@ List<ImportRow> validateImport(
     final code = cell(ProductField.code);
     final name = cell(ProductField.name);
     final barcode = cell(ProductField.barcode);
-    if (code.isEmpty) errors.add('Kode kosong.');
+    if (code.isEmpty) errors.add('Barcode kosong.');
     if (name.isEmpty) errors.add('Nama kosong.');
     final codeError = code.isEmpty ? null : ProductRules.code(code);
     if (codeError != null) errors.add(codeError);
@@ -316,7 +323,7 @@ List<ImportRow> validateImport(
     if (code.isNotEmpty) {
       final first = seenCode[codeKey];
       if (first != null) {
-        errors.add('Kode "$code" duplikat dengan baris $first.');
+        errors.add('Barcode "$code" duplikat dengan baris $first.');
       } else {
         seenCode[codeKey] = rowNumber;
       }
@@ -325,13 +332,13 @@ List<ImportRow> validateImport(
     if (barcode.isNotEmpty) {
       final first = seenBarcode[barcode];
       if (first != null) {
-        errors.add('Barcode $barcode duplikat dengan baris $first.');
+        errors.add('Barcode bawaan $barcode duplikat dengan baris $first.');
       } else {
         seenBarcode[barcode] = rowNumber;
       }
       final owner = existing.idByBarcode[barcode];
       if (owner != null && owner != existingId) {
-        errors.add('Barcode $barcode sudah dipakai barang lain.');
+        errors.add('Barcode bawaan $barcode sudah dipakai barang lain.');
       }
     }
 

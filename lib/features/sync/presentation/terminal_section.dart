@@ -21,6 +21,7 @@ class TerminalSection extends ConsumerWidget {
     final c = context.colors;
     final terminal = ref.watch(terminalProvider).value;
     final pending = ref.watch(pendingSyncCountProvider).value ?? 0;
+    final isAdmin = ref.watch(authControllerProvider)?.isAdmin ?? false;
     if (terminal == null) return const SizedBox.shrink();
 
     final example =
@@ -31,7 +32,8 @@ class TerminalSection extends ConsumerWidget {
       footer:
           'Kode terminal muncul di nomor faktur, mis. $example, supaya faktur '
           'dari beberapa komputer tidak bentrok. Mengganti kode hanya '
-          'berlaku untuk faktur berikutnya.',
+          'berlaku untuk faktur berikutnya.'
+          '${isAdmin ? '' : ' Kode hanya bisa diganti admin.'}',
       dividerIndent: 58,
       children: [
         InsetGroupedTile(
@@ -41,7 +43,7 @@ class TerminalSection extends ConsumerWidget {
           ),
           title: 'Kode terminal',
           value: terminal.code,
-          onPressed: () => _editCode(context, terminal),
+          onPressed: isAdmin ? () => _editCode(context, terminal) : null,
         ),
         InsetGroupedTile(
           leading: TileIcon(

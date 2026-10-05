@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../../core/database/tables/audit.dart';
 import '../../auth/domain/app_user.dart';
 import '../domain/store.dart';
 
@@ -74,6 +75,14 @@ class StoreRepository {
       );
       final savedId = id ?? await dao.insertStore(data);
       if (id != null) await dao.updateStore(id, data);
+      await _log(
+        actor,
+        current == null
+            ? 'Toko baru "$n"'
+            : 'Toko "${current.name}" diubah'
+                  '${current.isActive != isActive ? (isActive ? ' (diaktifkan)' : ' (dinonaktifkan)') : ''}',
+        savedId,
+      );
       return fromRow((await dao.findById(savedId))!);
     });
   }
@@ -92,12 +101,23 @@ class StoreRepository {
           id,
           const StoresCompanion(isActive: Value(false)),
         );
+        await _log(actor, 'Toko "${current.name}" dinonaktifkan', id);
         return StoreRemoval.deactivated;
       }
       await dao.deleteStore(id);
+      await _log(actor, 'Toko "${current.name}" dihapus', id);
       return StoreRemoval.deleted;
     });
   }
+
+  Future<void> _log(AppUser actor, String summary, int storeId) =>
+      _db.auditDao.append(
+        type: AuditType.storeChanged,
+        summary: summary,
+        userId: actor.id,
+        userName: actor.fullName,
+        data: {'storeId': storeId},
+      );
 
   Future<void> _ensureAnotherActive() async {
     if (await _db.storesDao.countActive() <= 1) {

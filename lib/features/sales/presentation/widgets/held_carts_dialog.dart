@@ -9,6 +9,7 @@ import '../../../../core/widgets/app_dialogs.dart';
 import '../../../../core/widgets/app_text_field.dart';
 import '../../../../core/widgets/pressable_scale.dart';
 import '../../../../core/widgets/state_views.dart';
+import '../../data/cashier_audit.dart';
 import '../../data/held_cart_repository.dart';
 import '../../domain/cart.dart';
 import '../../domain/held_cart.dart';
@@ -144,7 +145,16 @@ class _HeldList extends ConsumerWidget {
       confirmLabel: 'Hapus',
       destructive: true,
     );
-    if (ok) await ref.read(heldCartRepositoryProvider).delete(h.id);
+    if (ok) {
+      await ref
+          .read(cashierAuditProvider)
+          .heldCartDeleted(
+            note: h.note,
+            itemCount: h.items.length,
+            total: h.total,
+          );
+      await ref.read(heldCartRepositoryProvider).delete(h.id);
+    }
   }
 
   @override

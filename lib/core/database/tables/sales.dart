@@ -11,6 +11,7 @@ import 'vouchers.dart';
 @DataClassName('SaleRow')
 @TableIndex(name: 'idx_sales_date', columns: {#saleDate})
 @TableIndex(name: 'idx_sales_uuid', columns: {#uuid}, unique: true)
+@TableIndex(name: 'idx_sales_return_of', columns: {#returnOfId})
 class Sales extends Table {
   IntColumn get id => integer().autoIncrement()();
 
@@ -58,6 +59,14 @@ class Sales extends Table {
   IntColumn get paymentMethodId =>
       integer().nullable().references(PaymentMethods, #id)();
   TextColumn get paymentRef => text().nullable()();
+
+  /// v11: nota retur (`RET-…`) = faktur bernilai negatif yang menunjuk faktur
+  /// asal. Retur/batal tidak mengubah faktur asal; laporan otomatis
+  /// terpotong karena total & qty nota retur negatif. `null` = penjualan.
+  IntColumn get returnOfId => integer().nullable().references(Sales, #id)();
+
+  /// v11: alasan retur/batal (wajib diisi untuk nota retur).
+  TextColumn get returnReason => text().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
 
@@ -85,9 +94,14 @@ class SaleItems extends Table {
   RealColumn get discountPercent => real().withDefault(const Constant(0))();
   IntColumn get purchasePrice => integer()();
   IntColumn get subtotal => integer()();
+
+  /// v11: baris nota retur → baris faktur asal yang dikembalikan (qty &
+  /// subtotal negatif). `null` = baris penjualan.
+  IntColumn get returnOfItemId => integer().nullable()();
 }
 
-enum StockMovementType { sale, import, adjust }
+/// `saleReturn` (v11): barang kembali karena retur/batal faktur.
+enum StockMovementType { sale, import, adjust, saleReturn }
 
 /// Riwayat keluar-masuk stok (penjualan, import, penyesuaian).
 @DataClassName('StockMovementRow')

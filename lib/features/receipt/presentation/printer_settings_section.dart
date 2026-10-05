@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/utils/device.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_dialogs.dart';
@@ -48,6 +49,9 @@ class PrinterSettingsSection extends ConsumerStatefulWidget {
 
 class _PrinterSettingsSectionState
     extends ConsumerState<PrinterSettingsSection> {
+  /// Android (HP/tablet): hanya jaringan & Bluetooth.
+  static bool get _android => Device.isAndroid;
+
   PrinterConfig? _config;
   final _host = TextEditingController();
   final _port = TextEditingController();
@@ -116,22 +120,34 @@ class _PrinterSettingsSectionState
   }
 
   Future<void> _pickSerialPort() async {
-    final ports = await ref.read(printerTransportProvider).listSerialPorts();
+    final List<String> ports;
+    try {
+      ports = await ref.read(printerTransportProvider).listSerialPorts();
+    } on PrinterFailure catch (e) {
+      // Android: izin Bluetooth belum diberikan / Bluetooth mati.
+      if (mounted) {
+        await AppDialogs.alert(context, title: 'Bluetooth', message: e.message);
+      }
+      return;
+    }
     if (!mounted) return;
     if (ports.isEmpty) {
       await AppDialogs.alert(
         context,
-        title: 'Tidak ada port',
-        message:
-            'Belum ada port serial/Bluetooth. Nyalakan printer, lalu '
-            'pasangkan di Pengaturan Windows › Bluetooth & perangkat, dan '
-            'coba lagi.',
+        title: _android ? 'Belum ada printer' : 'Tidak ada port',
+        message: _android
+            ? 'Belum ada perangkat Bluetooth yang dipasangkan. Nyalakan '
+                  'printer, pasangkan di Pengaturan HP › Bluetooth (PIN '
+                  'biasanya 0000 atau 1234), lalu coba lagi.'
+            : 'Belum ada port serial/Bluetooth. Nyalakan printer, lalu '
+                  'pasangkan di Pengaturan Windows › Bluetooth & perangkat, '
+                  'dan coba lagi.',
       );
       return;
     }
     final pick = await showOptionPicker(
       context,
-      title: 'Pilih Port',
+      title: _android ? 'Pilih Printer Bluetooth' : 'Pilih Port',
       options: ports,
       selected: _config!.serialPort,
     );
@@ -213,17 +229,21 @@ class _PrinterSettingsSectionState
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         InsetGroupedSection(
-          header: 'Printer Komputer Ini',
+          header: _android ? 'Printer Perangkat Ini' : 'Printer Komputer Ini',
           footer: switch (p.connection) {
             PrinterConnection.none =>
               'Pilih cara menyambung printer thermal. Pengaturan printer '
-                  'berlaku untuk komputer ini saja.',
+                  'berlaku untuk ${_android ? 'HP/tablet' : 'komputer'} ini saja.',
             PrinterConnection.system =>
               'Printer USB yang sudah dipasang di Windows. Jika tidak ada '
                   'driver dari pabrik, pasang driver "Generic / Text Only".',
             PrinterConnection.network =>
               'Printer LAN/WiFi. Alamat IP biasanya tercetak saat printer '
                   'dinyalakan sambil menekan tombol FEED.',
+            PrinterConnection.serial when _android =>
+              'Pasangkan (pair) printer Bluetooth di Pengaturan HP › '
+                  'Bluetooth dulu, lalu pilih di sini. Izinkan akses '
+                  '"Perangkat di sekitar" bila diminta.',
             PrinterConnection.serial =>
               'Pasangkan (pair) printer Bluetooth di Pengaturan Windows dulu; '
                   'printer muncul sebagai port COM ("Serial over Bluetooth"). '
@@ -253,9 +273,11 @@ class _PrinterSettingsSectionState
                     width: double.infinity,
                     child: Segmented<PrinterConnection>(
                       value: p.connection,
-                      options: const {
+                      // Android: tidak ada spooler printer sistem (USB).
+                      options: {
                         PrinterConnection.none: 'Tidak ada',
-                        PrinterConnection.system: 'Terpasang (USB)',
+                        if (!_android)
+                          PrinterConnection.system: 'Terpasang (USB)',
                         PrinterConnection.network: 'Jaringan',
                         PrinterConnection.serial: 'Bluetooth',
                       },
@@ -303,19 +325,23 @@ class _PrinterSettingsSectionState
                   icon: CupertinoIcons.bluetooth,
                   color: c.labelSecondary,
                 ),
-                title: 'Port',
-                value: p.serialPort.isEmpty ? 'Pilih port…' : p.serialPort,
+                title: _android ? 'Printer' : 'Port',
+                value: p.serialPort.isEmpty
+                    ? (_android ? 'Pilih printer…' : 'Pilih port…')
+                    : p.serialPort,
                 onPressed: _pickSerialPort,
               ),
-              InsetGroupedTile(
-                leading: TileIcon(
-                  icon: CupertinoIcons.speedometer,
-                  color: c.labelSecondary,
+              // Bluetooth Android tidak memakai baud rate.
+              if (!_android)
+                InsetGroupedTile(
+                  leading: TileIcon(
+                    icon: CupertinoIcons.speedometer,
+                    color: c.labelSecondary,
+                  ),
+                  title: 'Baud rate',
+                  value: '${p.baudRate}',
+                  onPressed: _pickBaudRate,
                 ),
-                title: 'Baud rate',
-                value: '${p.baudRate}',
-                onPressed: _pickBaudRate,
-              ),
             ],
             InsetGroupedTile(
               leading: TileIcon(

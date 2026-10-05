@@ -136,6 +136,7 @@ class StoresDao extends DatabaseAccessor<AppDatabase> with _$StoresDaoMixin {
       ],
       updates: {storeProducts},
     );
+    await attachedDatabase.sealsDao.resealStoreProduct(storeId, productId);
     await into(stockMovements).insert(
       StockMovementsCompanion.insert(
         productId: productId,
@@ -154,19 +155,22 @@ class StoresDao extends DatabaseAccessor<AppDatabase> with _$StoresDaoMixin {
     required int storeId,
     required int productId,
     required int? price,
-  }) => customInsert(
-    'INSERT INTO store_products (uuid, store_id, product_id, selling_price) '
-    'VALUES (?, ?, ?, ?) '
-    'ON CONFLICT (store_id, product_id) DO UPDATE SET selling_price = ?',
-    variables: [
-      Variable.withString(newUuid()),
-      Variable.withInt(storeId),
-      Variable.withInt(productId),
-      Variable(price),
-      Variable(price),
-    ],
-    updates: {storeProducts},
-  );
+  }) async {
+    await customInsert(
+      'INSERT INTO store_products (uuid, store_id, product_id, selling_price) '
+      'VALUES (?, ?, ?, ?) '
+      'ON CONFLICT (store_id, product_id) DO UPDATE SET selling_price = ?',
+      variables: [
+        Variable.withString(newUuid()),
+        Variable.withInt(storeId),
+        Variable.withInt(productId),
+        Variable(price),
+        Variable(price),
+      ],
+      updates: {storeProducts},
+    );
+    await attachedDatabase.sealsDao.resealStoreProduct(storeId, productId);
+  }
 
   /// Riwayat stok barang di satu toko beserta nama user, terbaru dulu.
   Stream<List<(StockMovementRow, String?)>> watchMovements(

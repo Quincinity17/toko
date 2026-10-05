@@ -1,23 +1,16 @@
 import 'dart:convert';
-import 'dart:io';
 
-import 'package:bcrypt/bcrypt.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'package:toko/app.dart';
-import 'package:toko/core/database/app_database.dart';
-import 'package:toko/core/security/password_hasher.dart';
 import 'package:toko/core/widgets/app_button.dart';
 import 'package:toko/core/widgets/app_sidebar.dart';
 import 'package:toko/core/widgets/large_title_page.dart';
 import 'package:toko/features/auth/data/auth_repository.dart';
 import 'package:toko/features/auth/data/user_repository.dart';
 import 'package:toko/features/auth/domain/user_role.dart';
-import 'package:toko/features/backup/data/backup_service.dart';
+import 'package:toko/features/backup/presentation/backup_section.dart';
 import 'package:toko/features/payments/data/payment_method_repository.dart';
 import 'package:toko/features/receipt/data/printer_transport.dart';
 import 'package:toko/features/receipt/data/receipt_renderer.dart';
@@ -26,122 +19,13 @@ import 'package:toko/features/receipt/domain/printer_config.dart';
 import 'package:toko/features/products/data/product_repository.dart';
 import 'package:toko/features/sales/data/checkout_service.dart';
 import 'package:toko/features/sales/domain/cart.dart';
+import 'package:toko/features/products/domain/bulk_entry.dart';
+import 'package:toko/features/products/presentation/product_bulk_entry_page.dart';
 import 'package:toko/features/products/presentation/product_import_page.dart';
 
+import 'helpers/app_harness.dart';
 import 'helpers/fake_printer.dart';
 import 'helpers/test_app.dart';
-
-/// Hash/verifikasi bcrypt tanpa isolate, karena isolate tidak berjalan di dalam
-/// waktu palsu (fake async) milik testWidgets.
-class _SyncHasher extends PasswordHasher {
-  const _SyncHasher() : super(logRounds: 4);
-
-  @override
-  Future<bool> verify(String password, String hash) async =>
-      BCrypt.checkpw(password, hash);
-
-  @override
-  Future<String> hash(String password) async =>
-      BCrypt.hashpw(password, BCrypt.gensalt(logRounds: logRounds));
-}
-
-/// Kursor teks berkedip terus, jadi pumpAndSettle tidak bisa dipakai.
-Future<void> settle(WidgetTester tester) async {
-  for (var i = 0; i < 15; i++) {
-    await tester.pump(const Duration(milliseconds: 100));
-  }
-}
-
-Future<void> login(
-  WidgetTester tester,
-  String username,
-  String password,
-) async {
-  final fields = find.byType(EditableText);
-  await tester.enterText(fields.at(0), username);
-  await tester.enterText(fields.at(1), password);
-  await settle(tester); // tombol Masuk aktif setelah frame berikutnya
-  await tester.tap(find.text('Masuk'));
-  await settle(tester);
-}
-
-Future<AppDatabase> pumpApp(
-  WidgetTester tester, {
-  List<Override> overrides = const [],
-}) async {
-  tester.view.physicalSize = const Size(1440, 1000);
-  tester.view.devicePixelRatio = 1;
-  addTearDown(tester.view.reset);
-
-  final db = (await tester.runAsync(createSeededDb))!;
-  addTearDown(db.close);
-  // Backup ke folder sementara (path_provider tidak ada di tes).
-  final backupDir = (await tester.runAsync(
-    () => Directory.systemTemp.createTemp('toko-backup-'),
-  ))!;
-  addTearDown(() => backupDir.deleteSync(recursive: true));
-
-  await tester.pumpWidget(
-    ProviderScope(
-      overrides: [
-        appDatabaseProvider.overrideWithValue(db),
-        passwordHasherProvider.overrideWithValue(const _SyncHasher()),
-        backupServiceProvider.overrideWithValue(
-          BackupService(db, defaultFolder: () async => backupDir),
-        ),
-        ...overrides,
-      ],
-      child: const TokoApp(),
-    ),
-  );
-  await settle(tester);
-  return db;
-}
-
-/// Membongkar aplikasi di akhir tes supaya stream drift sempat ditutup
-/// dan tidak ada timer yang tertinggal.
-Future<void> unmount(WidgetTester tester) async {
-  await tester.pumpWidget(const SizedBox());
-  await tester.pump(const Duration(seconds: 1));
-}
-
-/// Gulir sampai [finder] terlihat, lalu ketuk.
-Future<void> tapVisible(WidgetTester tester, Finder finder) async {
-  await tester.ensureVisible(finder);
-  await tester.pump();
-  await tester.tap(finder);
-}
-
-/// Seperti [tapVisible], tetapi digulir ke tengah layar supaya tidak
-/// tertutup toolbar kaca halaman panjang.
-Future<void> tapCentered(WidgetTester tester, Finder finder) async {
-  await Scrollable.ensureVisible(tester.element(finder), alignment: 0.5);
-  await tester.pump();
-  await tester.tap(finder);
-}
-
-/// Mengisi AppTextField berdasarkan labelnya. Label yang sama bisa muncul di
-/// tempat lain (mis. "Stok" di sidebar), jadi dipilih label pertama yang
-/// Column induknya berisi kolom isian.
-Future<void> fill(WidgetTester tester, String label, String text) async {
-  for (final candidate in find.text(label).evaluate()) {
-    final field = find.descendant(
-      of: find
-          .ancestor(
-            of: find.byWidget(candidate.widget),
-            matching: find.byType(Column),
-          )
-          .first,
-      matching: find.byType(EditableText),
-    );
-    if (field.evaluate().isNotEmpty) {
-      await tester.enterText(field.first, text);
-      await tester.pump();
-      return;
-    }
-  }
-  fail('Kolom isian "$label" tidak ditemukan.');
-}
 
 void main() {
   setUpAll(() => initializeDateFormatting('id_ID'));
@@ -164,7 +48,7 @@ void main() {
     expect(find.text('Belum ada barang'), findsOneWidget);
     expect(find.text('Dashboard'), findsNothing);
     expect(find.text('Produk'), findsNothing);
-    expect(find.text('Pengaturan'), findsNothing);
+    expect(find.text('Pengaturan'), findsOneWidget); // versi ringkas
 
     // Keluar lewat menu user di sidebar.
     await tester.tap(
@@ -229,7 +113,7 @@ void main() {
     await login(tester, 'kasir', 'kasir123');
 
     Future<void> scan(String code) async {
-      await fill(tester, 'Kode / Barcode', code);
+      await fill(tester, 'Barcode', code);
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await settle(tester);
     }
@@ -303,12 +187,118 @@ void main() {
     await unmount(tester);
   });
 
+  testWidgets('Admin membatalkan faktur dari tab Hari Ini (nota retur)', (
+    tester,
+  ) async {
+    final db = await pumpApp(tester);
+    await login(tester, 'admin', 'admin123');
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AppSidebar),
+        matching: find.text('Kasir'),
+      ),
+    );
+    // Toko admin (satu-satunya toko) dimuat async dari settings.
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await settle(tester);
+
+    await fill(tester, 'Barcode', 'BRG001');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await settle(tester);
+    await tester.sendKeyEvent(LogicalKeyboardKey.f2);
+    await settle(tester);
+    await tester.testTextInput.receiveAction(TextInputAction.done); // uang pas
+    await settle(tester);
+    await tester.tap(find.textContaining('Transaksi Baru  (Enter)'));
+    await settle(tester);
+
+    await tester.tap(find.text('Hari Ini'));
+    await settle(tester);
+    await tester.tap(find.textContaining('INV-'));
+    await settle(tester);
+    await tapVisible(tester, find.text('Retur / Batalkan'));
+    await settle(tester);
+    expect(find.textContaining('Terjual 1'), findsOneWidget);
+    // Belum memilih barang: tombol simpan belum aktif.
+    expect(find.text('Pilih barang'), findsOneWidget);
+
+    await tester.tap(find.text('Batalkan Semua'));
+    await settle(tester);
+    await fill(tester, 'Alasan', 'Pelanggan batal');
+    await settle(tester);
+    await tester.tap(find.text('Kembalikan Rp 3.500'));
+    await settle(tester);
+    expect(find.text('Retur tersimpan'), findsOneWidget);
+    expect(find.textContaining('RET-'), findsWidgets); // popup + daftar
+    await tester.tap(find.text('OK'));
+    await settle(tester);
+
+    expect(find.text('Nota retur'), findsOneWidget);
+    expect(find.text('Dibatalkan'), findsOneWidget);
+    expect(find.text('-Rp 3.500'), findsOneWidget);
+    final stock = (await tester.runAsync(() async {
+      final p = await (db.select(
+        db.products,
+      )..where((p) => p.code.equals('BRG001'))).getSingle();
+      return db.storesDao.entry(await mainStoreId(db), p.id);
+    }))!;
+    expect(stock.stock, 120); // kembali
+
+    await unmount(tester);
+  });
+
+  testWidgets('Batal transaksi kasir tercatat di Laporan › Aktivitas', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await login(tester, 'kasir', 'kasir123');
+    await fill(tester, 'Barcode', 'BRG001');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await settle(tester);
+    await tester.tap(find.text('Batalkan Transaksi'));
+    await settle(tester);
+    await tester.tap(find.text('Batalkan').last);
+    await settle(tester);
+    expect(find.text('Belum ada barang'), findsOneWidget);
+
+    // Admin memeriksa.
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AppSidebar),
+        matching: find.text('Kasir Satu'),
+      ),
+    );
+    await settle(tester);
+    await tester.tap(find.text('Keluar'));
+    await settle(tester);
+    await login(tester, 'admin', 'admin123');
+    await tester.tap(find.text('Laporan'));
+    await settle(tester);
+    await tester.tap(
+      find.descendant(
+        of: find.byType(LargeTitlePage),
+        matching: find.text('Aktivitas'),
+      ),
+    );
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await settle(tester);
+    expect(find.text('Data utuh'), findsOneWidget);
+    expect(find.text('Kasir Satu'), findsWidgets);
+    expect(find.textContaining('Batal transaksi: 1 barang'), findsOneWidget);
+
+    await unmount(tester);
+  });
+
   testWidgets('Kasir menahan transaksi lalu melanjutkannya', (tester) async {
     final db = await pumpApp(tester);
     await login(tester, 'kasir', 'kasir123');
 
     Future<void> scan(String code) async {
-      await fill(tester, 'Kode / Barcode', code);
+      await fill(tester, 'Barcode', code);
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await settle(tester);
     }
@@ -379,7 +369,7 @@ void main() {
     await login(tester, 'budi', 'rahasia1');
 
     // Mulai di Kasir; menu hanya Kasir dan Stok, toko tampil di sidebar.
-    expect(find.text('Kode / Barcode'), findsOneWidget);
+    expect(find.text('Barcode'), findsWidgets); // isian + kolom keranjang
     final sidebar = find.byType(AppSidebar);
     expect(
       find.descendant(of: sidebar, matching: find.text('Stok')),
@@ -420,7 +410,7 @@ void main() {
     await login(tester, 'kasir', 'kasir123');
 
     // Ketik nama (bukan kode) dengan salah ketik di kolom kode, lalu Enter.
-    await fill(tester, 'Kode / Barcode', 'chitatoo');
+    await fill(tester, 'Barcode', 'chitatoo');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await settle(tester);
 
@@ -437,6 +427,159 @@ void main() {
     expect(find.text('Cari Barang'), findsNothing);
     expect(find.text('Chitato Sapi Panggang 68g'), findsOneWidget);
     expect(find.text('Belum ada barang'), findsNothing);
+
+    await unmount(tester);
+  });
+
+  testWidgets('Barang baru: barcode otomatis lanjut dari yang terakhir', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await login(tester, 'admin', 'admin123');
+    await tester.tap(find.text('Produk'));
+    await settle(tester);
+    await tester.tap(find.widgetWithText(AppButton, 'Tambah'));
+    await settle(tester);
+
+    await tester.tap(find.text('Otomatis (+1 dari barcode terakhir)'));
+    await settle(tester);
+    // Barang contoh terakhir: BRG020.
+    expect(find.text('BRG021'), findsOneWidget);
+    expect(find.text('Lanjutan dari BRG020'), findsOneWidget);
+
+    // Untung % mengisi harga jual (dibulatkan ke atas ke Rp 100).
+    final before = find.text('3.400').evaluate().length;
+    await fill(tester, 'Harga beli (opsional)', '2800');
+    await settle(tester);
+    await fill(tester, 'Untung (%)', '20');
+    await settle(tester);
+    // Harga jual + placeholder harga per toko (= harga default).
+    expect(find.text('3.400').evaluate().length, greaterThan(before));
+
+    await unmount(tester);
+  });
+
+  testWidgets('Input Tabel: banyak barang sekaligus + barcode otomatis', (
+    tester,
+  ) async {
+    final db = await pumpApp(tester);
+    await login(tester, 'admin', 'admin123');
+    await tester.tap(find.text('Produk'));
+    await settle(tester);
+    await tester.tap(find.widgetWithText(AppButton, 'Input Tabel'));
+    await settle(tester);
+
+    final cells = find.descendant(
+      of: find.byType(ProductBulkEntryPage),
+      matching: find.byType(EditableText),
+    );
+    Future<void> type(int row, BulkColumn col, String text) async {
+      await tester.enterText(
+        cells.at(row * BulkColumn.values.length + col.index),
+        text,
+      );
+      await tester.pump();
+    }
+
+    await type(0, BulkColumn.name, 'Boneka Beruang');
+    await type(0, BulkColumn.purchasePrice, '20000');
+    await type(0, BulkColumn.markup, '25');
+    // Harga jual terisi dari Untung %.
+    expect(find.text('25.000'), findsOneWidget);
+    await type(1, BulkColumn.name, 'Mobil Remote');
+    await type(1, BulkColumn.sellingPrice, '150000');
+
+    await tester.tap(find.widgetWithText(AppButton, 'Barcode Otomatis'));
+    await settle(tester);
+    expect(find.text('BRG021'), findsOneWidget);
+    expect(find.text('BRG022'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(AppButton, 'Simpan'));
+    await settle(tester);
+    expect(find.text('2 barang tersimpan'), findsOneWidget);
+    await tester.tap(find.text('OK'));
+    await settle(tester);
+    expect(find.text('Boneka Beruang'), findsNothing); // tabel dikosongkan
+
+    final saved = await tester.runAsync(
+      () => ProductRepository(db).findByCodeOrBarcode('BRG021'),
+    );
+    expect(saved!.name, 'Boneka Beruang');
+    expect(saved.sellingPrice, 25000);
+    expect(saved.unitName, 'PCS');
+
+    // Nama mirip barang yang sudah ada → peringatan sebelum menyimpan.
+    await type(0, BulkColumn.name, 'Indomie Goreng');
+    await type(0, BulkColumn.code, 'BMM0000001');
+    await type(0, BulkColumn.sellingPrice, '3500');
+    await tester.tap(find.widgetWithText(AppButton, 'Simpan'));
+    await settle(tester);
+    expect(find.text('Nama mirip'), findsOneWidget);
+    await tester.tap(find.text('Periksa Lagi'));
+    await settle(tester);
+    expect(
+      find.text('Mirip dengan Indomie Goreng 85g (BRG001)'),
+      findsOneWidget,
+    );
+    // Simpan lagi tanpa mengubah nama: tidak diperingatkan dua kali.
+    await tester.tap(find.widgetWithText(AppButton, 'Simpan'));
+    await settle(tester);
+    expect(find.text('1 barang tersimpan'), findsOneWidget);
+    await tester.tap(find.text('OK'));
+    await settle(tester);
+
+    // Keluar dengan isian belum disimpan → simpan sebagai draf → lanjutkan.
+    await type(0, BulkColumn.name, 'Kereta Api Mainan');
+    await tester.tap(
+      find
+          .descendant(
+            of: find.byType(LargeTitlePage),
+            matching: find.text('Produk'),
+          )
+          .first, // tombol kembali "‹ Produk"
+    );
+    await settle(tester);
+    await tester.tap(find.text('Simpan sebagai Draf'));
+    await settle(tester);
+    expect(find.byType(ProductBulkEntryPage), findsNothing);
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.tap(find.widgetWithText(AppButton, 'Input Tabel'));
+    await settle(tester);
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await settle(tester);
+    expect(find.text('Kereta Api Mainan'), findsOneWidget);
+    expect(find.text('Melanjutkan draf (1 baris)'), findsOneWidget);
+
+    await unmount(tester);
+  });
+
+  testWidgets('Barang baru dengan nama mirip: diperingatkan saat simpan', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await login(tester, 'admin', 'admin123');
+    await tester.tap(find.text('Produk'));
+    await settle(tester);
+    await tester.tap(find.widgetWithText(AppButton, 'Tambah'));
+    await settle(tester);
+    await fill(tester, 'Nama barang', 'Aqua Botol 600 ml');
+    await fill(tester, 'Barcode', 'BMM0000001');
+    await fill(tester, 'Harga jual (Rp)', '3500');
+    await tapVisible(tester, find.widgetWithText(AppButton, 'Simpan Barang'));
+    await settle(tester);
+    expect(find.text('Nama mirip'), findsOneWidget);
+    expect(
+      find.textContaining('Aqua Botol 600ml (BRG009)', findRichText: true),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Tetap Simpan'));
+    await settle(tester);
+    expect(find.text('Barang Baru'), findsNothing); // form tertutup
 
     await unmount(tester);
   });
@@ -468,8 +611,8 @@ void main() {
     await tester.tap(find.widgetWithText(AppButton, 'Tambah'));
     await settle(tester);
     await fill(tester, 'Nama barang', 'Kecap Bango 220ml');
-    await fill(tester, 'Kode', 'BRG100');
-    await fill(tester, 'Harga beli (Rp)', '9000');
+    await fill(tester, 'Barcode', 'BRG100');
+    await fill(tester, 'Harga beli (opsional)', '9000');
     await fill(tester, 'Harga jual (Rp)', '11000');
     await fill(tester, 'Stok', '2');
     await fill(tester, 'Stok minimum (opsional)', '5');
@@ -494,7 +637,8 @@ void main() {
         'Kode Item,Nama Item,Jenis,Satuan,Harga Pokok,Harga Jual 1,Stok\n'
         'BRG001,Indomie Goreng,Makanan,PCS,2900,3700,150\n'
         'IPOS1,Kopi Kenangan,Minuman,BTL,8000,10000,24\n'
-        'IPOS2,Roti Aoka,Roti,PCS,1500,,10\n';
+        'IPOS2,Roti Aoka,Roti,PCS,1500,,10\n'
+        'IPOS3,Aqua Botol 600 ml,Minuman,BTL,2800,3500,12\n';
     await pumpApp(
       tester,
       overrides: [
@@ -524,17 +668,19 @@ void main() {
     await settle(tester);
     expect(find.text('Barang baru'), findsOneWidget);
     expect(find.text('Baris 4'), findsOneWidget); // harga jual kosong
+    // Nama mirip barang yang sudah ada: peringatan, tetap di-import.
+    expect(find.text('Mirip dengan Aqua Botol 600ml (BRG009)'), findsOneWidget);
 
     await tapVisible(tester, find.text('Update stok & harga saja'));
     await settle(tester);
-    await tapVisible(tester, find.widgetWithText(AppButton, 'Import 2 barang'));
+    await tapVisible(tester, find.widgetWithText(AppButton, 'Import 3 barang'));
     await settle(tester);
     expect(find.text('Import selesai'), findsOneWidget);
-    expect(find.text('2 barang tersimpan'), findsOneWidget);
+    expect(find.text('3 barang tersimpan'), findsOneWidget);
 
     await tapVisible(tester, find.widgetWithText(AppButton, 'Lihat Produk'));
     await settle(tester);
-    expect(find.textContaining('21 barang · '), findsOneWidget);
+    expect(find.textContaining('22 barang · '), findsOneWidget);
     expect(find.text('Kopi Kenangan'), findsOneWidget);
 
     await unmount(tester);
@@ -547,10 +693,10 @@ void main() {
 
     // Kasir menjual 2 Indomie (Rp 7.000, laba 2 × 700).
     await login(tester, 'kasir', 'kasir123');
-    await fill(tester, 'Kode / Barcode', 'BRG001');
+    await fill(tester, 'Barcode', 'BRG001');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await settle(tester);
-    await fill(tester, 'Kode / Barcode', 'BRG001');
+    await fill(tester, 'Barcode', 'BRG001');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await settle(tester);
     await tester.sendKeyEvent(LogicalKeyboardKey.f2);
@@ -750,7 +896,7 @@ void main() {
       ),
     );
     await login(tester, 'kasir', 'kasir123');
-    await fill(tester, 'Kode / Barcode', 'BRG001');
+    await fill(tester, 'Barcode', 'BRG001');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await settle(tester);
 
@@ -791,8 +937,7 @@ void main() {
       ],
     );
     await login(tester, 'kasir', 'kasir123');
-    // Kasir tidak bisa membuka Pengaturan, tapi bisa mengatur printer.
-    expect(find.text('Pengaturan'), findsNothing);
+    // Printer diatur dari layar Kasir (bukan dari Pengaturan).
     await tester.tap(find.text('Atur Printer'));
     await settle(tester);
     expect(find.text('Printer Nota'), findsOneWidget);
@@ -880,6 +1025,84 @@ void main() {
     await waitFor(find.textContaining('toko-barang-'));
     expect(find.text('Belum pernah'), findsNothing);
     expect(find.textContaining('toko-barang-'), findsOneWidget);
+
+    await unmount(tester);
+  });
+
+  testWidgets('Admin memulihkan backup: disiapkan lalu aplikasi ditutup', (
+    tester,
+  ) async {
+    Future<void> waitFor(Finder finder) async {
+      for (var i = 0; i < 50 && finder.evaluate().isEmpty; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 100)),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    var exited = false;
+    await pumpApp(
+      tester,
+      overrides: [exitAppProvider.overrideWithValue(() => exited = true)],
+    );
+    await login(tester, 'admin', 'admin123');
+    await tester.tap(find.text('Pengaturan'));
+    await settle(tester);
+    await waitFor(find.text('Backup Sekarang'));
+    await tapCentered(tester, find.text('Backup Sekarang'));
+    await waitFor(find.text('Backup selesai'));
+    await tester.tap(find.text('OK'));
+    await settle(tester);
+    await waitFor(find.textContaining('toko-database-'));
+
+    // Ketuk file backup database → ringkasan → Pulihkan.
+    await tapVisible(tester, find.textContaining('toko-database-').last);
+    await settle(tester);
+    expect(find.text('Pulihkan data dari backup?'), findsOneWidget);
+    expect(find.textContaining('20 barang'), findsOneWidget);
+    await tester.tap(find.text('Pulihkan'));
+    await waitFor(find.text('Siap dipulihkan'));
+    expect(find.textContaining('toko-sebelum-pulih-'), findsOneWidget);
+    await tester.tap(find.text('Tutup Aplikasi'));
+    await settle(tester);
+    expect(exited, isTrue);
+    await waitFor(find.text('Pemulihan menunggu'));
+    expect(find.text('Pemulihan menunggu'), findsOneWidget);
+
+    await unmount(tester);
+  });
+
+  testWidgets('Kasir membuka Pengaturan versi ringkas', (tester) async {
+    Future<void> waitFor(Finder finder) async {
+      for (var i = 0; i < 50 && finder.evaluate().isEmpty; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 100)),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    await pumpApp(tester);
+    await login(tester, 'kasir', 'kasir123');
+    await tester.tap(find.text('Pengaturan'));
+    await settle(tester);
+    await waitFor(find.text('Backup otomatis'));
+
+    expect(find.text('Kode terminal'), findsOneWidget);
+    expect(find.text('Backup otomatis'), findsOneWidget);
+    expect(find.text('Mode'), findsOneWidget);
+    expect(find.text('Versi'), findsOneWidget);
+    // Menu admin tidak tampil.
+    expect(find.text('Kelola Akun'), findsNothing);
+    expect(find.text('Kelola Kategori'), findsNothing);
+    expect(find.text('Metode Pembayaran'), findsNothing);
+    expect(find.text('Kelola Toko'), findsNothing);
+    expect(find.text('Struk & Printer'), findsNothing);
+    // Pengaturan backup hanya dilihat (tanpa tombol ubah).
+    expect(find.byKey(const ValueKey('backup-keep')), findsNothing);
+    expect(find.text('2 file'), findsOneWidget);
+    expect(find.text('Backup Sekarang'), findsOneWidget);
 
     await unmount(tester);
   });

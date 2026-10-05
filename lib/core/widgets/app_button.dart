@@ -127,6 +127,7 @@ class AppIconButton extends StatelessWidget {
     this.tooltip,
     this.size = 36,
     this.filled = false,
+    this.color,
   });
 
   final IconData icon;
@@ -134,6 +135,9 @@ class AppIconButton extends StatelessWidget {
   final String? tooltip;
   final double size;
   final bool filled;
+
+  /// Warna ikon; bawaan aksen. Redup saat [onPressed] `null`.
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
@@ -149,7 +153,13 @@ class AppIconButton extends StatelessWidget {
           color: filled ? c.fill : Colors.transparent,
           shape: BoxShape.circle,
         ),
-        child: Icon(icon, size: size * 0.55, color: c.accent),
+        child: Icon(
+          icon,
+          size: size * 0.55,
+          color: onPressed == null
+              ? (color ?? c.accent).withValues(alpha: 0.35)
+              : color ?? c.accent,
+        ),
       ),
     );
     return tooltip == null ? button : Tooltip(message: tooltip!, child: button);

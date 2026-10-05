@@ -13,8 +13,29 @@ class AppSpacing {
   static const double xxl = 32;
   static const double xxxl = 48;
 
-  /// Padding kiri-kanan konten halaman.
+  /// Padding kiri-kanan konten halaman (layar lebar).
   static const double pageGutter = 32;
+
+  /// Padding kiri-kanan di layar HP ([AppBreakpoints.compact]).
+  static const double pageGutterCompact = 16;
+
+  static double gutterOf(BuildContext context) =>
+      AppBreakpoints.isCompact(context) ? pageGutterCompact : pageGutter;
+}
+
+/// Batas lebar layar untuk tata letak HP/tablet.
+class AppBreakpoints {
+  const AppBreakpoints._();
+
+  /// Di bawah ini (HP tegak): sidebar jadi laci (tombol ☰), halaman memakai
+  /// tata letak ringkas.
+  static const double compact = 700;
+
+  /// Di bawah ini (tablet tegak): sidebar otomatis ikon saja.
+  static const double medium = 1000;
+
+  static bool isCompact(BuildContext context) =>
+      MediaQuery.sizeOf(context).width < compact;
 }
 
 class AppRadius {

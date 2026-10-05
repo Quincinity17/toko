@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../../core/database/tables/audit.dart';
 import '../../../core/database/tables/sales.dart';
 import '../../auth/domain/app_user.dart';
 import '../domain/product.dart';
@@ -201,6 +202,23 @@ class ProductImportService {
           await Future<void>.delayed(Duration.zero);
         }
       }
+
+      await _db.auditDao.append(
+        type: AuditType.productsImported,
+        summary:
+            'Import barang: $inserted baru, $updated diperbarui, '
+            '$skipped dilewati',
+        userId: actor.id,
+        userName: actor.fullName,
+        storeId: stockStoreId,
+        data: {
+          'inserted': inserted,
+          'updated': updated,
+          'skipped': skipped,
+          'failed': failed.length,
+        },
+        at: now,
+      );
 
       return ImportResult(
         inserted: inserted,

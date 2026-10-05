@@ -87,7 +87,7 @@ class _StockPageState extends ConsumerState<StockPage> {
             height: 40,
             child: CupertinoSearchTextField(
               controller: _search,
-              placeholder: 'Cari nama, kode, atau barcode',
+              placeholder: 'Cari nama atau barcode',
               style: AppTypography.body.copyWith(color: c.label),
               onChanged: _onSearch,
             ),

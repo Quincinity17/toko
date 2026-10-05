@@ -28,10 +28,15 @@ enum UserRole {
 
   /// Halaman yang boleh dibuka. Admin bebas; kasir hanya halaman Kasir
   /// (transaksi baru dan daftar pembayaran hari ini); supervisor Kasir + Stok.
+  /// Supervisor & kasir juga membuka Pengaturan (versi ringkas: terminal,
+  /// backup, tampilan, tentang), tetapi tidak sub-halamannya.
   bool canAccess(String path) => switch (this) {
     UserRole.admin => true,
     UserRole.supervisor =>
-      path.startsWith(AppRoutes.kasir) || path.startsWith(AppRoutes.stok),
-    UserRole.kasir => path.startsWith(AppRoutes.kasir),
+      path.startsWith(AppRoutes.kasir) ||
+          path.startsWith(AppRoutes.stok) ||
+          path == AppRoutes.pengaturan,
+    UserRole.kasir =>
+      path.startsWith(AppRoutes.kasir) || path == AppRoutes.pengaturan,
   };
 }

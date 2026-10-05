@@ -29,7 +29,7 @@ class SalesRepository {
         .watchSalesBetween(start, end, storeId: storeId)
         .map(
           (rows) => [
-            for (final (s, cashier) in rows)
+            for (final (s, cashier, returned) in rows)
               SaleSummary(
                 id: s.id,
                 invoiceNo: s.invoiceNo,
@@ -44,6 +44,10 @@ class SalesRepository {
                 change: s.changeAmount,
                 paymentMethod: s.paymentMethod,
                 paymentRef: s.paymentRef,
+                storeId: s.storeId,
+                returnOfId: s.returnOfId,
+                returnReason: s.returnReason,
+                returnedAmount: returned,
               ),
           ],
         );

@@ -8,6 +8,8 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../../core/database/database_bootstrap.dart';
+import '../../../core/database/tables/audit.dart';
 import '../../auth/domain/app_user.dart';
 import '../../products/data/product_file_io.dart';
 import '../../products/data/product_repository.dart';
@@ -133,31 +135,44 @@ class BackupService {
 
   // ── Pengaturan (admin) ──
 
-  Future<void> setEnabled(AppUser actor, bool enabled) {
+  Future<void> setEnabled(AppUser actor, bool enabled) async {
     _requireAdmin(actor);
-    return _db.settingsDao.set(kEnabled, '$enabled');
+    await _db.settingsDao.set(kEnabled, '$enabled');
+    await _log(
+      actor,
+      enabled ? 'Backup otomatis dinyalakan' : 'Backup otomatis dimatikan',
+    );
   }
 
+  Future<void> _log(AppUser actor, String summary) => _db.auditDao.append(
+    type: AuditType.backupChanged,
+    summary: summary,
+    userId: actor.id,
+    userName: actor.fullName,
+  );
+
   /// Backup otomatis tiap [days] hari (1–30).
-  Future<void> setIntervalDays(AppUser actor, int days) {
+  Future<void> setIntervalDays(AppUser actor, int days) async {
     _requireAdmin(actor);
-    return _db.settingsDao.set(
-      kIntervalDays,
-      '${BackupPolicy.clampInterval(days)}',
-    );
+    final v = BackupPolicy.clampInterval(days);
+    await _db.settingsDao.set(kIntervalDays, '$v');
+    await _log(actor, 'Backup tiap $v hari');
   }
 
   /// Simpan [count] backup terbaru per jenis (1–10). File lebih lama dari
   /// itu dihapus pada backup berikutnya.
-  Future<void> setKeep(AppUser actor, int count) {
+  Future<void> setKeep(AppUser actor, int count) async {
     _requireAdmin(actor);
-    return _db.settingsDao.set(kKeep, '${BackupPolicy.clampKeep(count)}');
+    final v = BackupPolicy.clampKeep(count);
+    await _db.settingsDao.set(kKeep, '$v');
+    await _log(actor, 'Simpan $v backup terbaru');
   }
 
   /// [path] `null` = kembali ke folder bawaan.
-  Future<void> setFolder(AppUser actor, String? path) {
+  Future<void> setFolder(AppUser actor, String? path) async {
     _requireAdmin(actor);
-    return _db.settingsDao.set(kFolder, path ?? '');
+    await _db.settingsDao.set(kFolder, path ?? '');
+    await _log(actor, 'Folder backup: ${path ?? 'bawaan'}');
   }
 
   void _requireAdmin(AppUser actor) {
@@ -206,9 +221,8 @@ class BackupService {
         dir.path,
         BackupPolicy.fileName(BackupKind.database, now),
       );
-      final dbFile = File(dbPath);
-      if (await dbFile.exists()) await dbFile.delete();
-      await _db.customStatement('VACUUM INTO ?', [dbPath]);
+      // Tidak terenkripsi: bisa dipulihkan di perangkat lain.
+      await copyDatabasePlain(_db, dbPath);
 
       // 2. Barang: satu sheet per toko (stok & harga toko itu).
       final products = ProductRepository(_db);

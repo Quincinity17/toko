@@ -8,6 +8,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/charts.dart';
+import '../../../core/widgets/choice_chips.dart';
 import '../../../core/widgets/inset_grouped_list.dart';
 import '../../../core/widgets/large_title_page.dart';
 import '../../../core/widgets/stat_card.dart';
@@ -16,6 +17,8 @@ import '../../products/data/product_repository.dart';
 import '../../products/domain/product.dart';
 import '../../reports/data/report_repository.dart';
 import '../../reports/domain/report_models.dart';
+import '../../stores/data/store_repository.dart';
+import '../../stores/domain/store.dart';
 import '../../stores/presentation/store_scope.dart';
 
 // Provider di-key dengan rentang tanggal, jadi otomatis berganti hari saat
@@ -35,6 +38,12 @@ final _topProvider = StreamProvider.autoDispose
     .family<List<ProductPerformance>, ReportRange>(
       (ref, range) =>
           ref.watch(reportRepositoryProvider).watchTopProducts(range),
+    );
+
+final _storeSalesProvider = StreamProvider.autoDispose
+    .family<List<GroupPerformance>, ReportRange>(
+      (ref, range) =>
+          ref.watch(reportRepositoryProvider).watchStoreSales(range),
     );
 
 /// Stok menipis di toko yang dipilih (atau stok gabungan semua toko).
@@ -69,6 +78,12 @@ class DashboardPage extends ConsumerWidget {
     final s = ref.watch(_summaryProvider(today)).value;
     final prev = ref.watch(_summaryProvider(today.previous)).value;
     final lowCount = ref.watch(_lowStockCountProvider).value ?? 0;
+    final scope = ref.watch(storeScopeProvider);
+    final stores = (ref.watch(storesProvider).value ?? const <Store>[])
+        .where((s) => s.isActive)
+        .toList();
+    // Filter & ringkasan per toko hanya berarti bila ada > 1 toko aktif.
+    final multiStore = stores.length > 1;
 
     final cards = [
       StatCard(
@@ -89,7 +104,9 @@ class DashboardPage extends ConsumerWidget {
         color: c.chart2,
         caption: s?.margin == null
             ? 'Belum ada penjualan'
-            : 'Margin ${Fmt.percent(s!.margin!)}',
+            : s!.hasMissingCost
+            ? 'Margin ${Fmt.percent(s.margin!)} · ada barang tanpa harga beli'
+            : 'Margin ${Fmt.percent(s.margin!)}',
       ),
       StatCard(
         label: 'Transaksi',
@@ -121,6 +138,20 @@ class DashboardPage extends ConsumerWidget {
           onPressed: () => context.go(AppRoutes.laporan),
         ),
       ],
+      bottom: multiStore
+          ? ChoiceChips<int?>(
+              values: [null, for (final st in stores) st.id],
+              selected: scope,
+              label: (id) => id == null
+                  ? 'Semua toko'
+                  : stores.firstWhere((st) => st.id == id).name,
+              icon: (id) => id == null
+                  ? CupertinoIcons.square_grid_2x2
+                  : CupertinoIcons.house_fill,
+              onSelected: (id) =>
+                  ref.read(storeScopeProvider.notifier).select(id),
+            )
+          : null,
       slivers: [
         SliverToBoxAdapter(
           child: LayoutBuilder(
@@ -143,6 +174,12 @@ class DashboardPage extends ConsumerWidget {
             },
           ),
         ),
+        if (multiStore && scope == null) ...[
+          const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.xl)),
+          SliverToBoxAdapter(
+            child: _PerStore(range: today, stores: stores),
+          ),
+        ],
         const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.xl)),
         SliverToBoxAdapter(child: _WeekChart(range: week)),
         const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.xl)),
@@ -172,6 +209,48 @@ class DashboardPage extends ConsumerWidget {
             },
           ),
         ),
+      ],
+    );
+  }
+}
+
+/// Omzet hari ini tiap toko (saat melihat semua toko). Ketuk = buka
+/// dashboard toko itu.
+class _PerStore extends ConsumerWidget {
+  const _PerStore({required this.range, required this.stores});
+
+  final ReportRange range;
+  final List<Store> stores;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.colors;
+    final sales = ref.watch(_storeSalesProvider(range)).value ?? const [];
+    final byName = {for (final g in sales) g.name: g};
+    final rows = [
+      for (final st in stores)
+        (st.id, byName[st.name] ?? GroupPerformance(name: st.name)),
+    ]..sort((a, b) => b.$2.revenue.compareTo(a.$2.revenue));
+
+    return InsetGroupedSection(
+      header: 'Per toko hari ini',
+      footer: 'Ketuk toko untuk melihat dashboard toko itu.',
+      children: [
+        for (final (id, g) in rows)
+          InsetGroupedTile(
+            leading: Icon(
+              CupertinoIcons.house_fill,
+              size: 18,
+              color: g.revenue > 0 ? c.accent : c.labelTertiary,
+            ),
+            title: g.name,
+            subtitle: g.transactions == 0
+                ? 'Belum ada transaksi'
+                : '${Fmt.number(g.transactions)} transaksi · '
+                      'laba ${Fmt.rupiah(g.grossProfit)}',
+            value: Fmt.rupiah(g.revenue),
+            onPressed: () => ref.read(storeScopeProvider.notifier).select(id),
+          ),
       ],
     );
   }

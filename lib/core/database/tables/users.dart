@@ -27,4 +27,7 @@ class Users extends Table {
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastLoginAt => dateTime().nullable()();
+
+  /// v12: segel (`Sealer`) atas id, username, role, toko, aktif, password.
+  TextColumn get seal => text().nullable()();
 }

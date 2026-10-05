@@ -139,7 +139,7 @@ Uint8List exportReportXlsx({
   sheet(
     'Produk',
     [
-      'Kode',
+      'Barcode',
       'Nama',
       'Kategori',
       'Kelas ABC',
@@ -196,7 +196,7 @@ Uint8List exportReportXlsx({
   sheet(
     'Stok',
     [
-      'Kode',
+      'Barcode',
       'Nama',
       'Stok',
       'Satuan',

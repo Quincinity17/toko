@@ -65,7 +65,7 @@ class ReceiptVariables {
     ('{{kasir}}', 'Nama kasir'),
     ('{{#barang}}…{{/barang}}', 'Ulangi untuk setiap barang'),
     ('{{no}}', 'Nomor urut barang (di dalam barang)'),
-    ('{{kode}}', 'Kode barang (di dalam barang)'),
+    ('{{kode}}', 'Barcode barang (di dalam barang)'),
     ('{{nama}}', 'Nama barang (di dalam barang)'),
     ('{{qty}}', 'Jumlah (di dalam barang)'),
     ('{{satuan}}', 'Satuan (di dalam barang)'),

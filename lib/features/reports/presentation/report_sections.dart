@@ -178,6 +178,20 @@ class SummarySection extends StatelessWidget {
               title: '= Laba kotor',
               value: Fmt.rupiah(s.grossProfit),
             ),
+            if (s.hasMissingCost)
+              InsetGroupedTile(
+                leading: Icon(
+                  CupertinoIcons.exclamationmark_triangle_fill,
+                  size: 18,
+                  color: c.warning,
+                ),
+                title: 'Omzet tanpa harga beli',
+                subtitle:
+                    'Harga beli barang ini belum diisi, jadi labanya dihitung '
+                    'penuh dan laba kotor terlalu tinggi. Isi harga beli di '
+                    'Produk untuk penjualan berikutnya.',
+                value: Fmt.rupiah(s.revenueWithoutCost),
+              ),
           ],
         ),
         _gap,
@@ -819,7 +833,14 @@ class InvoicesSection extends StatelessWidget {
       rows: [
         for (final f in invoices.take(_limit))
           TableRowData([
-            CellText(f.invoiceNo, bold: true),
+            CellText(
+              f.isFullyReturned
+                  ? '${f.invoiceNo} · dibatalkan'
+                  : f.isPartlyReturned
+                  ? '${f.invoiceNo} · diretur sebagian'
+                  : f.invoiceNo,
+              bold: true,
+            ),
             CellText(time.format(f.date), muted: true),
             CellText(f.cashierName, muted: true),
             CellText(f.paymentMethod, muted: true),

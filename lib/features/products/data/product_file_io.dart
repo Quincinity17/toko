@@ -212,14 +212,16 @@ Uint8List productTemplateXlsx() {
 
   final help = book['Petunjuk'];
   const notes = {
-    ProductField.code: 'Wajib. Kode unik barang, mis. BRG001.',
-    ProductField.barcode: 'Opsional. Angka barcode tanpa spasi.',
+    ProductField.code: 'Wajib. Barcode unik barang, mis. BMM0000001.',
+    ProductField.barcode: 'Opsional. Barcode pabrik di kemasan, tanpa spasi.',
     ProductField.name: 'Wajib. Nama barang.',
     ProductField.category:
         'Opsional. Boleh lebih dari satu, dipisah koma, mis. '
         '"Mainan, Boneka". Kategori baru dibuat otomatis.',
     ProductField.unit: 'Opsional. Mis. PCS, BTL, KG. Dibuat otomatis.',
-    ProductField.purchasePrice: 'Opsional. Angka tanpa "Rp", mis. 2800.',
+    ProductField.purchasePrice:
+        'Opsional (boleh kosong bila belum tahu). Angka tanpa "Rp", '
+        'mis. 2800.',
     ProductField.sellingPrice: 'Wajib. Angka tanpa "Rp", mis. 3500.',
     ProductField.stock:
         'Opsional. Boleh desimal untuk barang timbangan, mis. 12,5.',

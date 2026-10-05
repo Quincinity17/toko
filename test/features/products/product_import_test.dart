@@ -83,7 +83,7 @@ void main() {
       expect(rows[1].errors.single, 'Harga jual kosong.');
       expect(rows[2].errors.single, contains('bukan angka'));
       expect(rows[3].errors.single, contains('duplikat dengan baris 2'));
-      expect(rows[4].errors.single, 'Kode kosong.');
+      expect(rows[4].errors.single, 'Barcode kosong.');
       expect(rows.map((r) => r.rowNumber), [2, 3, 4, 5, 6]);
     });
 

@@ -17,7 +17,9 @@ import '../../../core/widgets/state_views.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../data/product_file_io.dart';
 import '../data/product_import_service.dart';
+import '../data/product_repository.dart';
 import '../domain/product_import.dart';
+import '../domain/similar_names.dart';
 import 'product_export_dialog.dart';
 import '../../stores/data/store_repository.dart';
 import '../../stores/domain/store.dart';
@@ -57,6 +59,9 @@ class _ProductImportPageState extends ConsumerState<ProductImportPage> {
   ImportTable? _table;
   ImportMapping _mapping = {};
   List<ImportRow> _rows = const [];
+
+  /// Barang baru yang namanya sama / mirip barang lain (peringatan saja).
+  List<SimilarName> _similar = const [];
   ExistingProductAction _action = ExistingProductAction.skip;
 
   /// Toko tujuan kolom Stok (dipilih di langkah Periksa).
@@ -127,8 +132,17 @@ class _ProductImportPageState extends ConsumerState<ProductImportPage> {
     final existing = await ref
         .read(productImportServiceProvider)
         .existingIndex();
+    final rows = validateImport(_table!, _mapping, existing);
+    // Nama sama / mirip hanya untuk barang baru (yang lama dicocokkan lewat
+    // barcode).
+    final similar = await ref.read(productRepositoryProvider).similarNames([
+      for (final r in rows)
+        if (r.isNew) (r.rowNumber, r.draft!.name.trim()),
+    ]);
+    if (!mounted) return;
     setState(() {
-      _rows = validateImport(_table!, _mapping, existing);
+      _rows = rows;
+      _similar = similar;
       _busy = false;
       _step = _Step.review;
     });
@@ -167,6 +181,7 @@ class _ProductImportPageState extends ConsumerState<ProductImportPage> {
     _step = _Step.pick;
     _table = null;
     _rows = const [];
+    _similar = const [];
     _result = null;
     _error = null;
   });
@@ -214,6 +229,7 @@ class _ProductImportPageState extends ConsumerState<ProductImportPage> {
                     ),
                     _Step.review => _ReviewStep(
                       rows: _rows,
+                      similar: _similar,
                       hasStock: _mapping[ProductField.stock] != null,
                       stockStoreName: _activeStores
                           .where((s) => s.id == _stockStore)
@@ -257,50 +273,54 @@ class _StepIndicator extends StatelessWidget {
       _Step.review || _Step.running => 2,
       _Step.done => 3,
     };
-    return Row(
-      children: [
-        for (var i = 0; i < labels.length; i++) ...[
-          if (i > 0)
+    // Layar sempit (HP): bisa digeser ke samping.
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          for (var i = 0; i < labels.length; i++) ...[
+            if (i > 0)
+              Container(
+                width: 24,
+                height: 1,
+                margin: const EdgeInsets.symmetric(horizontal: 6),
+                color: c.separator,
+              ),
             Container(
-              width: 24,
-              height: 1,
-              margin: const EdgeInsets.symmetric(horizontal: 6),
-              color: c.separator,
-            ),
-          Container(
-            width: 22,
-            height: 22,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: i <= current ? c.accent : c.fill,
-            ),
-            child: i < current
-                ? const Icon(
-                    CupertinoIcons.checkmark_alt,
-                    size: 13,
-                    color: CupertinoColors.white,
-                  )
-                : Text(
-                    '${i + 1}',
-                    style: AppTypography.caption.copyWith(
-                      color: i <= current
-                          ? CupertinoColors.white
-                          : c.labelSecondary,
-                      fontWeight: FontWeight.w600,
+              width: 22,
+              height: 22,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: i <= current ? c.accent : c.fill,
+              ),
+              child: i < current
+                  ? const Icon(
+                      CupertinoIcons.checkmark_alt,
+                      size: 13,
+                      color: CupertinoColors.white,
+                    )
+                  : Text(
+                      '${i + 1}',
+                      style: AppTypography.caption.copyWith(
+                        color: i <= current
+                            ? CupertinoColors.white
+                            : c.labelSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            labels[i],
-            style: AppTypography.footnote.copyWith(
-              color: i == current ? c.label : c.labelSecondary,
-              fontWeight: i == current ? FontWeight.w600 : FontWeight.w400,
             ),
-          ),
+            const SizedBox(width: 6),
+            Text(
+              labels[i],
+              style: AppTypography.footnote.copyWith(
+                color: i == current ? c.label : c.labelSecondary,
+                fontWeight: i == current ? FontWeight.w600 : FontWeight.w400,
+              ),
+            ),
+          ],
         ],
-      ],
+      ),
     );
   }
 }
@@ -369,7 +389,7 @@ class _PickStep extends StatelessWidget {
                   'lalu Simpan Sebagai .xlsx.',
             ),
             const InsetGroupedTile(
-              title: 'Kode yang sudah ada',
+              title: 'Barcode yang sudah ada',
               subtitle:
                   'Bisa dilewati, ditimpa, atau hanya diperbarui stok & '
                   'harganya. Dipilih di langkah Periksa.',
@@ -578,6 +598,7 @@ class _Preview extends StatelessWidget {
 class _ReviewStep extends StatelessWidget {
   const _ReviewStep({
     required this.rows,
+    required this.similar,
     required this.hasStock,
     required this.stockStoreName,
     required this.onPickStockStore,
@@ -588,6 +609,7 @@ class _ReviewStep extends StatelessWidget {
   });
 
   final List<ImportRow> rows;
+  final List<SimilarName> similar;
 
   /// File punya kolom Stok, jadi perlu toko tujuan.
   final bool hasStock;
@@ -643,7 +665,7 @@ class _ReviewStep extends StatelessWidget {
             ),
             const SizedBox(width: AppSpacing.md),
             stat(
-              'Kode sudah ada',
+              'Barcode sudah ada',
               existingCount,
               c.accent,
               CupertinoIcons.arrow_2_circlepath_circle_fill,
@@ -683,7 +705,7 @@ class _ReviewStep extends StatelessWidget {
         if (existingCount > 0) ...[
           const SizedBox(height: AppSpacing.xl),
           InsetGroupedSection(
-            header: 'Untuk $existingCount barang yang kodenya sudah ada',
+            header: 'Untuk $existingCount barang yang barcodenya sudah ada',
             children: [
               for (final a in ExistingProductAction.values)
                 InsetGroupedTile(
@@ -694,6 +716,33 @@ class _ReviewStep extends StatelessWidget {
                       : null,
                   showChevron: false,
                   onPressed: () => onAction(a),
+                ),
+            ],
+          ),
+        ],
+        if (similar.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.xl),
+          InsetGroupedSection(
+            header: 'Nama sama / mirip barang lain (tetap di-import)',
+            footer:
+                '${similar.length > 200 ? 'Menampilkan 200 dari ${Fmt.number(similar.length)}. ' : ''}'
+                'Periksa supaya tidak dobel. Barang berbeda yang namanya '
+                'mirip (mis. beda ukuran) boleh dibiarkan; yang dobel bisa '
+                'dihapus dari file lalu import ulang.',
+            children: [
+              for (final f in similar.take(200))
+                InsetGroupedTile(
+                  leading: Text(
+                    'Baris ${f.key}',
+                    style: AppTypography.footnote.copyWith(
+                      color: c.warning,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  title: f.name,
+                  subtitle:
+                      '${f.exact ? 'Sama dengan' : 'Mirip dengan'} '
+                      '${f.matchLabel}',
                 ),
             ],
           ),
@@ -858,7 +907,7 @@ class _DoneStep extends StatelessWidget {
               value: Fmt.number(result.updated),
             ),
             InsetGroupedTile(
-              title: 'Dilewati (kode sudah ada)',
+              title: 'Dilewati (barcode sudah ada)',
               value: Fmt.number(result.skipped),
             ),
             InsetGroupedTile(

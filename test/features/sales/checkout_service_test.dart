@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:toko/core/database/app_database.dart';
+import 'package:toko/core/database/tables/audit.dart';
+import 'package:toko/features/audit/data/integrity_service.dart';
 import 'package:toko/features/auth/data/auth_repository.dart';
 import 'package:toko/features/auth/data/user_repository.dart';
 import 'package:toko/features/auth/domain/app_user.dart';
@@ -672,6 +674,80 @@ void main() {
       expect(boneka.tags.map((t) => t.name), ['Boneka']);
       expect((await repo.findByCodeOrBarcode('X1'))!.tags, isEmpty);
       expect(await db.select(db.tags).get(), hasLength(2));
+    });
+
+    test('v10 → v11: kolom nota retur ditambahkan, faktur lama utuh', () async {
+      final schema = File('test/fixtures/schema_v10.sql').readAsStringSync();
+      final db = AppDatabase(
+        NativeDatabase.memory(
+          setup: (Database raw) {
+            for (final stmt in schema.split(';\n')) {
+              if (stmt.trim().isNotEmpty) raw.execute(stmt);
+            }
+            raw.execute(
+              "INSERT INTO stores (name, uuid) VALUES ('Toko Utama', 's-1')",
+            );
+            raw.execute(
+              "INSERT INTO users (username, full_name, password_hash, role, "
+              "uuid) VALUES ('admin', 'Admin', 'x', 'admin', 'u-1')",
+            );
+            raw.execute(
+              "INSERT INTO sales (invoice_no, sale_date, user_id, item_count, "
+              "subtotal, total, paid, change_amount, store_id, uuid) VALUES "
+              "('INV-K01-20261001-0001', 1790000000, 1, 1, 3500, 3500, 5000, "
+              "1500, 1, 'sale-1')",
+            );
+            raw.userVersion = 10;
+          },
+        ),
+      );
+      addTearDown(db.close);
+      final sale = await db.select(db.sales).getSingle();
+      expect(sale.invoiceNo, 'INV-K01-20261001-0001');
+      expect(sale.returnOfId, isNull);
+      expect(sale.returnReason, isNull);
+      final cols = await db.customSelect('PRAGMA table_info(sale_items)').get();
+      expect(
+        cols.map((r) => r.read<String>('name')),
+        contains('return_of_item_id'),
+      );
+    });
+
+    test('v11 → v12: data lama disegel, catatan aktivitas dimulai, '
+        'pemeriksaan keutuhan bersih', () async {
+      final schema = File('test/fixtures/schema_v11.sql').readAsStringSync();
+      final db = AppDatabase(
+        NativeDatabase.memory(
+          setup: (Database raw) {
+            for (final stmt in schema.split(';\n')) {
+              if (stmt.trim().isNotEmpty) raw.execute(stmt);
+            }
+            raw.execute(
+              "INSERT INTO stores (name, uuid) VALUES ('Toko Utama', 's-1')",
+            );
+            raw.execute(
+              "INSERT INTO users (username, full_name, password_hash, role, "
+              "uuid) VALUES ('admin', 'Admin', 'x', 'admin', 'u-1')",
+            );
+            raw.execute(
+              "INSERT INTO products (code, name, selling_price, uuid) "
+              "VALUES ('A1', 'Gula', 17500, 'p-1')",
+            );
+            raw.execute(
+              'INSERT INTO store_products (store_id, product_id, stock, uuid) '
+              "VALUES (1, 1, 5, 'sp-1')",
+            );
+            raw.userVersion = 11;
+          },
+        ),
+      );
+      addTearDown(db.close);
+      final user = await db.select(db.users).getSingle();
+      expect(user.seal, isNotNull);
+      expect((await db.select(db.storeProducts).getSingle()).seal, isNotNull);
+      final audit = await db.select(db.auditLog).get();
+      expect(audit.single.type, AuditType.sealsRebuilt);
+      expect((await IntegrityService(db).check()).issues, isEmpty);
     });
 
     Future<AppDatabase> fromV8({required bool withTag}) async {

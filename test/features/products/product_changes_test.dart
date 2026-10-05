@@ -71,7 +71,7 @@ void main() {
     );
     expect(changes.map((c) => c.toString()), [
       'Nama: Indomie Goreng 85g → Indomie Goreng Jumbo',
-      'Barcode: – → 899',
+      'Barcode bawaan: – → 899',
       'Harga jual: Rp 3.500 → Rp 3.700',
       'Status: Aktif → Nonaktif',
       'Kategori: Laris, Sarapan → Laris',

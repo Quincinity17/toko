@@ -135,6 +135,7 @@ class InsetGroupedTile extends StatelessWidget {
               const SizedBox(width: AppSpacing.sm),
             ],
             Expanded(
+              flex: 3,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
@@ -167,18 +168,33 @@ class InsetGroupedTile extends StatelessWidget {
                 ],
               ),
             ),
+            // Di layar sempit (HP) nilai dipotong (…) dan kontrol di kanan
+            // diperkecil, supaya tidak meluap; di layar lebar ukuran asli.
             if (value != null)
-              Padding(
-                padding: const EdgeInsets.only(left: AppSpacing.xs),
-                child: Text(
-                  value!,
-                  style: AppTypography.body.copyWith(color: c.labelSecondary),
+              Flexible(
+                flex: 2,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: AppSpacing.xs),
+                  child: Text(
+                    value!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.right,
+                    style: AppTypography.body.copyWith(color: c.labelSecondary),
+                  ),
                 ),
               ),
             if (trailing != null)
-              Padding(
-                padding: const EdgeInsets.only(left: AppSpacing.xs),
-                child: trailing!,
+              Flexible(
+                flex: 2,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: AppSpacing.xs),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: trailing!,
+                  ),
+                ),
               ),
             if (chevron)
               Padding(

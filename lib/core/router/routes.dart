@@ -6,6 +6,7 @@ class AppRoutes {
   static const kasir = '/kasir';
   static const produk = '/produk';
   static const importProduk = '/produk/import';
+  static const inputTabel = '/produk/tabel';
   static const stok = '/stok';
   static const laporan = '/laporan';
   static const pengaturan = '/pengaturan';

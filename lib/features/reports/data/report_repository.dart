@@ -37,6 +37,7 @@ class ReportRepository {
     discount: _int(r, 'discount'),
     cost: _int(r, 'cost'),
     quantity: _double(r, 'qty'),
+    revenueWithoutCost: _int(r, 'no_cost_revenue'),
   );
 
   Future<SalesSummary> summary(ReportRange range) async => _summary(
@@ -165,6 +166,12 @@ class ReportRepository {
   /// Per toko (berguna saat melihat semua toko).
   Future<List<GroupPerformance>> stores(ReportRange range) =>
       _groups(_dao.storeSales(range.start, range.end, storeId: storeId));
+
+  /// Penjualan per toko, dipantau (dashboard "Semua toko").
+  Stream<List<GroupPerformance>> watchStoreSales(ReportRange range) => _dao
+      .storeSales(range.start, range.end, storeId: storeId)
+      .watch()
+      .map((rows) => rows.map(_group).toList());
 
   /// Semua bagian laporan untuk [range] (dimuat paralel).
   Future<ReportBundle> bundle(ReportRange range) async {

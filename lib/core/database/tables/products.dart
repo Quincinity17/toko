@@ -57,4 +57,7 @@ class Products extends Table {
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+
+  /// v12: segel (`Sealer`) atas id, kode, harga beli, harga jual, aktif.
+  TextColumn get seal => text().nullable()();
 }

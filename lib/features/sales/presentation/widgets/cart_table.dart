@@ -11,7 +11,7 @@ import '../../domain/cart.dart';
 /// Lebar kolom tabel keranjang. `null` = mengisi sisa ruang.
 const _cols = <(String, double?, TextAlign)>[
   ('No', 36, TextAlign.left),
-  ('Kode', 104, TextAlign.left),
+  ('Barcode', 120, TextAlign.left),
   ('Nama Barang', null, TextAlign.left),
   ('Jumlah', 132, TextAlign.center),
   ('Satuan', 64, TextAlign.left),
@@ -41,33 +41,50 @@ class CartTable extends StatelessWidget {
   final ValueChanged<int> onEditQty;
   final ValueChanged<int> onRemove;
 
+  /// Di bawah lebar ini (HP) keranjang tampil sebagai daftar ringkas.
+  static const compactWidth = 560.0;
+
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < compactWidth;
+        return _build(c, compact);
+      },
+    );
+  }
+
+  Widget _build(AppColors c, bool compact) {
     return AppCard(
       padding: EdgeInsets.zero,
       child: Column(
         children: [
-          _Header(),
-          Container(height: 0.5, color: c.separator),
+          if (!compact) ...[
+            _Header(),
+            Container(height: 0.5, color: c.separator),
+          ],
           Expanded(
             child: cart.isEmpty
-                ? const EmptyState(
+                ? EmptyState(
                     icon: CupertinoIcons.barcode_viewfinder,
                     title: 'Belum ada barang',
-                    message:
-                        'Scan barcode atau ketik kode barang lalu tekan Enter. '
-                        'Tekan F3 untuk mencari berdasarkan nama.',
+                    message: compact
+                        ? 'Scan atau ketik barcode, atau ketuk ikon cari '
+                              'untuk mencari berdasarkan nama.'
+                        : 'Scan atau ketik barcode barang lalu tekan Enter. '
+                              'Tekan F3 untuk mencari berdasarkan nama.',
                   )
                 : ListView.separated(
                     controller: scrollController,
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     itemCount: cart.lines.length,
                     separatorBuilder: (_, _) => Padding(
-                      padding: const EdgeInsets.only(left: 52),
+                      padding: EdgeInsets.only(left: compact ? 16 : 52),
                       child: Container(height: 0.5, color: c.separator),
                     ),
                     itemBuilder: (context, i) => _Row(
+                      compact: compact,
                       key: ValueKey(cart.lines[i].product.id),
                       index: i,
                       line: cart.lines[i],
@@ -120,6 +137,7 @@ Widget _cell(double? width, Widget child) => width == null
 class _Row extends StatelessWidget {
   const _Row({
     super.key,
+    this.compact = false,
     required this.index,
     required this.line,
     required this.selected,
@@ -130,6 +148,9 @@ class _Row extends StatelessWidget {
     required this.onRemove,
   });
 
+  /// HP: nama + barcode·harga, ± jumlah, total. Hapus barang = kurangi
+  /// sampai 0.
+  final bool compact;
   final int index;
   final CartLine line;
   final bool selected;
@@ -161,101 +182,105 @@ class _Row extends StatelessWidget {
           color: selected ? c.accentTint : Colors.transparent,
           borderRadius: AppRadius.smAll,
         ),
-        child: Row(
-          children: [
-            _cell(
-              _cols[0].$2,
-              Text(
-                '${index + 1}',
-                style: num.copyWith(color: c.labelSecondary),
-              ),
-            ),
-            _cell(
-              _cols[1].$2,
-              Text(
-                p.code,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: num.copyWith(color: c.labelSecondary),
-              ),
-            ),
-            _cell(
-              null,
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
+        child: compact
+            ? _compactRow(c, body, num)
+            : Row(
                 children: [
-                  Text(
-                    p.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: body.copyWith(fontWeight: FontWeight.w500),
-                  ),
-                  if (line.exceedsStock)
+                  _cell(
+                    _cols[0].$2,
                     Text(
-                      'Stok tercatat ${Fmt.number(p.stock)}',
-                      style: AppTypography.caption.copyWith(color: c.warning),
+                      '${index + 1}',
+                      style: num.copyWith(color: c.labelSecondary),
                     ),
+                  ),
+                  _cell(
+                    _cols[1].$2,
+                    Text(
+                      p.code,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: num.copyWith(color: c.labelSecondary),
+                    ),
+                  ),
+                  _cell(
+                    null,
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          p.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: body.copyWith(fontWeight: FontWeight.w500),
+                        ),
+                        if (line.exceedsStock)
+                          Text(
+                            'Stok tercatat ${Fmt.number(p.stock)}',
+                            style: AppTypography.caption.copyWith(
+                              color: c.warning,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  _cell(
+                    _cols[3].$2,
+                    _QtyStepper(
+                      qty: line.qty,
+                      onMinus: onMinus,
+                      onPlus: onPlus,
+                      onTapValue: onEditQty,
+                    ),
+                  ),
+                  _cell(
+                    _cols[4].$2,
+                    Text(
+                      p.unitName ?? '–',
+                      style: body.copyWith(color: c.labelSecondary),
+                    ),
+                  ),
+                  _cell(
+                    _cols[5].$2,
+                    Text(
+                      Fmt.number(line.price),
+                      textAlign: TextAlign.right,
+                      style: num,
+                    ),
+                  ),
+                  _cell(
+                    _cols[6].$2,
+                    AnimatedSwitcher(
+                      duration: AppDurations.medium,
+                      switchInCurve: SpringCurve.bouncy,
+                      transitionBuilder: (child, a) =>
+                          ScaleTransition(scale: a, child: child),
+                      child: Text(
+                        Fmt.number(line.total),
+                        key: ValueKey(line.total),
+                        textAlign: TextAlign.right,
+                        style: num.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ),
+                  _cell(
+                    _cols[7].$2,
+                    Tooltip(
+                      message: 'Hapus barang',
+                      child: CupertinoButton(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(36, 36),
+                        onPressed: onRemove,
+                        child: Icon(
+                          CupertinoIcons.minus_circle_fill,
+                          size: 20,
+                          color: c.danger.withValues(alpha: 0.85),
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
-            ),
-            _cell(
-              _cols[3].$2,
-              _QtyStepper(
-                qty: line.qty,
-                onMinus: onMinus,
-                onPlus: onPlus,
-                onTapValue: onEditQty,
-              ),
-            ),
-            _cell(
-              _cols[4].$2,
-              Text(
-                p.unitName ?? '–',
-                style: body.copyWith(color: c.labelSecondary),
-              ),
-            ),
-            _cell(
-              _cols[5].$2,
-              Text(
-                Fmt.number(line.price),
-                textAlign: TextAlign.right,
-                style: num,
-              ),
-            ),
-            _cell(
-              _cols[6].$2,
-              AnimatedSwitcher(
-                duration: AppDurations.medium,
-                switchInCurve: SpringCurve.bouncy,
-                transitionBuilder: (child, a) =>
-                    ScaleTransition(scale: a, child: child),
-                child: Text(
-                  Fmt.number(line.total),
-                  key: ValueKey(line.total),
-                  textAlign: TextAlign.right,
-                  style: num.copyWith(fontWeight: FontWeight.w600),
-                ),
-              ),
-            ),
-            _cell(
-              _cols[7].$2,
-              Tooltip(
-                message: 'Hapus barang',
-                child: CupertinoButton(
-                  padding: EdgeInsets.zero,
-                  minimumSize: const Size(36, 36),
-                  onPressed: onRemove,
-                  child: Icon(
-                    CupertinoIcons.minus_circle_fill,
-                    size: 20,
-                    color: c.danger.withValues(alpha: 0.85),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
       ),
     );
 
@@ -272,6 +297,57 @@ class _Row extends StatelessWidget {
         ),
       ),
       child: row,
+    );
+  }
+
+  Widget _compactRow(AppColors c, TextStyle body, TextStyle num) {
+    final p = line.product;
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                p.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: body.copyWith(fontWeight: FontWeight.w500),
+              ),
+              Text(
+                '${p.code} · ${Fmt.number(line.price)}'
+                '${p.unitName == null ? '' : '/${p.unitName}'}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.caption.copyWith(color: c.labelSecondary),
+              ),
+              if (line.exceedsStock)
+                Text(
+                  'Stok tercatat ${Fmt.number(p.stock)}',
+                  style: AppTypography.caption.copyWith(color: c.warning),
+                ),
+            ],
+          ),
+        ),
+        SizedBox(
+          width: 108,
+          child: _QtyStepper(
+            qty: line.qty,
+            onMinus: onMinus,
+            onPlus: onPlus,
+            onTapValue: onEditQty,
+          ),
+        ),
+        SizedBox(
+          width: 76,
+          child: Text(
+            Fmt.number(line.total),
+            textAlign: TextAlign.right,
+            style: num.copyWith(fontWeight: FontWeight.w600),
+          ),
+        ),
+      ],
     );
   }
 }

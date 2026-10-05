@@ -107,6 +107,12 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
                 '${storeId == null ? 'stok semua toko' : 'stok & harga ${store?.name ?? 'toko'}'}',
       actions: [
         AppButton(
+          label: 'Input Tabel',
+          icon: CupertinoIcons.table,
+          variant: AppButtonVariant.gray,
+          onPressed: () => context.go(AppRoutes.inputTabel),
+        ),
+        AppButton(
           label: 'Import',
           icon: CupertinoIcons.arrow_down_doc,
           variant: AppButtonVariant.gray,
@@ -132,7 +138,7 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
             height: 40,
             child: CupertinoSearchTextField(
               controller: _search,
-              placeholder: 'Cari nama, kode, atau barcode',
+              placeholder: 'Cari nama atau barcode',
               style: AppTypography.body.copyWith(color: c.label),
               onChanged: _onSearch,
             ),

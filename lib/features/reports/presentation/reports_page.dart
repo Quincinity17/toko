@@ -5,9 +5,10 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/save_file.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_dialogs.dart';
+import '../../../core/widgets/choice_chips.dart';
 import '../../../core/widgets/large_title_page.dart';
-import '../../../core/widgets/pressable_scale.dart';
 import '../../../core/widgets/state_views.dart';
+import '../../audit/presentation/activity_section.dart';
 import '../../sales/data/sales_repository.dart';
 import '../../sales/domain/sale.dart';
 import '../../stores/presentation/store_scope.dart';
@@ -48,7 +49,8 @@ enum ReportSection {
   stock('Stok', CupertinoIcons.archivebox),
   payments('Pembayaran', CupertinoIcons.creditcard),
   people('Kasir & Terminal', CupertinoIcons.person_2),
-  invoices('Faktur', CupertinoIcons.doc_text);
+  invoices('Faktur', CupertinoIcons.doc_text),
+  activity('Aktivitas', CupertinoIcons.shield_lefthalf_fill);
 
   const ReportSection(this.label, this.icon);
 
@@ -180,7 +182,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
       bottom: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _Chips<RangePreset>(
+          ChoiceChips<RangePreset>(
             values: RangePreset.values,
             selected: _preset,
             label: (p) => p == RangePreset.custom && _preset == p
@@ -191,7 +193,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
             onSelected: _choosePreset,
           ),
           const SizedBox(height: AppSpacing.sm),
-          _Chips<ReportSection>(
+          ChoiceChips<ReportSection>(
             values: ReportSection.values,
             selected: _section,
             label: (s) => s.label,
@@ -239,6 +241,11 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
         return PaymentsSection(bundle: bundle);
       case ReportSection.people:
         return PeopleSection(bundle: bundle);
+      case ReportSection.activity:
+        return ActivitySection(
+          range: _range,
+          storeId: ref.watch(storeScopeProvider),
+        );
       case ReportSection.invoices:
         final invoices = ref.watch(_invoicesProvider(_range));
         return invoices.when(
@@ -247,78 +254,5 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
           data: (list) => InvoicesSection(invoices: list),
         );
     }
-  }
-}
-
-/// Deretan pilihan berbentuk kapsul (satu terpilih), bisa melipat ke baris
-/// berikutnya di layar sempit.
-class _Chips<T> extends StatelessWidget {
-  const _Chips({
-    required this.values,
-    required this.selected,
-    required this.label,
-    required this.icon,
-    required this.onSelected,
-    this.subtle = false,
-  });
-
-  final List<T> values;
-  final T selected;
-  final String Function(T) label;
-  final IconData? Function(T) icon;
-  final ValueChanged<T> onSelected;
-
-  /// Gaya lebih tenang untuk navigasi bagian (bukan filter).
-  final bool subtle;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    return Wrap(
-      spacing: AppSpacing.xs,
-      runSpacing: AppSpacing.xs,
-      children: [
-        for (final v in values)
-          PressableScale(
-            onPressed: () => onSelected(v),
-            pressedScale: 0.95,
-            borderRadius: BorderRadius.circular(18),
-            child: AnimatedContainer(
-              duration: AppDurations.fast,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              decoration: BoxDecoration(
-                color: v == selected
-                    ? (subtle ? c.accentTint : c.accent)
-                    : c.fill,
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (icon(v) != null) ...[
-                    Icon(
-                      icon(v),
-                      size: 15,
-                      color: v == selected
-                          ? (subtle ? c.accent : CupertinoColors.white)
-                          : c.labelSecondary,
-                    ),
-                    const SizedBox(width: 6),
-                  ],
-                  Text(
-                    label(v),
-                    style: AppTypography.footnote.copyWith(
-                      color: v == selected
-                          ? (subtle ? c.accent : CupertinoColors.white)
-                          : c.label,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-      ],
-    );
   }
 }

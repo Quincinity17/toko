@@ -54,6 +54,25 @@ void main() {
     StoreProductValues(storeId: store, stock: stock, price: price),
   ];
 
+  test(
+    'barcode otomatis melanjutkan barang terbaru + pilihan diingat',
+    () async {
+      // Barang contoh: BRG001 … BRG020.
+      expect((await repo.nextCode())?.next, 'BRG021');
+      await repo.save(
+        actor: admin,
+        draft: draft(code: 'BMM0000001'),
+      );
+      final next = await repo.nextCode();
+      expect(next?.next, 'BMM0000002');
+      expect(next?.basedOn, 'BMM0000001');
+
+      expect(await repo.autoCodeEnabled(), isFalse);
+      await repo.setAutoCode(true);
+      expect(await repo.autoCodeEnabled(), isTrue);
+    },
+  );
+
   test('tambah barang: kategori baru dibuat, satuan dipakai ulang', () async {
     final p = await repo.save(actor: admin, draft: draft(), stores: at(12));
     expect(p.tags.single.name, 'Bumbu');

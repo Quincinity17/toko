@@ -59,18 +59,16 @@ List<FieldChange> productChanges({
   final unit = text(unitAfter ?? before.unitName, '');
 
   add('Nama', before.name, after.name.trim());
-  add('Kode', before.code, after.code.trim());
-  add('Barcode', text(before.barcode, '–'), text(after.barcode, '–'));
+  add('Barcode', before.code, after.code.trim());
+  add('Barcode bawaan', text(before.barcode, '–'), text(after.barcode, '–'));
   add(
     'Satuan',
     text(before.unitName, 'Tanpa satuan'),
     text(unitAfter, 'Tanpa satuan'),
   );
-  add(
-    'Harga beli',
-    Fmt.rupiah(before.purchasePrice),
-    Fmt.rupiah(after.purchasePrice),
-  );
+  // Harga beli opsional: 0 = belum diisi.
+  String buy(int v) => v == 0 ? 'Belum diisi' : Fmt.rupiah(v);
+  add('Harga beli', buy(before.purchasePrice), buy(after.purchasePrice));
   add(
     'Harga jual',
     Fmt.rupiah(before.defaultSellingPrice),

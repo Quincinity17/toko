@@ -17,6 +17,10 @@ class SaleSummary {
     required this.change,
     required this.paymentMethod,
     this.paymentRef,
+    this.storeId,
+    this.returnOfId,
+    this.returnReason,
+    this.returnedAmount = 0,
   });
 
   final int id;
@@ -34,6 +38,21 @@ class SaleSummary {
   final int change;
   final String paymentMethod;
   final String? paymentRef;
+  final int? storeId;
+
+  /// Nota retur (`RET-…`, total negatif): faktur asal yang diretur.
+  final int? returnOfId;
+  final String? returnReason;
+
+  /// Faktur penjualan: nilai yang sudah diretur (positif).
+  final int returnedAmount;
+
+  bool get isReturn => returnOfId != null;
+
+  /// Seluruh nilai faktur sudah dikembalikan (dibatalkan).
+  bool get isFullyReturned => !isReturn && total > 0 && returnedAmount >= total;
+  bool get isPartlyReturned =>
+      !isReturn && returnedAmount > 0 && !isFullyReturned;
 }
 
 /// Baris faktur yang sudah tersimpan.

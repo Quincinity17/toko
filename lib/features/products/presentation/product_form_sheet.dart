@@ -9,6 +9,7 @@ import '../../../core/widgets/app_dialogs.dart';
 import '../../../core/widgets/app_text_field.dart';
 import '../../../core/widgets/inset_grouped_list.dart';
 import '../../../core/widgets/option_picker.dart';
+import '../../../core/widgets/pressable_scale.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../stores/data/store_repository.dart';
@@ -16,11 +17,13 @@ import '../../stores/domain/store.dart';
 import '../data/product_repository.dart';
 import '../data/tag_repository.dart';
 import '../domain/product.dart';
+import '../domain/price_markup.dart';
 import '../domain/product_changes.dart';
 import '../domain/tag.dart';
 import 'tag_chip.dart';
 import 'tag_picker.dart';
 import 'product_providers.dart';
+import 'similar_names_dialog.dart';
 
 /// Form tambah (`existing == null`) atau ubah barang.
 Future<void> showProductFormSheet(BuildContext context, {Product? existing}) {
@@ -47,12 +50,27 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
   late final _code = TextEditingController(text: _p?.code);
   late final _barcode = TextEditingController(text: _p?.barcode);
   late final _name = TextEditingController(text: _p?.name);
+  // Harga beli opsional: 0 = belum diketahui, ditampilkan kosong.
   late final _buy = TextEditingController(
-    text: _p == null ? '' : Fmt.number(_p!.purchasePrice),
+    text: _p == null || _p!.purchasePrice == 0
+        ? ''
+        : Fmt.number(_p!.purchasePrice),
   );
   late final _sell = TextEditingController(
     text: _p == null ? '' : Fmt.number(_p!.defaultSellingPrice),
   );
+
+  /// Persen untung terhadap harga beli; mengisi harga jual otomatis.
+  late final _markup = TextEditingController(
+    text: switch (_p) {
+      final p? => _percentText(p.purchasePrice, p.defaultSellingPrice),
+      null => '',
+    },
+  );
+
+  /// Harga jual terakhir dihitung dari persen (bukan diketik), jadi ikut
+  /// berubah saat harga beli diubah.
+  bool _markupDriven = false;
 
   /// Isian per toko (stok, harga khusus), dibuat saat toko pertama tampil.
   final _storeStock = <int, TextEditingController>{};
@@ -68,6 +86,16 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
   late String? _unit = _p?.unitName ?? 'PCS';
   late bool _active = _p?.isActive ?? true;
 
+  /// Barcode diisi otomatis (+1 dari barcode terakhir); hanya barang baru.
+  bool _autoCode = false;
+
+  /// Barcode yang menjadi dasar nomor otomatis, untuk keterangan.
+  String? _autoBasis;
+
+  /// Nama yang sudah diperingatkan mirip lalu dipilih "Periksa Lagi";
+  /// Simpan berikutnya dengan nama yang sama tidak diperingatkan lagi.
+  String? _warnedName;
+
   final _errors = <String, String?>{};
   String? _error;
   bool _saving = false;
@@ -79,6 +107,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
     _buy,
     _sell,
     _minStock,
+    _markup,
     ..._storeStock.values,
     ..._storePrice.values,
   ];
@@ -91,6 +120,9 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
     _sell.addListener(_refresh);
     if (_p == null) {
       _saved = const {};
+      ref.read(productRepositoryProvider).autoCodeEnabled().then((on) {
+        if (on && mounted) _setAutoCode(true, remember: false);
+      });
     } else {
       ref.read(productRepositoryProvider).storeValues(_p!.id).then((v) {
         if (!mounted) return;
@@ -124,6 +156,67 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
   }
 
   void _refresh() => setState(() {});
+
+  static String _percentText(int buy, int sell) =>
+      switch (PriceMarkup.percent(buy, sell)) {
+        final p? => Fmt.number(p),
+        null => '',
+      };
+
+  void _sellFromMarkup() {
+    final pct = parseIdNumber(_markup.text);
+    final sell = pct == null
+        ? null
+        : PriceMarkup.sellingPrice(_money(_buy) ?? 0, pct.toDouble());
+    if (sell != null) _sell.text = Fmt.number(sell);
+  }
+
+  void _onBuyChanged(String _) {
+    if (_markupDriven) {
+      _sellFromMarkup();
+    } else if (_money(_sell) case final sell?) {
+      _markup.text = _percentText(_money(_buy) ?? 0, sell);
+    }
+  }
+
+  void _onMarkupChanged(String _) {
+    _markupDriven = true;
+    _sellFromMarkup();
+  }
+
+  void _onSellChanged(String _) {
+    _markupDriven = false;
+    _markup.text = _percentText(_money(_buy) ?? 0, _money(_sell) ?? 0);
+  }
+
+  Future<void> _setAutoCode(bool on, {bool remember = true}) async {
+    final repo = ref.read(productRepositoryProvider);
+    if (remember) await repo.setAutoCode(on);
+    if (!on) {
+      if (mounted) setState(() => _autoCode = false);
+      return;
+    }
+    await _fillAutoCode();
+  }
+
+  /// Mengisi barcode berikutnya; dipanggil lagi saat menyimpan supaya tetap
+  /// terbaru.
+  Future<void> _fillAutoCode() async {
+    final next = await ref.read(productRepositoryProvider).nextCode();
+    if (!mounted) return;
+    setState(() {
+      _autoCode = next != null;
+      _autoBasis = next?.basedOn;
+      if (next != null) {
+        _code.text = next.next;
+        _errors['code'] = null;
+      } else {
+        _errors['code'] =
+            'Belum ada barcode berakhiran angka. Isi satu barang dulu, '
+            'mis. BMM0000001.';
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -188,7 +281,8 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
   ];
 
   Future<void> _save() async {
-    if (_saved == null || !_validate()) return;
+    if (_p == null && _autoCode) await _fillAutoCode();
+    if (!mounted || _saved == null || !_validate()) return;
     final draft = _draft;
     final stores = _storeValues;
 
@@ -210,6 +304,23 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
       }
       final ok = await showChangesConfirm(context, _p!.name, changes);
       if (!ok || !mounted) return;
+    }
+
+    // Barang baru: peringatan nama sama / mirip (sekali, saat menyimpan).
+    final name = draft.name.trim();
+    if (_p == null && name != _warnedName) {
+      final found = await ref.read(productRepositoryProvider).similarNames([
+        (0, name),
+      ]);
+      if (!mounted) return;
+      if (found.isNotEmpty) {
+        final ok = await showSimilarNamesConfirm(context, found);
+        if (!mounted) return;
+        if (!ok) {
+          _warnedName = name;
+          return;
+        }
+      }
     }
 
     setState(() => _saving = true);
@@ -363,17 +474,29 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
           ),
           const SizedBox(height: AppSpacing.md),
           pair(
-            AppTextField(
-              controller: _code,
-              label: 'Kode',
-              placeholder: 'mis. BRG021',
-              errorText: _errors['code'],
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                AppTextField(
+                  controller: _code,
+                  label: 'Barcode',
+                  placeholder: 'mis. BMM0000001',
+                  prefixIcon: CupertinoIcons.barcode,
+                  enabled: !_autoCode,
+                  helper: _autoCode && _autoBasis != null
+                      ? 'Lanjutan dari $_autoBasis'
+                      : null,
+                  errorText: _errors['code'],
+                ),
+                if (_p == null)
+                  _AutoCodeToggle(value: _autoCode, onChanged: _setAutoCode),
+              ],
             ),
             AppTextField(
               controller: _barcode,
-              label: 'Barcode (opsional)',
-              placeholder: 'Scan atau ketik',
-              prefixIcon: CupertinoIcons.barcode,
+              label: 'Barcode bawaan (opsional)',
+              placeholder: 'Barcode pabrik di kemasan',
+              prefixIcon: CupertinoIcons.barcode_viewfinder,
               errorText: _errors['barcode'],
             ),
           ),
@@ -389,33 +512,68 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
             ],
           ),
           const SizedBox(height: AppSpacing.lg),
-          pair(
-            AppTextField(
-              controller: _buy,
-              label: 'Harga beli (Rp)',
-              placeholder: '0',
-              errorText: _errors['buy'],
-              keyboardType: TextInputType.number,
-              inputFormatters: [RupiahInputFormatter()],
-            ),
-            AppTextField(
-              controller: _sell,
-              label: 'Harga jual (Rp)',
-              placeholder: '0',
-              helper: 'Harga default semua toko.',
-              errorText: _errors['sell'],
-              keyboardType: TextInputType.number,
-              inputFormatters: [RupiahInputFormatter()],
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 3,
+                child: AppTextField(
+                  controller: _buy,
+                  label: 'Harga beli (opsional)',
+                  placeholder: 'Boleh dikosongkan',
+                  errorText: _errors['buy'],
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [RupiahInputFormatter()],
+                  onChanged: _onBuyChanged,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                flex: 2,
+                child: AppTextField(
+                  controller: _markup,
+                  label: 'Untung (%)',
+                  placeholder: buy > 0 ? 'mis. 25' : 'Isi harga beli',
+                  enabled: buy > 0,
+                  helper: buy > 0 ? 'Harga jual dihitung otomatis.' : null,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  onChanged: _onMarkupChanged,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                flex: 3,
+                child: AppTextField(
+                  controller: _sell,
+                  label: 'Harga jual (Rp)',
+                  placeholder: '0',
+                  helper: 'Harga default semua toko.',
+                  errorText: _errors['sell'],
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [RupiahInputFormatter()],
+                  onChanged: _onSellChanged,
+                ),
+              ),
+            ],
           ),
           if (sell != null) ...[
             const SizedBox(height: AppSpacing.xs),
             Text(
-              marginWarning ??
-                  'Untung ${Fmt.rupiah(sell - buy)} per ${_unit ?? 'barang'}'
-                      '${buy > 0 ? ' (${Fmt.number(((sell - buy) / buy * 100).round())}%)' : ''}',
+              buy == 0
+                  ? 'Harga beli belum diisi: untung belum bisa dihitung. '
+                        'Bisa dilengkapi nanti.'
+                  : marginWarning ??
+                        'Untung ${Fmt.rupiah(sell - buy)} per '
+                            '${_unit ?? 'barang'} '
+                            '(${Fmt.number(((sell - buy) / buy * 100).round())}%)',
               style: AppTypography.footnote.copyWith(
-                color: marginWarning == null ? c.success : c.warning,
+                color: buy == 0
+                    ? c.labelSecondary
+                    : marginWarning == null
+                    ? c.success
+                    : c.warning,
               ),
             ),
           ],
@@ -659,6 +817,42 @@ class _ChangesView extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Centang "Otomatis": barcode = barcode terakhir + 1.
+class _AutoCodeToggle extends StatelessWidget {
+  const _AutoCodeToggle({required this.value, required this.onChanged});
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return PressableScale(
+      onPressed: () => onChanged(!value),
+      pressedScale: 0.98,
+      child: Padding(
+        padding: const EdgeInsets.only(top: AppSpacing.xs),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CupertinoCheckbox(
+              value: value,
+              activeColor: c.accent,
+              onChanged: (v) => onChanged(v ?? false),
+            ),
+            Flexible(
+              child: Text(
+                'Otomatis (+1 dari barcode terakhir)',
+                style: AppTypography.footnote.copyWith(color: c.label),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -1,7 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../../core/database/tables/audit.dart';
 import '../../../core/database/tables/sales.dart';
+import '../../../core/utils/formatters.dart';
 import '../../auth/domain/app_user.dart';
 import '../domain/stock_adjustment.dart';
 
@@ -41,7 +43,8 @@ class StockRepository {
     }
     final dao = _db.storesDao;
     return _db.transaction(() async {
-      if (await _db.productsDao.findById(productId) == null) {
+      final product = await _db.productsDao.findById(productId);
+      if (product == null) {
         throw const StockFailure('Barang tidak ditemukan.');
       }
       final current = (await dao.entry(storeId, productId))?.stock ?? 0;
@@ -55,6 +58,22 @@ class StockRepository {
         type: StockMovementType.adjust,
         userId: actor.id,
         note: text.isEmpty ? mode.label : '${mode.label}: $text',
+      );
+      await _db.auditDao.append(
+        type: AuditType.stockAdjusted,
+        summary:
+            '${mode.label} ${product.code} · ${product.name}: '
+            '${Fmt.number(current)} → ${Fmt.number(current + delta)}'
+            '${text.isEmpty ? '' : ' ($text)'}',
+        userId: actor.id,
+        userName: actor.fullName,
+        storeId: storeId,
+        data: {
+          'productId': productId,
+          'mode': mode.name,
+          'from': current,
+          'to': current + delta,
+        },
       );
       return current + delta;
     });

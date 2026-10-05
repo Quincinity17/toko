@@ -66,7 +66,7 @@ class _LargeTitlePageState extends State<LargeTitlePage> {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    const gutter = AppSpacing.pageGutter;
+    final gutter = AppSpacing.gutterOf(context);
 
     return ColoredBox(
       color: c.background,
@@ -78,9 +78,12 @@ class _LargeTitlePageState extends State<LargeTitlePage> {
               controller: _scroll,
               slivers: [
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(
+                  padding: EdgeInsets.fromLTRB(
                     gutter,
-                    AppSpacing.xxxl + 8,
+                    // HP: bilah atas AppShell (☰) sudah memberi jarak.
+                    AppBreakpoints.isCompact(context)
+                        ? AppSpacing.sm
+                        : AppSpacing.xxxl + 8,
                     gutter,
                     AppSpacing.md,
                   ),
@@ -88,7 +91,7 @@ class _LargeTitlePageState extends State<LargeTitlePage> {
                 ),
                 if (widget.bottom != null)
                   SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(
+                    padding: EdgeInsets.fromLTRB(
                       gutter,
                       0,
                       gutter,
@@ -99,12 +102,12 @@ class _LargeTitlePageState extends State<LargeTitlePage> {
                 if (widget.slivers != null)
                   for (final s in widget.slivers!)
                     SliverPadding(
-                      padding: const EdgeInsets.symmetric(horizontal: gutter),
+                      padding: EdgeInsets.symmetric(horizontal: gutter),
                       sliver: s,
                     )
                 else
                   SliverPadding(
-                    padding: const EdgeInsets.symmetric(horizontal: gutter),
+                    padding: EdgeInsets.symmetric(horizontal: gutter),
                     sliver: SliverFillRemaining(
                       hasScrollBody: false,
                       child: widget.child,
@@ -134,40 +137,48 @@ class _LargeTitlePageState extends State<LargeTitlePage> {
     );
   }
 
+  /// Judul di kiri, tombol aksi di kanan; bila tidak muat (layar sempit),
+  /// tombol turun ke baris di bawah judul.
   Widget _buildHeader(AppColors c) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
+    return Wrap(
+      alignment: WrapAlignment.spaceBetween,
+      crossAxisAlignment: WrapCrossAlignment.end,
+      spacing: AppSpacing.md,
+      runSpacing: AppSpacing.sm,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (widget.onBack != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-                  child: _BackLink(
-                    label: widget.backLabel ?? 'Kembali',
-                    onPressed: widget.onBack!,
-                  ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (widget.onBack != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                child: _BackLink(
+                  label: widget.backLabel ?? 'Kembali',
+                  onPressed: widget.onBack!,
                 ),
-              Text(
-                widget.title,
-                style: AppTypography.largeTitle.copyWith(color: c.label),
               ),
-              if (widget.subtitle != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Text(
-                    widget.subtitle!,
-                    style: AppTypography.subheadline.copyWith(
-                      color: c.labelSecondary,
-                    ),
+            Text(
+              widget.title,
+              style: AppTypography.largeTitle.copyWith(color: c.label),
+            ),
+            if (widget.subtitle != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  widget.subtitle!,
+                  style: AppTypography.subheadline.copyWith(
+                    color: c.labelSecondary,
                   ),
                 ),
-            ],
-          ),
+              ),
+          ],
         ),
-        ..._spaced(widget.actions),
+        if (widget.actions.isNotEmpty)
+          Wrap(
+            spacing: AppSpacing.xs,
+            runSpacing: AppSpacing.xs,
+            children: widget.actions,
+          ),
       ],
     );
   }
@@ -179,8 +190,8 @@ class _LargeTitlePageState extends State<LargeTitlePage> {
       child: SizedBox(
         height: 52,
         child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.pageGutter,
+          padding: EdgeInsets.symmetric(
+            horizontal: AppSpacing.gutterOf(context),
           ),
           child: Stack(
             alignment: Alignment.center,
@@ -203,10 +214,6 @@ class _LargeTitlePageState extends State<LargeTitlePage> {
       ),
     );
   }
-
-  List<Widget> _spaced(List<Widget> items) => [
-    for (final a in items) ...[const SizedBox(width: AppSpacing.xs), a],
-  ];
 }
 
 class _BackLink extends StatelessWidget {

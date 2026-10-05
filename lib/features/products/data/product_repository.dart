@@ -1,11 +1,18 @@
+import 'dart:isolate';
+
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../../core/database/tables/audit.dart';
 import '../../../core/database/tables/sales.dart';
+import '../../../core/utils/formatters.dart';
 import '../../auth/domain/app_user.dart';
+import '../domain/bulk_entry.dart';
+import '../domain/code_sequence.dart';
 import '../domain/fuzzy_match.dart';
 import '../domain/product.dart';
+import '../domain/similar_names.dart';
 import '../domain/tag.dart';
 
 class ProductFailure implements Exception {
@@ -95,6 +102,47 @@ class ProductRepository {
       e.storeId: (stock: e.stock, price: e.sellingPrice),
   };
 
+  static const kAutoCodeSetting = 'products.auto_code';
+
+  /// Barcode berikutnya untuk barang baru (lihat [CodeSequence]); `null`
+  /// bila belum ada barcode berakhiran angka.
+  Future<({String next, String basedOn})?> nextCode() async =>
+      CodeSequence.next(await codesNewestFirst());
+
+  /// Semua barcode (kode) barang, terbaru dulu; bahan [CodeSequence].
+  Future<List<String>> codesNewestFirst() => _db.productsDao.codesNewestFirst();
+
+  /// Nama baru yang sama / mirip dengan barang aktif atau dengan nama lain
+  /// di [names] (lihat [SimilarNames]). Dipanggil sekali saat menyimpan.
+  Future<List<SimilarName>> similarNames(List<(int, String)> names) async {
+    if (names.isEmpty) return const [];
+    final existing = await _db.productsDao.activeNameCodes();
+    // Banyak baris × banyak barang: hitung di isolate agar UI tidak macet.
+    if (names.length * existing.length > 100000) {
+      return Isolate.run(() => SimilarNames.find(names, existing));
+    }
+    return SimilarNames.find(names, existing);
+  }
+
+  static const kBulkDraftSetting = 'products.bulk_draft';
+
+  /// Draf Input Tabel yang disimpan saat keluar (per komputer).
+  Future<List<BulkRowValues>> loadBulkDraft() async =>
+      BulkEntry.decodeDraft(await _db.settingsDao.get(kBulkDraftSetting));
+
+  /// Menyimpan draf; tanpa baris terisi = draf dihapus.
+  Future<void> saveBulkDraft(List<BulkRowValues> rows) =>
+      _db.settingsDao.set(kBulkDraftSetting, BulkEntry.encodeDraft(rows));
+
+  Future<void> clearBulkDraft() => _db.settingsDao.set(kBulkDraftSetting, '');
+
+  /// Pilihan terakhir centang "Otomatis" di form barang (per komputer).
+  Future<bool> autoCodeEnabled() async =>
+      await _db.settingsDao.get(kAutoCodeSetting) == '1';
+
+  Future<void> setAutoCode(bool enabled) =>
+      _db.settingsDao.set(kAutoCodeSetting, enabled ? '1' : '0');
+
   /// Menambah (`id == null`) atau mengubah barang, beserta stok & harga
   /// khusus per toko ([stores]; toko yang tidak disebut tidak diubah).
   /// Perubahan stok dicatat sebagai riwayat stok jenis penyesuaian.
@@ -134,14 +182,15 @@ class ProductRepository {
       final sameCode = await dao.findByCode(code);
       if (sameCode != null && sameCode.id != id) {
         throw ProductFailure(
-          'Kode "$code" sudah dipakai oleh "${sameCode.name}".',
+          'Barcode "$code" sudah dipakai oleh "${sameCode.name}".',
         );
       }
       if (barcode != null) {
         final sameBarcode = await dao.findByBarcode(barcode);
         if (sameBarcode != null && sameBarcode.id != id) {
           throw ProductFailure(
-            'Barcode $barcode sudah dipakai oleh "${sameBarcode.name}".',
+            'Barcode bawaan $barcode sudah dipakai oleh '
+            '"${sameBarcode.name}".',
           );
         }
       }
@@ -161,12 +210,37 @@ class ProductRepository {
       final savedId = id ?? await dao.insertProduct(data);
       if (id != null) await dao.updateProduct(id, data);
 
+      // Daftar perubahan untuk catatan aktivitas.
+      final changes = <String>[
+        if (current != null) ...[
+          if (current.code != code) 'barcode ${current.code} → $code',
+          if (current.name != draft.name.trim())
+            'nama "${current.name}" → "${draft.name.trim()}"',
+          if (current.purchasePrice != draft.purchasePrice)
+            'harga beli ${Fmt.rupiah(current.purchasePrice)} → '
+                '${Fmt.rupiah(draft.purchasePrice)}',
+          if (current.defaultSellingPrice != draft.sellingPrice)
+            'harga jual ${Fmt.rupiah(current.defaultSellingPrice)} → '
+                '${Fmt.rupiah(draft.sellingPrice)}',
+          if (current.isActive != draft.isActive)
+            draft.isActive ? 'diaktifkan' : 'dinonaktifkan',
+        ],
+      ];
+
       final storesDao = _db.storesDao;
       for (final v in stores) {
         final entry = await storesDao.entry(v.storeId, savedId);
+        final storeName =
+            (await storesDao.findById(v.storeId))?.name ?? 'toko ${v.storeId}';
         // Harga sama dengan default disimpan sebagai "tanpa harga khusus".
         final price = v.price == draft.sellingPrice ? null : v.price;
         if (price != entry?.sellingPrice) {
+          if (current != null) {
+            changes.add(
+              'harga $storeName ${entry?.sellingPrice == null ? 'default' : Fmt.rupiah(entry!.sellingPrice!)}'
+              ' → ${price == null ? 'default' : Fmt.rupiah(price)}',
+            );
+          }
           await storesDao.setPrice(
             storeId: v.storeId,
             productId: savedId,
@@ -175,6 +249,10 @@ class ProductRepository {
         }
         final change = v.stock - (entry?.stock ?? 0);
         if (change != 0) {
+          changes.add(
+            'stok $storeName ${Fmt.number(entry?.stock ?? 0)} → '
+            '${Fmt.number(v.stock)}',
+          );
           await storesDao.changeStock(
             storeId: v.storeId,
             productId: savedId,
@@ -193,6 +271,21 @@ class ProductRepository {
           await _db.tagsDao.idsForNames(tagNames),
         );
       }
+      if (current == null || changes.isNotEmpty) {
+        await _db.auditDao.append(
+          type: current == null
+              ? AuditType.productCreated
+              : AuditType.productUpdated,
+          summary: current == null
+              ? 'Barang baru $code · ${draft.name.trim()} '
+                    '(${Fmt.rupiah(draft.sellingPrice)})'
+              : '$code · ${draft.name.trim()}: ${changes.join('; ')}',
+          userId: actor.id,
+          userName: actor.fullName,
+          data: {'productId': savedId, 'code': code, 'changes': changes},
+          at: _clock(),
+        );
+      }
       return (await dao.findById(savedId))!;
     });
   }
@@ -205,7 +298,17 @@ class ProductRepository {
     _requireAdmin(actor);
     final dao = _db.productsDao;
     return _db.transaction(() async {
+      final product = await dao.findById(id);
+      Future<void> log(String what) => _db.auditDao.append(
+        type: AuditType.productDeleted,
+        summary: '${product?.code} · ${product?.name}: $what',
+        userId: actor.id,
+        userName: actor.fullName,
+        data: {'productId': id, 'code': product?.code},
+        at: _clock(),
+      );
       if (await dao.countSaleItems(id) > 0) {
+        await log('dinonaktifkan (sudah pernah terjual)');
         await dao.updateProduct(
           id,
           ProductsCompanion(
@@ -215,6 +318,7 @@ class ProductRepository {
         );
         return ProductRemoval.deactivated;
       }
+      await log('dihapus');
       await dao.deleteProduct(id);
       return ProductRemoval.deleted;
     });

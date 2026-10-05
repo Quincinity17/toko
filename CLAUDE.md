@@ -1,7 +1,7 @@
 # Toko — Aplikasi Kasir (POS) Desktop
 
 Aplikasi kasir offline untuk toko retail kecil, pengganti iPOS. Target utama
-Windows desktop; struktur disiapkan untuk Android/tablet.
+Windows desktop; juga Android (HP & tablet, APK).
 
 ## Menjalankan
 
@@ -16,6 +16,16 @@ fvm flutter analyze && fvm flutter test
 Build Windows **tidak bisa dari macOS**. `.exe` dibuat oleh GitHub Actions
 (`.github/workflows/build-windows.yml`) setiap push ke `main`; hasilnya di-download
 dari artifact `toko-windows` lalu dites di PC Windows.
+
+APK Android: `fvm flutter build apk --release --split-per-abi` (HP umumnya
+`app-arm64-v8a-release.apk`), juga GitHub Actions `build-android.yml` →
+artifact `toko-android`. Kunci rilis: `android/upload-keystore.jks` +
+`android/key.properties` (alias `toko`), **tidak di-commit** (.gitignore) —
+wajib dibackup user; hilang = APK baru tidak bisa meng-update yang terpasang.
+Tanpa key.properties rilis ditandatangani kunci debug. CI memakai secrets
+`ANDROID_KEYSTORE_BASE64` + `ANDROID_KEYSTORE_PASSWORD` bila ada.
+Emulator lokal: AVD `Pixel_9a` (`adb exec-out screencap -p` untuk cek tampilan).
+Ikon Android dibuat kode: `fvm flutter test tool/generate_app_icon.dart`.
 
 ## Arsitektur
 
@@ -46,6 +56,11 @@ dari artifact `toko-windows` lalu dites di PC Windows.
   (terikat 1 toko: hanya Kasir). Beda supervisor & kasir hanya hak ubah stok
   (`UserRole.canAdjustStock`, `AppUser.canAdjustStockAt`). URL terlarang
   dialihkan ke halaman awal peran.
+- **Pengaturan versi ringkas untuk supervisor & kasir** (permintaan user):
+  hanya `/pengaturan` (bukan sub-halamannya) berisi Terminal & Sinkronisasi,
+  Backup, Tampilan, Tentang. Kode terminal & pengaturan backup hanya dilihat
+  (diubah admin; repository tetap menolak non-admin), tetapi Backup Sekarang
+  dan Buka Folder bisa dipakai semua peran.
 - `users.store_id` wajib untuk supervisor/kasir, `null` untuk admin (dicek di
   `UserRepository._storeFor`). Akun dari toko nonaktif tidak bisa login.
 - Sesi hanya di memori (`authControllerProvider`); aplikasi dibuka = login lagi.
@@ -143,8 +158,25 @@ tab **Transaksi Baru** dan **Hari Ini**.
 - Pembulatan: total baris = round(qty × harga).
 - Stok boleh minus (penjualan tidak diblokir); baris diberi tanda bila qty > stok tercatat.
 - Keranjang tetap ada saat pindah halaman, kosong otomatis saat ganti user.
+- **Retur / batal faktur** (permintaan user; `ReturnService`,
+  `sales/data/return_service.dart`, domain `sale_return.dart`): rincian faktur
+  › "Retur / Batalkan" (admin & supervisor toko faktur itu =
+  `ReturnService.canReturn`; kasir tidak) → popup: jumlah per baris (± atau
+  ketik, maks sisa), "Batalkan Semua", alasan wajib, tombol "Kembalikan Rp X".
+  Disimpan sebagai **nota retur** `RET-<terminal>-YYYYMMDD-0001` = baris
+  `sales` negatif (`return_of_id` = faktur asal, `return_reason`), baris
+  qty/subtotal negatif (`return_of_item_id`), harga beli disalin; faktur asal
+  TIDAK diubah. Laporan otomatis terpotong pada tanggal retur; jumlah
+  transaksi (`ReportsDao._txCount/_txDistinct`) dan "terakhir terjual"
+  mengabaikan nota retur; terlaris dashboard hanya qty bersih > 0. Uang
+  kembali: sisa penuh = sisa subtotal persis, sebagian = round(qty × harga);
+  faktur lama berpotongan hanya bisa batal semua (uang = total). Stok kembali
+  (`StockMovementType.saleReturn`), outbox ikut. Tunai + printer/laci diatur →
+  laci dibuka. Daftar Hari Ini: "Nota retur" (total merah) / "Dibatalkan"
+  (dicoret) / "Diretur sebagian"; rincian menampilkan banner + "Sudah
+  diretur"; nota retur tidak bisa dicetak ulang/diretur lagi.
 - Belum ada (di luar tahap 1): pelanggan, sales, PPN, biaya lain,
-  split payment (satu faktur dua metode).
+  split payment (satu faktur dua metode), cetak struk retur.
 
 ## Struk & printer (`features/receipt`, Pengaturan › Struk & Printer, `/pengaturan/struk`, admin)
 
@@ -218,7 +250,20 @@ tab **Transaksi Baru** dan **Hari Ini**.
 - Settings: `backup.dir` (kosong = `Documents/Toko Backup`), `backup.enabled`,
   `backup.last_at`. Per komputer. Tombol Backup Sekarang & Buka Folder.
 - Excel < 1.000 baris ditulis langsung; lebih besar lewat `Isolate.run`.
-- Belum ada: pulihkan (restore) dari aplikasi.
+- **Pulihkan (restore)** (admin; `RestoreService`, `backup/data/restore_service.dart`):
+  ketuk file backup database di daftar, atau "Pulihkan…" → pilih backup /
+  "Pilih file lain…" (flashdisk). `inspect` (sqlite3 langsung, read-only):
+  header SQLite, `quick_check`, `user_version` 1..`AppDatabase.currentSchemaVersion`
+  (lebih baru = tolak), ada tabel users+products, ada admin aktif → ringkasan
+  (jumlah barang/transaksi, transaksi terakhir) → konfirmasi. `stage`: data
+  sekarang disalin dulu (`VACUUM INTO` → `toko-sebelum-pulih-*.sqlite` di
+  folder backup, tidak ikut dipangkas), backup disalin ke
+  `toko.sqlite.restore` (+ `.json` nama sumber) di folder database.
+  `RestoreService.applyPending()` di `main()` SEBELUM `AppDatabase` dibuka:
+  hapus `toko.sqlite`(-wal/-shm/-journal), tukar; lalu settings
+  `backup.last_restore` = "waktu|file" (tampil "Terakhir dipulihkan").
+  Backup versi lama dimigrasi seperti biasa. Popup "Tutup Aplikasi"
+  (`exitAppProvider`, di-override di tes); "Pemulihan menunggu" + Batalkan.
 - Tes widget: `pumpApp` mengarahkan backup ke folder sementara; status/backup
   memakai I/O sungguhan → tunggu dengan `runAsync` + `pump` bergantian.
 
@@ -246,16 +291,62 @@ tab **Transaksi Baru** dan **Hari Ini**.
 
 ## Master barang (`/produk`, admin)
 
+- **Di layar, `products.code` bernama "Barcode"** (wajib, unik, mis.
+  BMM0000001) dan `products.barcode` bernama **"Barcode bawaan"** (opsional,
+  barcode pabrik). Keputusan user: barang toko hanya pakai barcode. Nama di
+  kode/database tetap `code`/`barcode`; kasir mencocokkan keduanya.
+- **Barcode otomatis** (form barang baru, centang "Otomatis (+1 dari barcode
+  terakhir)"): `CodeSequence` (`products/domain/code_sequence.dart`): awalan
+  mengikuti barang terbaru (id terbesar) yang barcodenya berakhiran angka,
+  angka terbesar di seri itu + 1, digit nol dipertahankan, dilewati bila
+  bentrok; kode angka saja (EAN pabrik) dipakai hanya bila tidak ada seri
+  berawalan huruf. Dihitung ulang saat simpan. Pilihan centang diingat di
+  settings `products.auto_code`.
+
 - Daftar: cari per kata (+ saran nama mirip bila kosong), filter status
   (Aktif/Nonaktif/Semua), kategori, stok menipis (stok ≤ stok minimum), urutan
   (nama, kode, stok terkecil, harga tertinggi, terakhir diubah), 50 per halaman.
-- Form (sheet): nama, kode, barcode, satuan (`showOptionPicker`, bisa buat
+- Form (sheet): nama, barcode (+ otomatis), barcode bawaan, satuan (`showOptionPicker`, bisa buat
   baru; disimpan huruf besar), kategori (banyak, lihat "Kategori barang"),
   harga beli/jual (+ info untung atau peringatan rugi), stok, stok minimum, aktif.
 - Aturan di `ProductRepository.save` (`ProductRules`): kode & barcode unik (kode
   tanpa peduli huruf besar), barcode tanpa spasi, harga ≥ 0. Kategori (tag) &
   satuan dibuat otomatis berdasarkan nama. Selisih stok → `stock_movements` jenis
   `adjust` ("Stok awal" / "Penyesuaian manual").
+- **Untung %** (permintaan user): isian "Untung (%)" di antara harga beli dan
+  harga jual. `PriceMarkup` (`products/domain/price_markup.dart`): harga jual
+  = beli × (1 + %), **dibulatkan ke atas ke Rp 100**; persen = 1 desimal.
+  Isi % → harga jual dihitung (dan ikut berubah saat harga beli diubah);
+  ketik harga jual → % menyesuaikan. Nonaktif bila harga beli kosong.
+- **Input Tabel** (`/produk/tabel`, tombol di Produk; permintaan user: tanpa
+  buka Excel): tabel ketik banyak barang baru (Barcode, Barcode bawaan, Nama,
+  Kategori, Satuan (kosong = PCS), Harga beli, Untung %, Harga jual, Stok).
+  Tab = kolom, Enter = baris bawah (baris baru otomatis), mulai 10 baris.
+  "Barcode Otomatis" mengisi barcode kosong berurutan (`CodeSequence`, ikut
+  barcode di tabel). Simpan: `BulkEntry.validate` (`products/domain/bulk_entry.dart`
+  → `validateImport`; barcode yang sudah ada = error, tabel hanya barang baru)
+  → `ProductImportService.run`; baris valid tersimpan & hilang dari tabel,
+  baris error tetap merah dengan pesannya. Stok masuk ke toko yang dipilih
+  (sama dengan import). Garis pemisah tipis antar kolom.
+- **Peringatan nama sama/mirip** (permintaan user; dicek **sekali saat
+  Simpan**, bukan sambil mengetik): `SimilarNames` (`products/domain/similar_names.dart`)
+  = nama dinormalkan sama persis, atau `FuzzyMatch.score` **dua arah** ≥ 0,7,
+  maks 2 per nama; juga antar baris di tabel. Pembanding: barang aktif
+  (`ProductRepository.similarNames`, isolate bila baris × barang > 100.000).
+  Popup `showSimilarNamesConfirm` (Periksa Lagi / Tetap Simpan) — peringatan,
+  bukan larangan. Dipakai form Barang Baru (bukan ubah barang) dan Input
+  Tabel (baris diberi catatan oranye). Nama yang sudah diperingatkan lalu
+  "Periksa Lagi" tidak diperingatkan lagi bila disimpan tanpa diubah.
+  Import Excel: daftar "Nama sama / mirip barang lain (tetap di-import)" di
+  langkah Periksa (hanya baris barang baru). Kecepatan: kata dipecah sekali
+  (`FuzzyMatch.scoreTokens`), pasangan disaring lewat kunci 2-huruf terjarang
+  tiap nama (±2,7 dtk untuk 3.000 × 3.000 di tes).
+- **Draf Input Tabel** (permintaan user): tombol kembali dengan isian → pilihan
+  "Simpan sebagai Draf" / "Buang Isian". Keluar lewat sidebar = otomatis
+  disimpan sebagai draf (`dispose`). Draf = JSON baris terisi
+  (`BulkEntry.encodeDraft`) di settings `products.bulk_draft` (per komputer,
+  bertahan setelah aplikasi ditutup); dibuka lagi → dimuat + keterangan
+  "Melanjutkan draf (N baris)" dan tombol Buang Draf.
 - **Ubah barang → konfirmasi perubahan** (permintaan user): `productChanges`
   (`products/domain/product_changes.dart`, fungsi murni) membandingkan barang
   lama + stok/harga per toko dengan isian baru → daftar "lama → baru" di popup
@@ -314,13 +405,15 @@ tab **Transaksi Baru** dan **Hari Ini**.
 
 ## Import & export barang
 
-- Kolom file = `ProductField` (label: Kode, Barcode, Nama, Kategori (bisa
+- Kolom file = `ProductField` (label: Barcode (= kode), Barcode Bawaan, Nama, Kategori (bisa
   "A, B"), Satuan, Harga Beli, Harga Jual, Stok, Stok Minimum, Aktif). Export dan template memakai
   label ini → hasil export bisa langsung di-import ulang.
 - `product_file_io.dart`: baca .xlsx/.csv (di `Isolate.run`; baris judul = baris
   pertama dengan ≥ 2 kolom terisi; delimiter CSV dideteksi otomatis), tulis
   .xlsx/.csv (BOM), template .xlsx (sheet Barang + Petunjuk). .xls lama tidak
   didukung (minta simpan ulang sebagai .xlsx).
+- Kolom "Barcode" di file menjadi kode hanya bila tidak ada kolom kode (Kode,
+  Kode Item, …); jika ada, "Barcode" menjadi barcode bawaan (urutan sinonim).
 - `guessMapping`: cocokkan judul kolom dengan sinonim (termasuk istilah iPOS:
   Kode Item, Nama Item, Jenis, Harga Pokok, Harga Jual 1, Stok Min). Bisa diubah
   manual di layar.
@@ -345,9 +438,19 @@ tab **Transaksi Baru** dan **Hari Ini**.
   `num` (bisa INTEGER/REAL). Alias kolom kelompok = `grp` (hindari bentrok `name`).
 - Definisi: omzet = Σ sales.total; harga pokok = Σ qty × purchase_price
   (snapshot di sale_items); laba kotor = omzet − pokok.
+- **Harga beli opsional** (permintaan user: sering lupa): kosong = 0 = "belum
+  diisi" (tanpa perubahan skema). Form menampilkan kosong + "untung belum bisa
+  dihitung"; konfirmasi perubahan "Belum diisi". Laporan: `no_cost_revenue`
+  (`SalesSummary.revenueWithoutCost`, sale_items.purchase_price = 0) → baris
+  peringatan "Omzet tanpa harga beli" di Rincian laba dan keterangan di kartu
+  Laba kotor dashboard (laba terhitung terlalu tinggi).
 - Dashboard (`watch*`, otomatis terbarui): omzet hari ini vs kemarin, laba kotor
   & margin, transaksi & rata-rata belanja, stok menipis, grafik omzet 7 hari,
   terlaris hari ini, daftar stok menipis.
+- Filter toko di Dashboard (permintaan user): chip "Semua toko" + tiap toko aktif
+  (hanya bila > 1 toko aktif), menulis ke `storeScopeProvider` (sama dengan
+  pemilih di sidebar). Saat "Semua toko": kartu "Per toko hari ini" (omzet,
+  transaksi, laba; `watchStoreSales`), ketuk = dashboard toko itu.
 - Laporan: satu filter rentang (Hari Ini/7/30 Hari/Bulan Ini/pilih tanggal) +
   pembanding periode sebelumnya; bagian Ringkasan, Tren (harian omzet vs laba,
   per jam, per hari), Produk (ABC Pareto berdasarkan laba), Kategori, Stok (nilai
@@ -378,6 +481,87 @@ tab **Transaksi Baru** dan **Hari Ini**.
   riwayat git (commit sebelum penghapusan: `94be0cd`).
 - Faktur lama yang punya potongan tetap tampil "Potongan" di rincian faktur dan
   di Ringkasan laporan (hanya jika > 0).
+
+## Keamanan (permintaan user: mencegah kecurangan karyawan)
+
+- **Database terenkripsi** (SQLite3MultipleCiphers via `hooks: user_defines:
+  sqlite3: source: sqlite3mc` di pubspec; ChaCha20). Kunci dari rahasia
+  perangkat `DeviceKeys` (`core/security/device_keys.dart`): 32 byte acak di
+  `toko.key` samping database — Windows dikunci **DPAPI** + garam aplikasi
+  (`windows_dpapi.dart`, FFI win32), Android/macOS diacak garam di folder
+  pribadi. `databaseKey` & `sealKey` = HMAC turunan. `openDeviceDatabase()`
+  (`core/database/database_bootstrap.dart`, dipanggil `main()`): buat kunci
+  bila belum ada; database belum terenkripsi (instalasi lama / hasil restore)
+  → `PRAGMA rekey`; kunci hilang/salah → `DatabaseLocked` →
+  `DatabaseLockedApp` (pulihkan dari backup; TIDAK membuat database baru
+  diam-diam karena akun bawaan akan aktif). `AppDatabase(executor, keys:)`;
+  tes memakai `NativeDatabase.memory()` (tanpa enkripsi) + kunci tes.
+- **Backup & salinan pengaman TIDAK terenkripsi** (`copyDatabasePlain`:
+  VACUUM INTO lalu `rekey ''`) supaya bisa dipulihkan di komputer lain;
+  konsekuensinya isi backup bisa dibaca → restore memeriksa segelnya
+  (`BackupSeals`: utuh / diubah / tidak bisa diperiksa) dan memperingatkan.
+- **Segel data** (`Sealer` HMAC-SHA256, `SealsDao`): kolom `seal` (v12) di
+  users (id, username, role, toko, aktif, hash password), products (id, kode,
+  harga beli/jual, aktif), store_products (toko, barang, stok, harga). Disegel
+  ulang otomatis di DAO (`insertUser/updateUser`, `insertProduct/
+  updateProduct`, `changeStock/setPrice`); `resealAll()` di onCreate, migrasi
+  v12, seeder, dan setelah restore. **Login menolak akun yang segelnya tidak
+  cocok** (role dinaikkan lewat DB Browser). Mengubah daftar kolom tersegel =
+  perlu `resealAll()` di migrasi.
+- **Catatan aktivitas** (`audit_log` v12, `AuditDao.append`, berantai:
+  `hash` = HMAC(isi + `prev_hash`); tidak pernah diubah/dihapus aplikasi).
+  `AuditType` (textEnum): login/gagal/keluar, sale & saleReturn (+ sidik jari
+  isi faktur `saleDigest`), cartCleared, cartItemReduced, heldCartDeleted,
+  drawerOpened (`CashierAudit` di `sales/data/cashier_audit.dart`, dipanggil
+  layar kasir), barang/import/stok, akun, toko, metode bayar, terminal,
+  backup, restore, sealsRebuilt, **clockBack** (otomatis bila jam mundur
+  > 2 menit dari catatan terakhir). Ditulis di dalam transaksi tindakannya.
+  Feature `features/audit`: `AuditRepository` (record, between, attention),
+  domain `AuditEntry`/`AuditTypeInfo` (label, kategori, `needsAttention`).
+- **Pemeriksaan keutuhan** (`IntegrityService`): mulai dari jangkar terakhir
+  (sealsRebuilt/restoreApplied): rantai catatan, faktur vs catatan
+  (diubah/dihapus/disisipkan), lubang nomor faktur, jam mundur, segel akun/
+  barang/stok. Laporan › **Aktivitas** (`activity_section.dart`): kartu
+  Keutuhan data (Periksa Ulang), "Perlu perhatian" per akun, daftar catatan
+  + filter; HP = daftar. Nanti server menjalankan pemeriksaan yang sama
+  (Tahap C).
+- Batasan (jujur ke user): orang yang sangat ahli bisa membongkar aplikasi
+  untuk mengambil kunci; yang ini baru tuntas dengan pemeriksaan server.
+
+## Android / HP & tablet (permintaan user)
+
+- Tata letak responsif (`AppBreakpoints` di `app_metrics.dart`): lebar
+  < 700 = **HP** (`_CompactShell` di `app_shell.dart`: bilah atas ☰ + nama
+  toko, sidebar jadi laci `Drawer`, `SafeArea` bawah; gutter 16), 700–1000 =
+  sidebar otomatis ikon saja, ≥ 1000 = desktop. `LargeTitlePage`: judul &
+  tombol aksi dalam `Wrap` (tombol turun bila tak muat). `InsetGroupedTile`:
+  value terpotong, trailing `FittedBox.scaleDown`.
+- Kasir HP: header (judul + ikon printer, tab di baris sendiri), isian scan
+  ringkas (cari = ikon), `CartTable` < 560 px = daftar (nama, barcode·harga,
+  ±, total; hapus = kurangi sampai 0), `CartSummaryPanel(compact)` = kartu
+  bawah (total + Bayar, Tahan/Tertahan/Batalkan/Laci ikon). Hari Ini HP =
+  daftar ringkas.
+- `Device` (`core/utils/device.dart`, dari `dart:io` — **jangan pakai
+  `defaultTargetPlatform`, di tes selalu Android**): `isTouch`/`isAndroid`,
+  `withShortcut(label, key)` (petunjuk "(F2)" hanya di komputer). Tes:
+  `Device.debugAndroidOverride = true` (lihat `test/android_mode_test.dart`).
+- Perangkat sentuh: kolom barcode tidak autofocus/fokus ulang (keyboard layar
+  menutupi keranjang), kecuali setelah scan/Enter (`focusEntry(force: true)`)
+  supaya scanner Bluetooth bisa beruntun.
+- Printer Android: Jaringan + **Bluetooth (SPP)** lewat kode native sendiri
+  (`MainActivity.kt`, kanal `id.toko/bluetooth`: bondedDevices, send; izin
+  BLUETOOTH_CONNECT diminta saat dipakai; hanya perangkat yang sudah
+  dipasangkan) ← `AndroidBluetooth` (`receipt/data/android_bluetooth.dart`);
+  `serialPort` = "Nama (MAC)". Plugin pihak ketiga sengaja tidak dipakai
+  (print_bluetooth_thermal menambah kode native Windows/macOS). "Terpasang
+  (USB)" & baud rate disembunyikan di Android. USB di Android belum ada.
+- Backup Android: folder bawaan (penyimpanan aplikasi) tidak bisa diganti;
+  "Buka Folder" → "Simpan Salinan…" (`saveFileAs`, Download/Drive).
+- Manifest: INTERNET, BLUETOOTH(+ADMIN ≤ API 30), BLUETOOTH_CONNECT; label
+  "Toko"; ikon adaptif (latar #007AFF).
+- `test/layout_sizes_test.dart`: semua halaman admin di 4 ukuran (HP tegak/
+  mendatar, tablet tegak/mendatar) + alur kasir, form barang, 8 bagian laporan
+  di HP; luapan apa pun = gagal (lokasi kode penyebab ikut dilaporkan).
 
 ## Design system (gaya Apple / iOS)
 
@@ -411,6 +595,7 @@ tab **Transaksi Baru** dan **Hari Ini**.
 | `DataTableCard` / `CellText` | Tabel ringkas dalam kartu (versi tabel untuk setiap grafik) |
 | `AppTextField` | Input dengan label, helper/error, mode password |
 | `Shake` | Animasi getar untuk input salah |
+| `ChoiceChips` | Deretan kapsul pilih satu (filter rentang laporan, filter toko dashboard) |
 | `showOptionPicker` | Popup pilih satu opsi dengan pencarian, opsi "buat baru" dan "tanpa …" |
 
 Format angka/tanggal: `Fmt` di `core/utils/formatters.dart` (`Fmt.rupiah(10000)` → `Rp 10.000`,
@@ -427,6 +612,10 @@ di `core/utils/number_input.dart`.
 - Tes yang memformat tanggal Indonesia perlu `initializeDateFormatting('id_ID')`.
 - Kerja di isolate (baca file) butuh `tester.runAsync(() => Future.delayed(...))`.
 - Tombol di halaman panjang: pakai `tapVisible` (ensureVisible dulu).
+- Bantuan tes aplikasi penuh (`pumpApp(size:)`, `login`, `fill`, `settle`,
+  `unmount`, `tapVisible`) ada di `test/helpers/app_harness.dart`.
+- Tes yang gagal di tengah (sebelum `unmount`) bisa menggantung karena stream
+  drift; cari error pertama di log.
 - Teks yang juga ada di sidebar (mis. "Produk"): batasi dengan
   `find.descendant(of: find.byType(LargeTitlePage), ...)`.
 - Tampilan kosong di dalam kartu: pakai tinggi minimal (`BoxConstraints(minHeight)`),
@@ -480,13 +669,19 @@ Uang = INTEGER Rupiah; stok = REAL (mendukung kg/liter).
 - v9: data saja (tag contoh untuk barang contoh), skema sama dengan v8.
 - v10: data saja: kategori lama → tag (kategori & tag jadi satu konsep).
   `categories`/`products.category_id` tidak dipakai lagi.
+- v12: `audit_log` (catatan aktivitas berantai, indeks created_at) + kolom
+  `seal` di users, products, store_products (segel data). Data lama disegel
+  saat migrasi (`_baselineSeals`).
+- v11: `sales.return_of_id` (+ indeks `idx_sales_return_of`),
+  `sales.return_reason`, `sale_items.return_of_item_id` (nota retur).
+  `StockMovementType.saleReturn` (textEnum, tanpa migrasi).
 - Langkah `from < 4` idempoten (`_ensureColumn` cek `PRAGMA table_info`) karena
   bisa dicapai dari v1/v2/v3 yang tabelnya berbeda-beda.
 - PENTING migrasi: `createTable` memakai definisi TERBARU, jadi cabang `from < 2`
   membuat semua tabel baru sekaligus dan cabang `else if (from < 3)` hanya
   menambah yang belum ada. Pola ini harus dijaga untuk v4 dst.
-- Tes migrasi (`checkout_service_test.dart`): v1 manual, v2–v6 dari
-  `test/fixtures/schema_v{2,…,9}.sql` (skema asli DB user) → versi terbaru.
+- Tes migrasi (`checkout_service_test.dart`): v1 manual, v2–v11 dari
+  `test/fixtures/schema_v{2,…,11}.sql` (skema asli DB user) → versi terbaru.
   Saat menaikkan versi lagi: simpan skema DB sekarang sebagai fixture baru dulu.
 - Data contoh (`sample_products.dart`) dimasukkan di onCreate/onUpgrade, bukan di
   seeder start-up, supaya tidak muncul lagi jika user menghapusnya.
@@ -522,6 +717,9 @@ Rencana berikutnya: settings.
   (contoh file iPOS asli belum diberikan; pemetaan kolom berdasarkan nama kolom umum)
 - [x] Langkah 6 — Struk dari template HTML + CSS (dicetak sebagai gambar ESC/POS 58/80 mm) + logo + buka laci, pratinjau langsung
 - [x] Langkah 7 — Dashboard + laporan keuangan (8 bagian + export Excel)
+- [x] Restore backup, peringatan nama mirip di import, retur/batal faktur (nota retur, v11)
+- [x] Android: tata letak HP/tablet, printer Bluetooth, kunci rilis, ikon, CI APK
+- [x] Keamanan: database terenkripsi, segel data, catatan aktivitas berantai, pemeriksaan keutuhan (Laporan › Aktivitas)
 - [ ] Sinkron Tahap B/C/D — server, mesin sinkron & pairing, VPN (**ditunda ke paling akhir**, keputusan user 2026-10-01; fokus fitur dulu)
 
 ## Catatan

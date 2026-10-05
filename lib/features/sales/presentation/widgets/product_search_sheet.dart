@@ -116,7 +116,7 @@ class _ProductSearchState extends ConsumerState<_ProductSearch> {
               child: CupertinoSearchTextField(
                 controller: _query,
                 autofocus: true,
-                placeholder: 'Nama, kode, atau barcode',
+                placeholder: 'Nama atau barcode',
                 style: AppTypography.body.copyWith(color: c.label),
                 onChanged: _onChanged,
                 onSubmitted: (_) {
@@ -137,7 +137,7 @@ class _ProductSearchState extends ConsumerState<_ProductSearch> {
                           ? null
                           : 'Tidak ada barang yang cocok atau mirip dengan '
                                 '"${_query.text}". Periksa ejaan, atau cari '
-                                'dengan kode/barcode.',
+                                'dengan barcode.',
                     )
                   : Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,

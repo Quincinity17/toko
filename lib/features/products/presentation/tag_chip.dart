@@ -49,7 +49,15 @@ class TagChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(name, style: style),
+          // Nama panjang dipotong (…) bila ruang sempit, mis. di HP.
+          Flexible(
+            child: Text(
+              name,
+              style: style,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
           if (onRemove != null)
             PressableScale(
               onPressed: onRemove,

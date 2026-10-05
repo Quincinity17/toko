@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../../core/database/tables/audit.dart';
 import '../../../core/security/password_hasher.dart';
 import '../domain/account_rules.dart';
 import '../domain/app_user.dart';
@@ -66,8 +67,28 @@ class UserRepository {
         storeId: Value(store),
       ),
     );
+    await _log(
+      actor,
+      AuditType.userCreated,
+      'Akun baru $normalized (${fullName.trim()}, ${role.label})',
+      id,
+    );
     return userFromRow((await _db.usersDao.findById(id))!);
   }
+
+  Future<void> _log(
+    AppUser actor,
+    AuditType type,
+    String summary,
+    int targetId, [
+    Map<String, Object?> extra = const {},
+  ]) => _db.auditDao.append(
+    type: type,
+    summary: summary,
+    userId: actor.id,
+    userName: actor.fullName,
+    data: {'targetUserId': targetId, ...extra},
+  );
 
   /// Mengubah nama, peran, toko, dan status aktif. Username tidak bisa diubah.
   Future<AppUser> update({
@@ -104,6 +125,23 @@ class UserRepository {
           isActive: Value(isActive),
         ),
       );
+      final changes = [
+        if (current.fullName != fullName.trim())
+          'nama "${current.fullName}" → "${fullName.trim()}"',
+        if (current.role != role) 'peran ${current.role.label} → ${role.label}',
+        if (current.storeId != store) 'toko diubah',
+        if (current.isActive != isActive)
+          isActive ? 'diaktifkan' : 'dinonaktifkan',
+      ];
+      if (changes.isNotEmpty) {
+        await _log(
+          actor,
+          AuditType.userUpdated,
+          'Akun ${current.username}: ${changes.join('; ')}',
+          id,
+          {'changes': changes},
+        );
+      }
       return userFromRow((await _db.usersDao.findById(id))!);
     });
   }
@@ -116,8 +154,14 @@ class UserRepository {
   }) async {
     _requireAdmin(actor);
     _check(AccountRules.password(newPassword));
-    await _find(id);
+    final row = await _find(id);
     await _setPassword(id, newPassword);
+    await _log(
+      actor,
+      AuditType.userPasswordReset,
+      'Reset password akun ${row.username}',
+      id,
+    );
   }
 
   /// Admin mengganti password sendiri; wajib benar password lamanya.
@@ -138,6 +182,12 @@ class UserRepository {
       throw const AccountFailure('Password baru harus berbeda dari yang lama.');
     }
     await _setPassword(user.id, newPassword);
+    await _log(
+      user,
+      AuditType.passwordChanged,
+      'Ganti password sendiri',
+      user.id,
+    );
   }
 
   Future<void> delete({required AppUser actor, required int id}) async {
@@ -156,6 +206,12 @@ class UserRepository {
       final current = await _find(id);
       if (_isActiveAdmin(current)) await _ensureAnotherActiveAdmin();
       await _db.usersDao.deleteUser(id);
+      await _log(
+        actor,
+        AuditType.userDeleted,
+        'Hapus akun ${current.username} (${current.fullName})',
+        id,
+      );
     });
   }
 

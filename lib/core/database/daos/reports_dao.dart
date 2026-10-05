@@ -42,13 +42,22 @@ class ReportsDao extends DatabaseAccessor<AppDatabase> with _$ReportsDaoMixin {
   /// Filter toko untuk tabel sales dengan alias [alias].
   static String _store(String alias) => '(?3 IS NULL OR $alias.store_id = ?3)';
 
-  /// Satu baris: tx, revenue, gross, discount, cost, qty.
+  // Nota retur (v11) = baris sales bernilai negatif (`return_of_id` terisi):
+  // omzet, qty, dan harga pokok otomatis terpotong; tetapi tidak dihitung
+  // sebagai transaksi.
+  static const _txCount =
+      'SUM(CASE WHEN s.return_of_id IS NULL THEN 1 ELSE 0 END)';
+  static const _txDistinct =
+      'COUNT(DISTINCT CASE WHEN s.return_of_id IS NULL THEN si.sale_id END)';
+
+  /// Satu baris: tx, revenue, gross, discount, cost, qty, no_cost_revenue
+  /// (omzet barang yang terjual tanpa harga beli).
   Selectable<QueryRow> summary(DateTime start, DateTime end, {int? storeId}) =>
       customSelect(
         '''
     SELECT
       (SELECT COUNT(*) FROM sales s WHERE s.sale_date >= ?1 AND s.sale_date < ?2
-         AND ${_store('s')}) AS tx,
+         AND ${_store('s')} AND s.return_of_id IS NULL) AS tx,
       (SELECT COALESCE(SUM(total), 0) FROM sales s
          WHERE s.sale_date >= ?1 AND s.sale_date < ?2
          AND ${_store('s')}) AS revenue,
@@ -65,7 +74,12 @@ class ReportsDao extends DatabaseAccessor<AppDatabase> with _$ReportsDaoMixin {
       (SELECT COALESCE(SUM(si.qty), 0)
          FROM sale_items si JOIN sales s ON s.id = si.sale_id
          WHERE s.sale_date >= ?1 AND s.sale_date < ?2
-         AND ${_store('s')}) AS qty
+         AND ${_store('s')}) AS qty,
+      (SELECT COALESCE(SUM(si.subtotal), 0)
+         FROM sale_items si JOIN sales s ON s.id = si.sale_id
+         WHERE s.sale_date >= ?1 AND s.sale_date < ?2
+         AND si.purchase_price = 0
+         AND ${_store('s')}) AS no_cost_revenue
     ''',
         variables: _range(start, end, storeId),
         readsFrom: {sales, saleItems},
@@ -78,7 +92,7 @@ class ReportsDao extends DatabaseAccessor<AppDatabase> with _$ReportsDaoMixin {
         '''
     SELECT d.day, d.tx, d.revenue, COALESCE(c.cost, 0) AS cost
     FROM (
-      SELECT date(sale_date, $_local) AS day, COUNT(*) AS tx,
+      SELECT date(sale_date, $_local) AS day, $_txCount AS tx,
              SUM(total) AS revenue
       FROM sales s WHERE s.sale_date >= ?1 AND s.sale_date < ?2
         AND ${_store('s')}
@@ -106,7 +120,7 @@ class ReportsDao extends DatabaseAccessor<AppDatabase> with _$ReportsDaoMixin {
   }) => customSelect(
     '''
         SELECT CAST(strftime('$format', sale_date, $_local) AS INTEGER) AS bucket,
-               COUNT(*) AS tx, SUM(total) AS revenue
+               $_txCount AS tx, SUM(total) AS revenue
         FROM sales s WHERE s.sale_date >= ?1 AND s.sale_date < ?2
           AND ${_store('s')}
         GROUP BY bucket ORDER BY bucket
@@ -116,7 +130,8 @@ class ReportsDao extends DatabaseAccessor<AppDatabase> with _$ReportsDaoMixin {
   );
 
   /// Per barang: kode/nama dari faktur, kategori (tag, dipisah koma) &
-  /// satuan terkini.
+  /// satuan terkini. Dengan [limit] (terlaris di dashboard): hanya barang
+  /// yang terjual bersih > 0 (barang yang hanya diretur tidak tampil).
   Selectable<QueryRow> productSales(
     DateTime start,
     DateTime end, {
@@ -131,11 +146,12 @@ class ReportsDao extends DatabaseAccessor<AppDatabase> with _$ReportsDaoMixin {
             WHERE pt.product_id = si.product_id) AS category,
            SUM(si.qty) AS qty, SUM(si.subtotal) AS revenue,
            SUM(si.qty * si.purchase_price) AS cost,
-           COUNT(DISTINCT si.sale_id) AS tx
+           $_txDistinct AS tx
     FROM sale_items si
     JOIN sales s ON s.id = si.sale_id
     WHERE s.sale_date >= ?1 AND s.sale_date < ?2 AND ${_store('s')}
     GROUP BY si.product_id
+    ${limit == null ? '' : 'HAVING SUM(si.qty) > 0'}
     ORDER BY qty DESC, revenue DESC
     ${limit == null ? '' : 'LIMIT $limit'}
     ''',
@@ -152,7 +168,7 @@ class ReportsDao extends DatabaseAccessor<AppDatabase> with _$ReportsDaoMixin {
   }) => customSelect(
     '''
         SELECT COALESCE(t.name, 'Tanpa kategori') AS grp,
-               COUNT(DISTINCT si.sale_id) AS tx, SUM(si.qty) AS qty,
+               $_txDistinct AS tx, SUM(si.qty) AS qty,
                SUM(si.subtotal) AS revenue,
                SUM(si.qty * si.purchase_price) AS cost
         FROM sale_items si
@@ -178,7 +194,7 @@ class ReportsDao extends DatabaseAccessor<AppDatabase> with _$ReportsDaoMixin {
     String where = '',
   }) => customSelect(
     '''
-    SELECT $groupExpr AS grp, COUNT(*) AS tx, SUM(s.total) AS revenue,
+    SELECT $groupExpr AS grp, $_txCount AS tx, SUM(s.total) AS revenue,
            SUM(s.discount) AS discount, SUM(COALESCE(ic.cost, 0)) AS cost
     FROM sales s
     LEFT JOIN (
@@ -271,7 +287,7 @@ class ReportsDao extends DatabaseAccessor<AppDatabase> with _$ReportsDaoMixin {
         LEFT JOIN (
           SELECT si.product_id, MAX(s.sale_date) AS last_sold
           FROM sale_items si JOIN sales s ON s.id = si.sale_id
-          WHERE (?2 IS NULL OR s.store_id = ?2)
+          WHERE (?2 IS NULL OR s.store_id = ?2) AND s.return_of_id IS NULL
           GROUP BY si.product_id
         ) l ON l.product_id = p.id
         WHERE p.is_active = 1

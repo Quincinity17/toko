@@ -22,7 +22,12 @@ class UsersDao extends DatabaseAccessor<AppDatabase> with _$UsersDaoMixin {
         .getSingleOrNull();
   }
 
-  Future<int> insertUser(UsersCompanion user) => into(users).insert(user);
+  // Setiap penulisan menyegel ulang baris (lihat SealsDao).
+  Future<int> insertUser(UsersCompanion user) async {
+    final id = await into(users).insert(user);
+    await attachedDatabase.sealsDao.resealUser(id);
+    return id;
+  }
 
   Future<void> touchLastLogin(int id, DateTime at) {
     return (update(users)..where((u) => u.id.equals(id))).write(
@@ -55,8 +60,9 @@ class UsersDao extends DatabaseAccessor<AppDatabase> with _$UsersDaoMixin {
     return row.read(count) ?? 0;
   }
 
-  Future<void> updateUser(int id, UsersCompanion data) {
-    return (update(users)..where((u) => u.id.equals(id))).write(data);
+  Future<void> updateUser(int id, UsersCompanion data) async {
+    await (update(users)..where((u) => u.id.equals(id))).write(data);
+    await attachedDatabase.sealsDao.resealUser(id);
   }
 
   Future<int> deleteUser(int id) {
