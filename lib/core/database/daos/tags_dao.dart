@@ -31,6 +31,12 @@ class TagsDao extends DatabaseAccessor<AppDatabase> with _$TagsDaoMixin {
             ..where((t) => t.name.lower().equals(name.trim().toLowerCase())))
           .getSingleOrNull();
 
+  /// Tanpa peduli huruf besar/kecil.
+  Future<TagRow?> findByPrefix(String prefix) =>
+      (select(tags)
+            ..where((t) => t.codePrefix.upper().equals(prefix.toUpperCase())))
+          .getSingleOrNull();
+
   Future<int> insertTag(TagsCompanion t) => into(tags).insert(t);
 
   Future<void> updateTag(int id, TagsCompanion t) =>

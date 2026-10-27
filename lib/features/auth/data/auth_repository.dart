@@ -5,6 +5,7 @@ import '../../../core/database/daos/seals_dao.dart';
 import '../../../core/database/tables/audit.dart';
 import '../../../core/security/password_hasher.dart';
 import '../domain/app_user.dart';
+import '../domain/user_role.dart';
 
 /// Gagal login. [message] sudah siap ditampilkan ke user.
 class AuthFailure implements Exception {
@@ -87,7 +88,12 @@ class AuthRepository {
       storeId: row.storeId,
       at: now,
     );
-    return userFromRow(row).copyWith(lastLoginAt: now);
+    return userFromRow(row).copyWith(
+      lastLoginAt: now,
+      permissions: row.role == UserRole.admin
+          ? null
+          : await _db.rolePermissionsDao.permissionsOf(row.role),
+    );
   }
 }
 

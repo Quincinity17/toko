@@ -27,3 +27,15 @@ jobs:
         with:
           name: toko-windows
           path: build/windows/x64/runner/Release/
+
+      # Program server sinkron (toko_server.exe + sqlite3mc.dll) dan skrip
+      # pemasangannya.
+      - run: dart build cli -t bin/toko_server.dart -o build/server
+      - run: Copy-Item tool/server/* build/server/bundle/
+        shell: pwsh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: toko-server-windows
+          path: build/server/bundle/
+

@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 
+import '../../sales/domain/split_payment.dart';
+
 /// Isi satu struk (faktur yang sudah tersimpan).
 @immutable
 class ReceiptData {
@@ -14,12 +16,18 @@ class ReceiptData {
     required this.items,
     required this.subtotal,
     this.discount = 0,
+    this.voucherCode,
+    this.exchangeCredit = 0,
+    this.exchangeFrom,
     required this.total,
     required this.paid,
     required this.change,
     required this.paymentMethod,
     this.isCash = true,
     this.paymentRef,
+    this.payments = const [],
+    this.returnOf,
+    this.returnReason,
   });
 
   /// Toko faktur (menentukan bentuk struk); `null` untuk contoh.
@@ -32,14 +40,29 @@ class ReceiptData {
   final List<ReceiptItem> items;
   final int subtotal;
 
-  /// Hanya faktur lama (sebelum potongan dihapus) yang bisa > 0.
+  /// Potongan voucher (atau potongan manual faktur lama).
   final int discount;
+  final String? voucherCode;
+
+  /// Tukar barang: kredit dari barang yang dikembalikan (ikut membayar) dan
+  /// nomor faktur asalnya.
+  final int exchangeCredit;
+  final String? exchangeFrom;
   final int total;
   final int paid;
   final int change;
   final String paymentMethod;
   final bool isCash;
   final String? paymentRef;
+
+  /// Split payment: nilai per metode (kosong = satu metode).
+  final List<SalePart> payments;
+
+  /// Nota retur: nomor faktur asal dan alasannya. Nilai nota retur negatif.
+  final String? returnOf;
+  final String? returnReason;
+
+  bool get isReturn => returnOf != null;
 
   /// Contoh untuk pratinjau dan tes cetak.
   factory ReceiptData.sample({String? storeName, String? storeAddress}) {
@@ -123,9 +146,32 @@ class ReceiptData {
       'jumlah_item': _n(qty),
       'subtotal': _n(subtotal),
       'potongan': discount > 0 ? _n(discount) : null,
+      'voucher': discount > 0 ? _orNull(voucherCode) : null,
       'total': _n(total),
       'metode': paymentMethod,
-      'bayar': _n(paid),
+      // Tukar barang: "bayar" = uang dari pelanggan saja.
+      'bayar': _n(paid - exchangeCredit),
+      'pembayaran': payments.isEmpty
+          ? null
+          : [
+              for (final p in payments)
+                {
+                  'metode': p.name,
+                  // Tunai: uang yang diterima (kembalian ditulis terpisah).
+                  'jumlah': _n(p.tendered ?? p.amount),
+                  'ref': _orNull(p.ref),
+                },
+            ],
+      'retur': isReturn
+          ? {
+              'dari': returnOf,
+              'alasan': _orNull(returnReason),
+              'kembali': _n(-total),
+            }
+          : null,
+      'tukar': exchangeCredit > 0
+          ? {'dari': exchangeFrom ?? '', 'kredit': _n(exchangeCredit)}
+          : null,
       'kembali': change > 0 ? _n(change) : null,
       'ref': _orNull(paymentRef),
       'tunai': isCash,

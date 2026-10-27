@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import 'split_payment.dart';
+
 /// Satu baris faktur yang bisa diretur.
 @immutable
 class ReturnableLine {
@@ -15,6 +17,7 @@ class ReturnableLine {
     required this.subtotal,
     this.returnedQty = 0,
     this.returnedSubtotal = 0,
+    this.unitFactor = 1,
   });
 
   final int saleItemId;
@@ -28,6 +31,9 @@ class ReturnableLine {
 
   /// Subtotal baris di faktur asal.
   final int subtotal;
+
+  /// Isi satuan baris ini dalam satuan dasar (stok kembali qty × isi).
+  final double unitFactor;
 
   /// Sudah diretur sebelumnya (positif).
   final double returnedQty;
@@ -58,6 +64,7 @@ class ReturnableSale {
     required this.paymentMethod,
     required this.isCash,
     required this.lines,
+    this.payments = const [],
   });
 
   final int saleId;
@@ -65,12 +72,18 @@ class ReturnableSale {
   final int? storeId;
   final int total;
 
-  /// Hanya faktur lama (voucher) yang punya potongan; faktur seperti ini
+  /// Potongan voucher (atau potongan manual faktur lama); faktur seperti ini
   /// hanya bisa dibatalkan seluruhnya supaya uang kembali = yang dibayar.
   final int discount;
   final String paymentMethod;
   final bool isCash;
   final List<ReturnableLine> lines;
+
+  /// Split payment: sisa per metode yang belum dikembalikan (kosong = satu
+  /// metode).
+  final List<SalePart> payments;
+
+  bool get isSplit => payments.isNotEmpty;
 
   bool get hasDiscount => discount > 0;
   bool get fullyReturned => lines.every((l) => l.returnable <= 1e-9);

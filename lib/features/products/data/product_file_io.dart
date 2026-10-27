@@ -6,6 +6,7 @@ import 'package:csv/csv.dart';
 import 'package:excel/excel.dart';
 
 import '../domain/product.dart';
+import '../domain/product_pricing.dart';
 import '../domain/product_import.dart';
 
 class ProductFileFailure implements Exception {
@@ -138,6 +139,8 @@ List<Object> _rowOf(Product p) => [
   p.stock,
   p.minStock,
   p.isActive ? 'Ya' : 'Tidak',
+  PricingText.units(p.units),
+  PricingText.tiers(p.tiers),
 ];
 
 /// Export barang ke Excel. Judul kolom = [ProductField.label], sehingga file
@@ -227,6 +230,13 @@ Uint8List productTemplateXlsx() {
         'Opsional. Boleh desimal untuk barang timbangan, mis. 12,5.',
     ProductField.minStock: 'Opsional. Batas "stok menipis".',
     ProductField.isActive: 'Opsional. "Tidak" untuk menyembunyikan dari kasir.',
+    ProductField.otherUnits:
+        'Opsional. Satuan lain: NAMA:ISI:HARGA[:BARCODE KEMASAN], pisahkan '
+        'dengan titik koma. Mis. "DUS:24:78000:8991002101234; PAK:6:20000". '
+        'Kolom terisi = satuan lain barang diganti.',
+    ProductField.wholesale:
+        'Opsional. Harga grosir satuan dasar: MINIMAL:HARGA, mis. '
+        '"10:3300; 24:3100". Harus lebih murah dari harga jual.',
   };
   help.appendRow([TextCellValue('Kolom'), TextCellValue('Keterangan')]);
   for (final f in ProductField.values) {

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/utils/formatters.dart';
 import 'product.dart';
+import 'product_pricing.dart';
 
 /// Satu isian yang berubah, untuk konfirmasi sebelum menyimpan.
 @immutable
@@ -34,7 +35,7 @@ class FieldChange {
 /// sama seperti cara `ProductRepository.save` menyimpannya.
 List<FieldChange> productChanges({
   required Product before,
-  required Map<int, ({double stock, int? price})> beforeStores,
+  required Map<int, StoreProductSaved> beforeStores,
   required ProductDraft after,
   required List<StoreProductValues> afterStores,
   Map<int, String> storeNames = const {},
@@ -89,6 +90,34 @@ List<FieldChange> productChanges({
     }
   }
 
+  if (after.units case final units?) {
+    String text(List<ProductUnit> list) {
+      final items = [
+        for (final u in list)
+          '${PricingRules.unitName(u.name)} isi ${Fmt.number(u.factor)} '
+              '${Fmt.rupiah(u.defaultPrice)}'
+              '${(u.barcode?.trim().isEmpty ?? true) ? '' : ' (${u.barcode!.trim()})'}',
+      ]..sort();
+      return items.isEmpty ? 'Tidak ada' : items.join(', ');
+    }
+
+    add('Satuan lain', text(before.units), text(units));
+  }
+  if (after.tiers case final tiers?) {
+    String text(List<PriceTier> list) {
+      final sorted = [...list]..sort((a, b) => a.minQty.compareTo(b.minQty));
+      return sorted.isEmpty
+          ? 'Tidak ada'
+          : sorted
+                .map(
+                  (t) => 'min. ${Fmt.number(t.minQty)} ${Fmt.rupiah(t.price)}',
+                )
+                .join(', ');
+    }
+
+    add('Harga grosir', text(before.tiers), text(tiers));
+  }
+
   String price(int? storePrice, int defaultPrice) =>
       storePrice == null || storePrice == defaultPrice
       ? 'Harga default'
@@ -107,6 +136,32 @@ List<FieldChange> productChanges({
       price(old?.price, before.defaultSellingPrice),
       price(v.price, after.sellingPrice),
     );
+    // Harga satuan lain khusus toko (sama dengan harga satuan = default).
+    final defaults = {
+      for (final u in after.units ?? before.units)
+        PricingRules.unitName(u.name): u.defaultPrice,
+    };
+    for (final MapEntry(key: unit, value: p)
+        in (v.unitPrices ?? const <String, int?>{}).entries) {
+      String text(int? x) =>
+          x == null || x == defaults[unit] ? 'Harga $unit' : Fmt.rupiah(x);
+      add('Harga $unit $name', text(old?.unitPrices[unit]), text(p));
+    }
+    if (v.tiers case final tiers?) {
+      String text(List<PriceTier> list) {
+        final sorted = [...list]..sort((a, b) => a.minQty.compareTo(b.minQty));
+        return sorted.isEmpty
+            ? 'Ikut semua toko'
+            : sorted
+                  .map(
+                    (t) =>
+                        'min. ${Fmt.number(t.minQty)} ${Fmt.rupiah(t.price)}',
+                  )
+                  .join(', ');
+      }
+
+      add('Grosir $name', text(old?.tiers ?? const []), text(tiers));
+    }
   }
   return out;
 }

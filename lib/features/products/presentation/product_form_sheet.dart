@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/barcode_scanner.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/number_input.dart';
@@ -23,6 +24,7 @@ import '../domain/tag.dart';
 import 'tag_chip.dart';
 import 'tag_picker.dart';
 import 'product_providers.dart';
+import 'pricing_editor.dart';
 import 'similar_names_dialog.dart';
 
 /// Form tambah (`existing == null`) atau ubah barang.
@@ -76,8 +78,14 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
   final _storeStock = <int, TextEditingController>{};
   final _storePrice = <int, TextEditingController>{};
 
+  /// Harga khusus toko per satuan lain: toko → nama satuan → isian.
+  final _storeUnitPrice = <int, Map<String, TextEditingController>>{};
+
+  /// Grosir khusus toko (dibuat setelah data tersimpan dimuat).
+  final _storeTiers = <int, TierRowsController>{};
+
   /// Nilai tersimpan per toko; `null` selama dimuat (barang lama).
-  Map<int, ({double stock, int? price})>? _saved;
+  Map<int, StoreProductSaved>? _saved;
   late final _minStock = TextEditingController(
     text: _p == null || _p!.minStock == 0 ? '' : Fmt.number(_p!.minStock),
   );
@@ -89,12 +97,18 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
   /// Barcode diisi otomatis (+1 dari barcode terakhir); hanya barang baru.
   bool _autoCode = false;
 
-  /// Barcode yang menjadi dasar nomor otomatis, untuk keterangan.
+  /// Keterangan nomor otomatis (dasar nomor & kategori).
   String? _autoBasis;
 
   /// Nama yang sudah diperingatkan mirip lalu dipilih "Periksa Lagi";
   /// Simpan berikutnya dengan nama yang sama tidak diperingatkan lagi.
   String? _warnedName;
+
+  /// Satuan lain & harga grosir.
+  late final _pricing = PricingEditorController(
+    units: _p?.units ?? const [],
+    tiers: _p?.tiers ?? const [],
+  );
 
   final _errors = <String, String?>{};
   String? _error;
@@ -138,9 +152,23 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
     }
   }
 
+  TextEditingController _unitPriceCtl(int storeId, String unit) =>
+      _storeUnitPrice.putIfAbsent(storeId, () => {}).putIfAbsent(unit, () {
+        final price = _saved?[storeId]?.unitPrices[unit];
+        return TextEditingController(
+          text: price == null ? '' : Fmt.number(price),
+        );
+      });
+
   /// Membuat isian untuk toko [s] (sekali), terisi nilai tersimpan.
   void _ensureStoreFields(Store s) {
     final saved = _saved?[s.id];
+    if (_saved != null) {
+      _storeTiers.putIfAbsent(
+        s.id,
+        () => TierRowsController(saved?.tiers ?? const []),
+      );
+    }
     _storeStock.putIfAbsent(
       s.id,
       () => TextEditingController(
@@ -202,11 +230,13 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
   /// Mengisi barcode berikutnya; dipanggil lagi saat menyimpan supaya tetap
   /// terbaru.
   Future<void> _fillAutoCode() async {
-    final next = await ref.read(productRepositoryProvider).nextCode();
+    final next = await ref
+        .read(productRepositoryProvider)
+        .nextCode(categories: _tags);
     if (!mounted) return;
     setState(() {
       _autoCode = next != null;
-      _autoBasis = next?.basedOn;
+      _autoBasis = next?.note;
       if (next != null) {
         _code.text = next.next;
         _errors['code'] = null;
@@ -222,6 +252,15 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
   void dispose() {
     for (final c in _controllers) {
       c.dispose();
+    }
+    _pricing.dispose();
+    for (final m in _storeUnitPrice.values) {
+      for (final c in m.values) {
+        c.dispose();
+      }
+    }
+    for (final t in _storeTiers.values) {
+      t.dispose();
     }
     super.dispose();
   }
@@ -255,8 +294,17 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
             ? 'Format angka tidak valid.'
             : ProductRules.minStock(_qty(_minStock)),
       });
-    setState(() => _error = null);
-    return _errors.values.every((e) => e == null);
+    final pricing =
+        _pricing.parseError ??
+        _storeTiers.values.map((t) => t.parseError).nonNulls.firstOrNull ??
+        [
+          for (final m in _storeUnitPrice.values)
+            for (final c in m.values)
+              if (c.text.trim().isNotEmpty && _money(c) == null)
+                'Format harga satuan toko tidak valid.',
+        ].firstOrNull;
+    setState(() => _error = pricing);
+    return pricing == null && _errors.values.every((e) => e == null);
   }
 
   ProductDraft get _draft => ProductDraft(
@@ -269,6 +317,8 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
     minStock: _qty(_minStock) ?? 0,
     isActive: _active,
     tagNames: _tags,
+    units: _pricing.units,
+    tiers: _pricing.tiers,
   );
 
   List<StoreProductValues> get _storeValues => [
@@ -277,6 +327,11 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
         storeId: id,
         stock: _qty(_storeStock[id]!) ?? 0,
         price: _money(_storePrice[id]!),
+        unitPrices: {
+          for (final name in _pricing.unitNames)
+            name: _money(_unitPriceCtl(id, name)),
+        },
+        tiers: _storeTiers[id]?.tiers,
       ),
   ];
 
@@ -379,6 +434,8 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
   Future<void> _pickTags() async {
     final picked = await showTagPicker(context, selected: _tags);
     if (picked != null) setState(() => _tags = picked);
+    // Seri barcode otomatis mengikuti kategori.
+    if (picked != null && _p == null && _autoCode) await _fillAutoCode();
   }
 
   Future<void> _pickUnit() async {
@@ -416,12 +473,15 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
                   TagChip(
                     name: name,
                     color: colors[name.toLowerCase()] ?? TagColor.blue,
-                    onRemove: () => setState(
-                      () => _tags = [
-                        for (final t in _tags)
-                          if (t != name) t,
-                      ],
-                    ),
+                    onRemove: () {
+                      setState(
+                        () => _tags = [
+                          for (final t in _tags)
+                            if (t != name) t,
+                        ],
+                      );
+                      if (_p == null && _autoCode) _fillAutoCode();
+                    },
                   ),
               ],
             ),
@@ -473,31 +533,40 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
             errorText: _errors['name'],
           ),
           const SizedBox(height: AppSpacing.md),
+          // Kategori dipilih sebelum barcode: barcode otomatis mengikuti
+          // seri kategori.
+          InsetGroupedSection(children: [_tagTile()]),
+          const SizedBox(height: AppSpacing.md),
           pair(
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                AppTextField(
-                  controller: _code,
-                  label: 'Barcode',
-                  placeholder: 'mis. BMM0000001',
-                  prefixIcon: CupertinoIcons.barcode,
+                WithScanButton(
                   enabled: !_autoCode,
-                  helper: _autoCode && _autoBasis != null
-                      ? 'Lanjutan dari $_autoBasis'
-                      : null,
-                  errorText: _errors['code'],
+                  onScanned: (v) => setState(() => _code.text = v),
+                  field: AppTextField(
+                    controller: _code,
+                    label: 'Barcode',
+                    placeholder: 'mis. BMM0000001',
+                    prefixIcon: CupertinoIcons.barcode,
+                    enabled: !_autoCode,
+                    helper: _autoCode ? _autoBasis : null,
+                    errorText: _errors['code'],
+                  ),
                 ),
                 if (_p == null)
                   _AutoCodeToggle(value: _autoCode, onChanged: _setAutoCode),
               ],
             ),
-            AppTextField(
-              controller: _barcode,
-              label: 'Barcode bawaan (opsional)',
-              placeholder: 'Barcode pabrik di kemasan',
-              prefixIcon: CupertinoIcons.barcode_viewfinder,
-              errorText: _errors['barcode'],
+            WithScanButton(
+              onScanned: (v) => setState(() => _barcode.text = v),
+              field: AppTextField(
+                controller: _barcode,
+                label: 'Barcode bawaan (opsional)',
+                placeholder: 'Barcode pabrik di kemasan',
+                prefixIcon: CupertinoIcons.barcode_viewfinder,
+                errorText: _errors['barcode'],
+              ),
             ),
           ),
           const SizedBox(height: AppSpacing.lg),
@@ -508,7 +577,6 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
                 value: _unit ?? 'Tanpa satuan',
                 onPressed: _pickUnit,
               ),
-              _tagTile(),
             ],
           ),
           const SizedBox(height: AppSpacing.lg),
@@ -592,6 +660,12 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
             const SizedBox.shrink(),
           ),
           const SizedBox(height: AppSpacing.lg),
+          PricingEditor(
+            controller: _pricing,
+            baseUnit: _unit ?? 'PCS',
+            purchasePrice: buy,
+          ),
+          const SizedBox(height: AppSpacing.lg),
           Text(
             'STOK & HARGA PER TOKO',
             style: AppTypography.footnote.copyWith(
@@ -621,6 +695,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
                     const SizedBox(height: AppSpacing.xs),
                     pair(
                       AppTextField(
+                        key: ValueKey('stock-${store.id}'),
                         controller: _storeStock[store.id],
                         label: 'Stok',
                         placeholder: '0',
@@ -640,6 +715,38 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
                         inputFormatters: [RupiahInputFormatter()],
                       ),
                     ),
+                    // Harga satuan lain & grosir khusus toko ini.
+                    ListenableBuilder(
+                      listenable: _pricing,
+                      builder: (context, _) => Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (final unit in _pricing.unitNames)
+                            Padding(
+                              padding: const EdgeInsets.only(
+                                top: AppSpacing.xs,
+                              ),
+                              child: AppTextField(
+                                controller: _unitPriceCtl(store.id, unit),
+                                label: 'Harga $unit di toko ini (Rp)',
+                                placeholder: switch (_pricing.defaultPriceOf(
+                                  unit,
+                                )) {
+                                  final p? => Fmt.number(p),
+                                  null => 'Sama dengan harga $unit',
+                                },
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [RupiahInputFormatter()],
+                              ),
+                            ),
+                          if (_storeTiers[store.id] case final tiers?)
+                            TierRowsEditor(
+                              controller: tiers,
+                              baseUnit: _unit ?? 'PCS',
+                            ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -647,9 +754,11 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
             ],
           Text(
             widget.existing == null
-                ? 'Harga khusus kosong = memakai harga default.'
-                : 'Harga khusus kosong = memakai harga default. Perubahan '
-                      'stok dicatat di riwayat stok.',
+                ? 'Harga khusus kosong = memakai harga default. Grosir '
+                      'khusus toko menggantikan grosir semua toko di toko itu.'
+                : 'Harga khusus kosong = memakai harga default. Grosir '
+                      'khusus toko menggantikan grosir semua toko di toko itu. '
+                      'Perubahan stok dicatat di riwayat stok.',
             style: AppTypography.footnote.copyWith(color: c.labelSecondary),
           ),
           if (widget.existing != null) ...[

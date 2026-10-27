@@ -9,11 +9,13 @@ import '../../../core/database/uuid.dart';
 import '../../../core/utils/formatters.dart';
 import '../../audit/domain/sale_digest.dart';
 import '../../auth/domain/app_user.dart';
+import '../../auth/domain/permission.dart';
 import '../../payments/domain/payment_method.dart';
 import '../../sync/data/terminal_repository.dart';
 import '../../sync/domain/terminal.dart';
 import '../domain/invoice_number.dart';
 import '../domain/sale_return.dart';
+import '../domain/split_payment.dart';
 
 class ReturnFailure implements Exception {
   const ReturnFailure(this.message);
@@ -32,6 +34,7 @@ class ReturnResult {
     required this.refund,
     required this.paymentMethod,
     required this.isCash,
+    this.payments = const [],
   });
 
   final int saleId;
@@ -41,6 +44,15 @@ class ReturnResult {
   final int refund;
   final String paymentMethod;
   final bool isCash;
+
+  /// Faktur split payment: uang kembali per metode (nilai negatif).
+  final List<SalePart> payments;
+
+  /// Keterangan cara mengembalikan, mis. "Tunai" atau
+  /// "Tunai Rp 20.000 + QRIS Rp 5.000".
+  String get refundMethods => payments.isEmpty
+      ? paymentMethod
+      : payments.map((p) => '${p.name} ${Fmt.rupiah(-p.amount)}').join(' + ');
 }
 
 /// Retur sebagian atau batal seluruh faktur.
@@ -63,7 +75,10 @@ class ReturnService {
 
   /// Boleh meretur faktur toko [storeId].
   static bool canReturn(AppUser user, int? storeId) =>
-      user.isAdmin || (storeId != null && user.canAdjustStockAt(storeId));
+      user.isAdmin ||
+      (storeId != null &&
+          user.storeId == storeId &&
+          user.can(Permission.returnSale));
 
   Future<ReturnableSale> load(int saleId) async {
     final sale = await (_db.select(
@@ -78,6 +93,10 @@ class ReturnService {
         : await _db.paymentMethodsDao.findById(sale.paymentMethodId!);
     final returned = await _db.salesDao.returnedByItem(saleId);
     final items = await _db.salesDao.itemsOf(saleId);
+    final parts = await _db.salesDao.paymentsOf(saleId);
+    final refunded = parts.isEmpty
+        ? const <int?, int>{}
+        : await _db.salesDao.refundedByMethod(saleId);
     return ReturnableSale(
       saleId: sale.id,
       invoiceNo: sale.invoiceNo,
@@ -101,58 +120,99 @@ class ReturnService {
             subtotal: i.subtotal,
             returnedQty: returned[i.id]?.$1 ?? 0,
             returnedSubtotal: returned[i.id]?.$2 ?? 0,
+            unitFactor: i.unitFactor,
+          ),
+      ],
+      payments: [
+        for (final p in parts)
+          SalePart(
+            methodId: p.paymentMethodId,
+            name: p.methodName,
+            amount: p.amount - (refunded[p.paymentMethodId] ?? 0),
+            isCash: p.isCash,
           ),
       ],
     );
   }
 
+  /// Memeriksa pilihan retur tanpa menyimpan (dipakai sebelum tukar
+  /// barang). Mengembalikan nilai kredit/uang kembali.
+  Future<int> check({
+    required AppUser actor,
+    required int saleId,
+    required Map<int, double> qtys,
+    required String reason,
+  }) async {
+    if (reason.trim().isEmpty) throw const ReturnFailure('Alasan wajib diisi.');
+    final sale = await load(saleId);
+    _pick(actor, sale, qtys);
+    return sale.refundFor(qtys);
+  }
+
+  /// Baris yang dipilih untuk diretur; melempar [ReturnFailure] bila tidak
+  /// sah.
+  List<(ReturnableLine, double)> _pick(
+    AppUser actor,
+    ReturnableSale sale,
+    Map<int, double> qtys,
+  ) {
+    if (!canReturn(actor, sale.storeId)) {
+      throw const ReturnFailure(
+        'Anda tidak punya hak retur untuk faktur toko ini.',
+      );
+    }
+    if (sale.fullyReturned) {
+      throw const ReturnFailure('Semua barang di faktur ini sudah diretur.');
+    }
+
+    final picked = <(ReturnableLine, double)>[];
+    for (final l in sale.lines) {
+      final q = qtys[l.saleItemId] ?? 0;
+      if (q < 0) throw const ReturnFailure('Jumlah tidak boleh negatif.');
+      if (q == 0) continue;
+      if (q > l.returnable + 1e-9) {
+        throw ReturnFailure(
+          '${l.name}: paling banyak ${_qty(l.returnable)} yang bisa '
+          'diretur.',
+        );
+      }
+      picked.add((l, q));
+    }
+    if (picked.isEmpty) {
+      throw const ReturnFailure('Pilih minimal satu barang yang diretur.');
+    }
+    final returnsAll =
+        picked.length == sale.lines.length &&
+        picked.every((p) => (p.$2 - p.$1.returnable).abs() < 1e-9);
+    if (sale.hasDiscount && !returnsAll) {
+      throw const ReturnFailure(
+        'Faktur dengan voucher/potongan hanya bisa dibatalkan seluruhnya.',
+      );
+    }
+    return picked;
+  }
+
   /// [qtys]: `id baris faktur → jumlah dikembalikan`. Faktur berpotongan
   /// (lama) hanya bisa dibatalkan seluruhnya.
+  ///
+  /// Tukar barang ([exchange], lewat `ExchangeService`): nilai retur menjadi
+  /// kredit faktur penukaran, dan nota retur dicatat dengan metode
+  /// penyelesaian [settleMethodId] (supaya total per metode = uang yang
+  /// benar-benar berpindah).
   Future<ReturnResult> create({
     required AppUser actor,
     required int saleId,
     required Map<int, double> qtys,
     required String reason,
+    int? settleMethodId,
+    bool exchange = false,
   }) async {
     final why = reason.trim();
     if (why.isEmpty) throw const ReturnFailure('Alasan wajib diisi.');
 
     return _db.transaction(() async {
       final sale = await load(saleId);
-      if (!canReturn(actor, sale.storeId)) {
-        throw const ReturnFailure(
-          'Hanya admin atau supervisor toko ini yang bisa meretur faktur.',
-        );
-      }
-      if (sale.fullyReturned) {
-        throw const ReturnFailure('Semua barang di faktur ini sudah diretur.');
-      }
-
-      final picked = <(ReturnableLine, double)>[];
-      for (final l in sale.lines) {
-        final q = qtys[l.saleItemId] ?? 0;
-        if (q < 0) throw const ReturnFailure('Jumlah tidak boleh negatif.');
-        if (q == 0) continue;
-        if (q > l.returnable + 1e-9) {
-          throw ReturnFailure(
-            '${l.name}: paling banyak ${_qty(l.returnable)} yang bisa '
-            'diretur.',
-          );
-        }
-        picked.add((l, q));
-      }
-      if (picked.isEmpty) {
-        throw const ReturnFailure('Pilih minimal satu barang yang diretur.');
-      }
-      final returnsAll =
-          picked.length == sale.lines.length &&
-          picked.every((p) => (p.$2 - p.$1.returnable).abs() < 1e-9);
-      if (sale.hasDiscount && !returnsAll) {
-        throw const ReturnFailure(
-          'Faktur dengan potongan hanya bisa dibatalkan seluruhnya.',
-        );
-      }
-
+      final picked = _pick(actor, sale, qtys);
       final refund = sale.refundFor(qtys);
       final now = _clock();
       final terminalCode =
@@ -172,6 +232,31 @@ class ReturnService {
       )..where((s) => s.id.equals(saleId))).getSingle();
       final uuid = newUuid();
 
+      // Metode nota: metode faktur asal, atau metode penyelesaian tukar.
+      var methodName = original.paymentMethod;
+      var methodId = original.paymentMethodId;
+      var isCash = sale.isCash;
+      // Faktur split payment: uang kembali dibagi ke metode asalnya (tunai
+      // dulu). Tukar barang memakai metode penyelesaiannya sendiri.
+      final refundParts = settleMethodId == null && sale.isSplit
+          ? SplitPayment.allocateRefund(sale.payments, refund)
+          : const <SalePart>[];
+      if (refundParts.isNotEmpty) {
+        methodName = SplitPayment.joinedName(refundParts.map((p) => p.name));
+        methodId = refundParts.first.methodId;
+        isCash = refundParts.any((p) => p.isCash);
+      }
+      if (settleMethodId != null) {
+        final m = await _db.paymentMethodsDao.findById(settleMethodId);
+        if (m == null || !m.isActive) {
+          throw const ReturnFailure('Metode pembayaran tidak tersedia.');
+        }
+        methodName = m.name;
+        methodId = m.id;
+        isCash = m.kind == PaymentKind.cash;
+      }
+      final note = exchange ? 'Tukar barang: $why' : why;
+
       final returnId = await _db
           .into(_db.sales)
           .insert(
@@ -183,16 +268,37 @@ class ReturnService {
               saleDate: now,
               userId: actor.id,
               itemCount: picked.length,
-              subtotal: -refund,
+              // Faktur bervoucher (hanya batal semua): subtotal, potongan,
+              // dan voucher dicerminkan supaya laporan kembali nol.
+              subtotal: sale.hasDiscount ? -original.subtotal : -refund,
+              discount: Value(sale.hasDiscount ? -original.discount : 0),
+              voucherId: Value(sale.hasDiscount ? original.voucherId : null),
+              voucherCode: Value(
+                sale.hasDiscount ? original.voucherCode : null,
+              ),
               total: -refund,
               paid: -refund,
               changeAmount: 0,
-              paymentMethod: Value(original.paymentMethod),
-              paymentMethodId: Value(original.paymentMethodId),
+              paymentMethod: Value(methodName),
+              paymentMethodId: Value(methodId),
               returnOfId: Value(saleId),
-              returnReason: Value(why),
+              returnReason: Value(note),
             ),
           );
+      for (final p in refundParts) {
+        await _db
+            .into(_db.salePayments)
+            .insert(
+              SalePaymentsCompanion.insert(
+                saleId: returnId,
+                paymentMethodId: Value(p.methodId),
+                methodName: p.name,
+                isCash: Value(p.isCash),
+                amount: p.amount,
+                tendered: p.amount,
+              ),
+            );
+      }
 
       for (final (l, q) in picked) {
         await _db
@@ -207,6 +313,7 @@ class ReturnService {
                 qty: -q,
                 price: l.price,
                 purchasePrice: l.purchasePrice,
+                unitFactor: Value(l.unitFactor),
                 // Faktur berpotongan (batal semua): nilai per baris tetap
                 // subtotal asal; selisih potongan ada di total nota.
                 subtotal: -l.refundFor(q),
@@ -217,7 +324,7 @@ class ReturnService {
           await _db.storesDao.changeStock(
             storeId: storeId,
             productId: l.productId,
-            delta: q,
+            delta: q * l.unitFactor,
             type: StockMovementType.saleReturn,
             userId: actor.id,
             refId: returnId,
@@ -232,7 +339,8 @@ class ReturnService {
         type: AuditType.saleReturn,
         summary:
             '$invoiceNo dari ${sale.invoiceNo}: ${picked.length} barang, '
-            'kembali ${Fmt.rupiah(refund)}. Alasan: $why',
+            '${exchange ? 'kredit tukar' : 'kembali'} ${Fmt.rupiah(refund)}. '
+            'Alasan: $note',
         userId: actor.id,
         userName: actor.fullName,
         storeId: original.storeId,
@@ -242,7 +350,7 @@ class ReturnService {
           'original': sale.invoiceNo,
           'total': -refund,
           'refund': refund,
-          'reason': why,
+          'reason': note,
           'digest': saleDigest(
             uuid: uuid,
             invoiceNo: invoiceNo,
@@ -265,8 +373,9 @@ class ReturnService {
         saleId: returnId,
         invoiceNo: invoiceNo,
         refund: refund,
-        paymentMethod: original.paymentMethod,
-        isCash: sale.isCash,
+        paymentMethod: methodName,
+        isCash: isCash,
+        payments: refundParts,
       );
     });
   }

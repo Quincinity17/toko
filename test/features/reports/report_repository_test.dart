@@ -322,6 +322,7 @@ void main() {
       'Produk',
       'Kategori',
       'Pembayaran',
+      'Voucher',
       'Kasir',
       'Terminal',
       'Stok',

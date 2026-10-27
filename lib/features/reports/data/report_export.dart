@@ -14,6 +14,7 @@ Uint8List exportReportXlsx({
   required InventorySummary inventory,
   required List<StockStatus> stock,
   required List<SaleSummary> invoices,
+  String? storeName,
 }) {
   final book = Excel.createExcel();
   final first = book.getDefaultSheet() ?? 'Sheet1';
@@ -52,6 +53,7 @@ Uint8List exportReportXlsx({
     'Ringkasan',
     ['Keterangan', 'Periode ini', 'Periode sebelumnya', 'Perubahan (%)'],
     [
+      if (storeName != null) ['Toko', storeName, storeName, null],
       ['Periode', bundle.range.label, bundle.range.previous.label, null],
       [
         'Penjualan kotor',
@@ -59,7 +61,12 @@ Uint8List exportReportXlsx({
         p.grossSales,
         pct(growth(s.grossSales, p.grossSales)),
       ],
-      ['Potongan', s.discount, p.discount, pct(growth(s.discount, p.discount))],
+      [
+        'Potongan voucher',
+        s.discount,
+        p.discount,
+        pct(growth(s.discount, p.discount)),
+      ],
       ['Omzet bersih', s.revenue, p.revenue, pct(growth(s.revenue, p.revenue))],
       ['Harga pokok terjual', s.cost, p.cost, pct(growth(s.cost, p.cost))],
       [
@@ -187,6 +194,14 @@ Uint8List exportReportXlsx({
     ...groupHeaders,
   ], groupRows(bundle.categories));
   sheet('Pembayaran', ['Metode', ...groupHeaders], groupRows(bundle.payments));
+  sheet(
+    'Voucher',
+    ['Kode', 'Dipakai', 'Total potongan', 'Omzet', 'Laba kotor'],
+    [
+      for (final v in bundle.vouchers)
+        [v.name, v.transactions, v.discount, v.revenue, v.grossProfit],
+    ],
+  );
   if (bundle.stores.length > 1) {
     sheet('Toko', ['Toko', ...groupHeaders], groupRows(bundle.stores));
   }
@@ -231,6 +246,7 @@ Uint8List exportReportXlsx({
       'Kasir',
       'Barang',
       'Subtotal',
+      'Voucher',
       'Potongan',
       'Total',
       'Metode bayar',
@@ -245,6 +261,7 @@ Uint8List exportReportXlsx({
           f.cashierName,
           f.itemCount,
           f.subtotal,
+          f.voucherCode,
           f.discount,
           f.total,
           f.paymentMethod,

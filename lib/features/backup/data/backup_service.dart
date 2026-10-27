@@ -281,10 +281,12 @@ class BackupService {
 
 /// Menjalankan [BackupService.runIfDue] saat aplikasi dibuka (setelah jeda
 /// singkat agar tidak memperlambat) lalu setiap jam, selama aplikasi terbuka.
+/// [then] dijalankan setelahnya (penghapusan riwayat lama, sekali sehari).
 class BackupScheduler {
-  BackupScheduler(this._service);
+  BackupScheduler(this._service, {this.then});
 
   final BackupService _service;
+  final Future<Object?> Function()? then;
   Timer? _timer;
 
   void start({
@@ -295,7 +297,10 @@ class BackupScheduler {
     _timer = Timer.periodic(every, (_) => _tick());
   }
 
-  void _tick() => unawaited(_service.runIfDue());
+  void _tick() => unawaited(() async {
+    await _service.runIfDue();
+    await then?.call();
+  }());
 
   void stop() => _timer?.cancel();
 }

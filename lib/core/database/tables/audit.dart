@@ -28,15 +28,21 @@ enum AuditType {
   userPasswordReset,
   userDeleted,
   passwordChanged,
+  permissionsChanged,
   // Pengaturan & sistem
   storeChanged,
   paymentMethodChanged,
+  voucherChanged,
   terminalChanged,
   backupChanged,
   restoreStaged,
   restoreApplied,
+  salesPurged,
   sealsRebuilt,
   clockBack,
+  // Sinkron
+  syncPaired,
+  syncReceived,
 }
 
 /// v12: catatan aktivitas berantai. Setiap baris menyimpan [hash] =
@@ -64,6 +70,43 @@ class AuditLog extends Table {
   TextColumn get summary => text()();
 
   /// Rincian JSON (isi keranjang, perubahan lama → baru, dll.).
+  TextColumn get data => text().nullable()();
+  TextColumn get prevHash => text()();
+  TextColumn get hash => text()();
+}
+
+/// v18: catatan aktivitas dari komputer lain (diterima komputer master
+/// lewat sinkron). Terpisah dari [AuditLog] karena rantai segelnya milik
+/// komputer pengirim (kunci perangkatnya); di sini hanya kesinambungan
+/// [prevHash] → [hash] yang bisa diperiksa (catatan yang dihapus di
+/// cabang memutus rantai).
+@DataClassName('RemoteAuditRow')
+@TableIndex(name: 'idx_remote_audit_uuid', columns: {#uuid}, unique: true)
+@TableIndex(name: 'idx_remote_audit_created', columns: {#createdAt})
+class RemoteAuditLog extends Table {
+  @override
+  String get tableName => 'remote_audit_log';
+
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get uuid => text()();
+
+  /// ID terminal pengirim.
+  TextColumn get origin => text().nullable()();
+
+  /// `audit_log.id` di komputer pengirim (urutan rantai).
+  IntColumn get remoteId => integer()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  /// Akun (id lokal komputer ini, dari uuid akun).
+  IntColumn get userId => integer().nullable()();
+  TextColumn get userName => text().nullable()();
+  IntColumn get storeId => integer().nullable()();
+  TextColumn get terminalCode => text().nullable()();
+
+  /// Nama [AuditType] (teks biasa: jenis yang tidak dikenal versi ini tetap
+  /// tersimpan).
+  TextColumn get type => text()();
+  TextColumn get summary => text()();
   TextColumn get data => text().nullable()();
   TextColumn get prevHash => text()();
   TextColumn get hash => text()();

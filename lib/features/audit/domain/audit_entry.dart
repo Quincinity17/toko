@@ -39,14 +39,19 @@ extension AuditTypeInfo on AuditType {
     AuditType.userPasswordReset => 'Reset password',
     AuditType.userDeleted => 'Akun dihapus',
     AuditType.passwordChanged => 'Ganti password',
+    AuditType.permissionsChanged => 'Hak akses peran diubah',
     AuditType.storeChanged => 'Toko diubah',
     AuditType.paymentMethodChanged => 'Metode bayar diubah',
+    AuditType.voucherChanged => 'Voucher diubah',
     AuditType.terminalChanged => 'Kode terminal diubah',
     AuditType.backupChanged => 'Pengaturan backup',
     AuditType.restoreStaged => 'Pemulihan disiapkan',
     AuditType.restoreApplied => 'Data dipulihkan',
+    AuditType.salesPurged => 'Riwayat penjualan dihapus',
     AuditType.sealsRebuilt => 'Segel data dibuat',
     AuditType.clockBack => 'Jam perangkat mundur',
+    AuditType.syncPaired => 'Disambungkan ke server',
+    AuditType.syncReceived => 'Data dari server',
   };
 
   AuditCategory get category => switch (this) {
@@ -68,7 +73,8 @@ extension AuditTypeInfo on AuditType {
     AuditType.userUpdated ||
     AuditType.userPasswordReset ||
     AuditType.userDeleted ||
-    AuditType.passwordChanged => AuditCategory.accounts,
+    AuditType.passwordChanged ||
+    AuditType.permissionsChanged => AuditCategory.accounts,
     _ => AuditCategory.system,
   };
 
@@ -81,7 +87,8 @@ extension AuditTypeInfo on AuditType {
     AuditType.saleReturn ||
     AuditType.loginFailed ||
     AuditType.clockBack ||
-    AuditType.restoreApplied => true,
+    AuditType.restoreApplied ||
+    AuditType.salesPurged => true,
     _ => false,
   };
 }

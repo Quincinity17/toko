@@ -17,6 +17,9 @@ mixin _$ProductsDaoMixin on DatabaseAccessor<AppDatabase> {
   $StoreProductsTable get storeProducts => attachedDatabase.storeProducts;
   $TagsTable get tags => attachedDatabase.tags;
   $ProductTagsTable get productTags => attachedDatabase.productTags;
+  $ProductUnitsTable get productUnits => attachedDatabase.productUnits;
+  $PriceTiersTable get priceTiers => attachedDatabase.priceTiers;
+  $StoreUnitPricesTable get storeUnitPrices => attachedDatabase.storeUnitPrices;
   ProductsDaoManager get managers => ProductsDaoManager(this);
 }
 
@@ -55,4 +58,13 @@ class ProductsDaoManager {
       $$TagsTableTableManager(_db.attachedDatabase, _db.tags);
   $$ProductTagsTableTableManager get productTags =>
       $$ProductTagsTableTableManager(_db.attachedDatabase, _db.productTags);
+  $$ProductUnitsTableTableManager get productUnits =>
+      $$ProductUnitsTableTableManager(_db.attachedDatabase, _db.productUnits);
+  $$PriceTiersTableTableManager get priceTiers =>
+      $$PriceTiersTableTableManager(_db.attachedDatabase, _db.priceTiers);
+  $$StoreUnitPricesTableTableManager get storeUnitPrices =>
+      $$StoreUnitPricesTableTableManager(
+        _db.attachedDatabase,
+        _db.storeUnitPrices,
+      );
 }

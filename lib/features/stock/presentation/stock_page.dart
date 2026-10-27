@@ -2,8 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../core/widgets/barcode_scanner.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/app_button.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/inset_grouped_list.dart';
 import '../../../core/widgets/large_title_page.dart';
@@ -11,7 +14,9 @@ import '../../../core/widgets/state_views.dart';
 import '../../products/domain/product.dart';
 import '../../products/presentation/product_providers.dart';
 import '../../stores/presentation/store_scope.dart';
+import '../data/stock_repository.dart';
 import 'stock_adjust_dialog.dart';
+import 'stock_alert_list.dart';
 
 /// Halaman Stok (admin & supervisor): stok barang di toko yang dipakai, lalu
 /// sesuaikan per barang (barang masuk, keluar, atau stok opname).
@@ -22,13 +27,24 @@ class StockPage extends ConsumerStatefulWidget {
   ConsumerState<StockPage> createState() => _StockPageState();
 }
 
-enum _StockView { all, low }
+enum _StockView { all, alerts }
 
 class _StockPageState extends ConsumerState<StockPage> {
   final _search = TextEditingController();
   Timer? _debounce;
   String _text = '';
   _StockView _view = _StockView.all;
+
+  @override
+  void initState() {
+    super.initState();
+    // Dari Dashboard (kartu Peringatan stok): langsung ke tab Peringatan.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final view = GoRouterState.of(context).uri.queryParameters['view'];
+      if (view == 'peringatan') setState(() => _view = _StockView.alerts);
+    });
+  }
 
   @override
   void dispose() {
@@ -51,31 +67,39 @@ class _StockPageState extends ConsumerState<StockPage> {
     final storeId = ref.watch(storeScopeProvider);
     final store = ref.watch(activeStoreProvider);
 
+    // Semua toko (admin): peringatan stok seluruh toko; daftar & ubah stok
+    // per toko setelah memilih toko.
     if (storeId == null) {
+      final all = ref.watch(stockAlertsProvider(null));
       return LargeTitlePage(
         title: 'Stok',
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 360),
-          alignment: Alignment.center,
-          child: EmptyState(
+        subtitle: 'Peringatan stok semua toko',
+        actions: [
+          AppButton(
+            label: 'Pilih Toko',
             icon: CupertinoIcons.building_2_fill,
-            title: 'Pilih toko dulu',
-            message: 'Stok dicatat per toko. Pilih toko yang ingin diatur.',
-            actionLabel: 'Pilih Toko',
-            onAction: () => pickStoreScope(context, ref, allowAll: false),
+            onPressed: () => pickStoreScope(context, ref, allowAll: false),
           ),
-        ),
+        ],
+        slivers: [
+          SliverToBoxAdapter(
+            child: all.when(
+              loading: () => const SizedBox(height: 240, child: LoadingState()),
+              error: (e, _) => ErrorBanner(message: 'Gagal memuat: $e'),
+              data: (list) => StockAlertList(alerts: list),
+            ),
+          ),
+        ],
       );
     }
 
-    final filter = ProductFilter(
-      text: _text,
-      storeId: storeId,
-      lowStockOnly: _view == _StockView.low,
-      sort: _view == _StockView.low ? ProductSort.stockLow : ProductSort.name,
-    );
+    final filter = ProductFilter(text: _text, storeId: storeId);
     final count = ref.watch(productCountProvider(filter)).value;
     final page = ref.watch(productPageProvider((filter, 0)));
+    final alerts = ref.watch(stockAlertsProvider(storeId));
+    final alertCount = alerts.value == null
+        ? null
+        : {for (final a in alerts.value!) a.row.productId}.length;
 
     return LargeTitlePage(
       title: 'Stok',
@@ -83,13 +107,22 @@ class _StockPageState extends ConsumerState<StockPage> {
       bottom: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SizedBox(
-            height: 40,
-            child: CupertinoSearchTextField(
-              controller: _search,
-              placeholder: 'Cari nama atau barcode',
-              style: AppTypography.body.copyWith(color: c.label),
-              onChanged: _onSearch,
+          // HP/tablet: cari barang dengan memotret barcodenya.
+          WithScanButton(
+            topOffset: 0,
+            size: 40,
+            onScanned: (code) {
+              _search.text = code;
+              _onSearch(code);
+            },
+            field: SizedBox(
+              height: 40,
+              child: CupertinoSearchTextField(
+                controller: _search,
+                placeholder: 'Cari nama atau barcode',
+                style: AppTypography.body.copyWith(color: c.label),
+                onChanged: _onSearch,
+              ),
             ),
           ),
           const SizedBox(height: AppSpacing.sm),
@@ -104,7 +137,12 @@ class _StockPageState extends ConsumerState<StockPage> {
               children: {
                 for (final (v, label) in [
                   (_StockView.all, 'Semua barang'),
-                  (_StockView.low, 'Stok menipis'),
+                  (
+                    _StockView.alerts,
+                    alertCount == null || alertCount == 0
+                        ? 'Peringatan'
+                        : 'Peringatan ($alertCount)',
+                  ),
                 ])
                   v: Padding(
                     padding: const EdgeInsets.symmetric(
@@ -119,44 +157,60 @@ class _StockPageState extends ConsumerState<StockPage> {
         ],
       ),
       slivers: [
-        SliverToBoxAdapter(
-          child: page.when(
-            loading: () => const SizedBox(height: 240, child: LoadingState()),
-            error: (e, _) => ErrorBanner(message: 'Gagal memuat stok: $e'),
-            data: (list) => list.isEmpty
-                ? Container(
-                    constraints: const BoxConstraints(minHeight: 320),
-                    alignment: Alignment.center,
-                    child: EmptyState(
-                      icon: _view == _StockView.low
-                          ? CupertinoIcons.checkmark_seal
-                          : CupertinoIcons.archivebox,
-                      title: _view == _StockView.low
-                          ? 'Tidak ada stok menipis'
-                          : 'Barang tidak ditemukan',
-                    ),
-                  )
-                : InsetGroupedSection(
-                    footer: count != null && count > list.length
-                        ? 'Menampilkan ${list.length} dari '
-                              '${Fmt.number(count)} barang. Gunakan pencarian '
-                              'untuk barang lainnya.'
-                        : 'Klik barang untuk menambah, mengurangi, atau '
-                              'menghitung ulang stok.',
-                    children: [
-                      for (final p in list)
-                        _StockTile(
-                          product: p,
-                          onTap: () => showStockAdjustDialog(
-                            context,
+        if (_view == _StockView.alerts)
+          SliverToBoxAdapter(
+            child: alerts.when(
+              loading: () => const SizedBox(height: 240, child: LoadingState()),
+              error: (e, _) => ErrorBanner(message: 'Gagal memuat: $e'),
+              data: (list) => StockAlertList(
+                alerts: _text.trim().isEmpty
+                    ? list
+                    : [
+                        for (final a in list)
+                          if ('${a.row.name} ${a.row.code}'
+                              .toLowerCase()
+                              .contains(_text.trim().toLowerCase()))
+                            a,
+                      ],
+                storeId: storeId,
+              ),
+            ),
+          )
+        else
+          SliverToBoxAdapter(
+            child: page.when(
+              loading: () => const SizedBox(height: 240, child: LoadingState()),
+              error: (e, _) => ErrorBanner(message: 'Gagal memuat stok: $e'),
+              data: (list) => list.isEmpty
+                  ? Container(
+                      constraints: const BoxConstraints(minHeight: 320),
+                      alignment: Alignment.center,
+                      child: const EmptyState(
+                        icon: CupertinoIcons.archivebox,
+                        title: 'Barang tidak ditemukan',
+                      ),
+                    )
+                  : InsetGroupedSection(
+                      footer: count != null && count > list.length
+                          ? 'Menampilkan ${list.length} dari '
+                                '${Fmt.number(count)} barang. Gunakan pencarian '
+                                'untuk barang lainnya.'
+                          : 'Klik barang untuk menambah, mengurangi, atau '
+                                'menghitung ulang stok.',
+                      children: [
+                        for (final p in list)
+                          _StockTile(
                             product: p,
-                            storeId: storeId,
+                            onTap: () => showStockAdjustDialog(
+                              context,
+                              product: p,
+                              storeId: storeId,
+                            ),
                           ),
-                        ),
-                    ],
-                  ),
+                      ],
+                    ),
+            ),
           ),
-        ),
       ],
     );
   }

@@ -8,6 +8,7 @@ import '../domain/account_rules.dart';
 import '../domain/app_user.dart';
 import '../domain/user_role.dart';
 import 'auth_repository.dart';
+import '../../sync/data/terminal_repository.dart';
 
 /// Gagal mengelola akun. [message] siap ditampilkan ke user.
 class AccountFailure implements Exception {
@@ -47,6 +48,7 @@ class UserRepository {
     required String password,
   }) async {
     _requireAdmin(actor);
+    await _requireMaster();
     _check(AccountRules.username(username));
     _check(AccountRules.fullName(fullName));
     _check(AccountRules.password(password));
@@ -100,6 +102,7 @@ class UserRepository {
     required bool isActive,
   }) async {
     _requireAdmin(actor);
+    await _requireMaster();
     _check(AccountRules.fullName(fullName));
 
     return _db.transaction(() async {
@@ -153,6 +156,7 @@ class UserRepository {
     required String newPassword,
   }) async {
     _requireAdmin(actor);
+    await _requireMaster();
     _check(AccountRules.password(newPassword));
     final row = await _find(id);
     await _setPassword(id, newPassword);
@@ -173,6 +177,7 @@ class UserRepository {
     // Kebijakan toko: password hanya diganti oleh admin. Kasir minta admin
     // mereset lewat Kelola Akun.
     _requireAdmin(user);
+    await _requireMaster();
     _check(AccountRules.password(newPassword));
     final row = await _find(user.id);
     if (!await _hasher.verify(currentPassword, row.passwordHash)) {
@@ -192,6 +197,7 @@ class UserRepository {
 
   Future<void> delete({required AppUser actor, required int id}) async {
     _requireAdmin(actor);
+    await _requireMaster();
     if (id == actor.id) {
       throw const AccountFailure('Anda tidak bisa menghapus akun sendiri.');
     }
@@ -251,6 +257,12 @@ class UserRepository {
     if (await _db.usersDao.countActiveAdmins() <= 1) {
       throw const AccountFailure('Harus ada minimal satu admin aktif.');
     }
+  }
+
+  /// Data master hanya diubah di komputer server (lihat sinkron).
+  Future<void> _requireMaster() async {
+    final message = await TerminalRepository.masterLockMessage(_db);
+    if (message != null) throw AccountFailure(message);
   }
 
   void _requireAdmin(AppUser actor) {

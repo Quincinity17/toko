@@ -8,18 +8,20 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/charts.dart';
-import '../../../core/widgets/choice_chips.dart';
 import '../../../core/widgets/inset_grouped_list.dart';
 import '../../../core/widgets/large_title_page.dart';
 import '../../../core/widgets/stat_card.dart';
 import '../../../core/widgets/state_views.dart';
+import '../../auth/presentation/auth_controller.dart';
 import '../../products/data/product_repository.dart';
 import '../../products/domain/product.dart';
 import '../../reports/data/report_repository.dart';
 import '../../reports/domain/report_models.dart';
-import '../../stores/data/store_repository.dart';
 import '../../stores/domain/store.dart';
 import '../../stores/presentation/store_scope.dart';
+import '../../stores/presentation/store_scope_chips.dart';
+import '../../stock/data/stock_repository.dart';
+import '../../stock/domain/stock_alert.dart';
 
 // Provider di-key dengan rentang tanggal, jadi otomatis berganti hari saat
 // halaman dibangun ulang setelah tengah malam.
@@ -79,11 +81,29 @@ class DashboardPage extends ConsumerWidget {
     final prev = ref.watch(_summaryProvider(today.previous)).value;
     final lowCount = ref.watch(_lowStockCountProvider).value ?? 0;
     final scope = ref.watch(storeScopeProvider);
-    final stores = (ref.watch(storesProvider).value ?? const <Store>[])
-        .where((s) => s.isActive)
-        .toList();
-    // Filter & ringkasan per toko hanya berarti bila ada > 1 toko aktif.
-    final multiStore = stores.length > 1;
+    // Satu toko: kartu & daftar memakai peringatan stok (minus, menipis,
+    // perlu dicek); semua toko: stok menipis gabungan.
+    final alerts = ref.watch(stockAlertsProvider(scope)).value;
+    final alertProducts = {for (final a in alerts ?? const []) a.row.productId};
+    final dangerCount = {
+      for (final a in alerts ?? const <StockAlert>[])
+        if (a.kind.level == StockAlertLevel.danger) a.row.productId,
+    }.length;
+    final checkCount = {
+      for (final a in alerts ?? const <StockAlert>[])
+        if (a.kind.level == StockAlertLevel.check) a.row.productId,
+    }.length;
+    final openStock = switch (ref.watch(authControllerProvider)) {
+      final u? when u.canAccess(AppRoutes.stok) => () => context.go(
+        '${AppRoutes.stok}?view=peringatan',
+      ),
+      _ => null,
+    };
+    final stores = activeStores(ref);
+    final user = ref.watch(authControllerProvider);
+    // Filter & ringkasan per toko hanya berarti bila ada > 1 toko aktif, dan
+    // hanya admin yang bisa berpindah toko (peran lain: tokonya sendiri).
+    final multiStore = stores.length > 1 && (user?.isAdmin ?? false);
 
     final cards = [
       StatCard(
@@ -115,14 +135,42 @@ class DashboardPage extends ConsumerWidget {
         color: c.accent,
         caption: 'Rata-rata belanja ${Fmt.rupiah(s?.averageBasket ?? 0)}',
       ),
-      StatCard(
-        label: 'Stok menipis',
-        value: Fmt.number(lowCount),
-        icon: CupertinoIcons.exclamationmark_triangle_fill,
-        color: lowCount > 0 ? c.warning : c.labelTertiary,
-        caption: lowCount > 0 ? 'Perlu dibeli ulang' : 'Semua stok aman',
-        onPressed: () => context.go(AppRoutes.produk),
-      ),
+      if (alerts != null)
+        StatCard(
+          label: 'Peringatan stok',
+          value: Fmt.number(alertProducts.length),
+          icon: CupertinoIcons.exclamationmark_triangle_fill,
+          color: dangerCount > 0
+              ? c.danger
+              : alertProducts.isNotEmpty
+              ? c.warning
+              : c.labelTertiary,
+          caption: alertProducts.isEmpty
+              ? 'Semua stok aman'
+              : [
+                  if (dangerCount > 0) '$dangerCount minus/habis',
+                  if (checkCount > 0) '$checkCount perlu dicek',
+                  if (dangerCount == 0 && checkCount == 0) 'Perlu dibeli',
+                ].join(' · '),
+          onPressed: openStock,
+        )
+      else
+        StatCard(
+          label: 'Stok menipis',
+          value: Fmt.number(lowCount),
+          icon: CupertinoIcons.exclamationmark_triangle_fill,
+          color: lowCount > 0 ? c.warning : c.labelTertiary,
+          caption: lowCount > 0 ? 'Perlu dibeli ulang' : 'Semua stok aman',
+          onPressed: switch (user) {
+            final u? when u.canAccess(AppRoutes.produk) => () => context.go(
+              AppRoutes.produk,
+            ),
+            final u? when u.canAccess(AppRoutes.stok) => () => context.go(
+              AppRoutes.stok,
+            ),
+            _ => null,
+          },
+        ),
     ];
 
     return LargeTitlePage(
@@ -131,27 +179,15 @@ class DashboardPage extends ConsumerWidget {
           '${Fmt.dateLong(now)} · '
           '${ref.watch(activeStoreProvider)?.name ?? 'Semua toko'}',
       actions: [
-        AppButton(
-          label: 'Lihat Laporan',
-          icon: CupertinoIcons.chart_bar_alt_fill,
-          variant: AppButtonVariant.gray,
-          onPressed: () => context.go(AppRoutes.laporan),
-        ),
+        if (user?.canAccess(AppRoutes.laporan) ?? false)
+          AppButton(
+            label: 'Lihat Laporan',
+            icon: CupertinoIcons.chart_bar_alt_fill,
+            variant: AppButtonVariant.gray,
+            onPressed: () => context.go(AppRoutes.laporan),
+          ),
       ],
-      bottom: multiStore
-          ? ChoiceChips<int?>(
-              values: [null, for (final st in stores) st.id],
-              selected: scope,
-              label: (id) => id == null
-                  ? 'Semua toko'
-                  : stores.firstWhere((st) => st.id == id).name,
-              icon: (id) => id == null
-                  ? CupertinoIcons.square_grid_2x2
-                  : CupertinoIcons.house_fill,
-              onSelected: (id) =>
-                  ref.read(storeScopeProvider.notifier).select(id),
-            )
-          : null,
+      bottom: multiStore ? StoreScopeChips(stores: stores) : null,
       slivers: [
         SliverToBoxAdapter(
           child: LayoutBuilder(
@@ -187,7 +223,9 @@ class DashboardPage extends ConsumerWidget {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final top = _TopToday(range: today);
-              const low = _LowStock();
+              final low = alerts == null
+                  ? const _LowStock()
+                  : _Alerts(alerts: alerts, onOpen: openStock);
               if (constraints.maxWidth < 820) {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -203,7 +241,7 @@ class DashboardPage extends ConsumerWidget {
                 children: [
                   Expanded(child: top),
                   const SizedBox(width: AppSpacing.xl),
-                  const Expanded(child: low),
+                  Expanded(child: low),
                 ],
               );
             },
@@ -344,6 +382,53 @@ class _TopToday extends ConsumerWidget {
   }
 }
 
+/// Peringatan stok teratas toko yang dipilih (lihat halaman Stok).
+class _Alerts extends StatelessWidget {
+  const _Alerts({required this.alerts, required this.onOpen});
+
+  final List<StockAlert> alerts;
+  final VoidCallback? onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final top = alerts.take(5).toList();
+    return InsetGroupedSection(
+      header: 'Peringatan stok',
+      footer: alerts.isEmpty
+          ? 'Tidak ada stok minus, menipis, atau yang perlu dicek.'
+          : alerts.length > top.length
+          ? '${alerts.length - top.length} peringatan lain di halaman Stok.'
+          : 'Ketuk untuk membuka halaman Stok.',
+      children: [
+        for (final a in top)
+          InsetGroupedTile(
+            leading: Icon(
+              a.kind.level == StockAlertLevel.check
+                  ? CupertinoIcons.question_circle_fill
+                  : CupertinoIcons.exclamationmark_triangle_fill,
+              size: 18,
+              color: switch (a.kind.level) {
+                StockAlertLevel.danger => c.danger,
+                StockAlertLevel.warning => c.warning,
+                StockAlertLevel.check => c.labelSecondary,
+              },
+            ),
+            title: a.row.name,
+            subtitle: [
+              ?a.row.storeName,
+              a.kind.label,
+              if (a.suggestedBuy case final buy?) 'beli ±${Fmt.number(buy)}',
+            ].join(' · '),
+            value: '${Fmt.number(a.row.stock)} ${a.row.unit ?? ''}'.trim(),
+            onPressed: onOpen,
+          ),
+        if (alerts.isEmpty) const InsetGroupedTile(title: '–'),
+      ],
+    );
+  }
+}
+
 class _LowStock extends ConsumerWidget {
   const _LowStock();
 
@@ -351,6 +436,7 @@ class _LowStock extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.colors;
     final list = ref.watch(_lowStockProvider).value ?? const [];
+    final user = ref.watch(authControllerProvider);
     return InsetGroupedSection(
       header: 'Stok menipis',
       footer: list.isEmpty
@@ -367,7 +453,15 @@ class _LowStock extends ConsumerWidget {
             title: p.name,
             subtitle: 'Minimum ${Fmt.number(p.minStock)}',
             value: '${Fmt.number(p.stock)} ${p.unitName ?? ''}'.trim(),
-            onPressed: () => context.go(AppRoutes.produk),
+            onPressed: switch (user) {
+              final u? when u.canAccess(AppRoutes.produk) => () => context.go(
+                AppRoutes.produk,
+              ),
+              final u? when u.canAccess(AppRoutes.stok) => () => context.go(
+                AppRoutes.stok,
+              ),
+              _ => null,
+            },
           ),
         if (list.isEmpty) const InsetGroupedTile(title: '–'),
       ],

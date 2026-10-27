@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../auth/domain/app_user.dart';
+import '../../auth/domain/permission.dart';
 import '../domain/cart.dart';
 import '../domain/held_cart.dart';
 
@@ -63,7 +64,8 @@ class HeldCartRepository {
         note: Value(trimmed.isEmpty ? null : trimmed),
         items: HeldItem.encodeCart(cart),
         itemCount: cart.lines.length,
-        total: cart.total,
+        // Voucher tidak ikut ditahan (dipasang lagi saat dilanjutkan).
+        total: cart.subtotal,
         createdAt: _clock(),
       ),
     );
@@ -90,17 +92,31 @@ class HeldCartRepository {
     final skipped = <String>[];
     for (final item in items) {
       final product = products[item.productId];
-      if (product == null || !product.isActive) {
-        skipped.add(item.name);
+      // Satuan lain yang sudah dihapus admin: barang dilewati juga.
+      final unit = product?.unitById(item.unitId);
+      if (product == null ||
+          !product.isActive ||
+          (item.unitId != null && unit == null)) {
+        skipped.add(
+          item.unitName == null ? item.name : '${item.name} (${item.unitName})',
+        );
       } else {
-        cart = cart.add(product, qty: item.qty);
+        cart = cart.add(product, qty: item.qty, unit: unit);
       }
     }
     await _db.heldCartsDao.deleteById(id);
     return ResumedCart(cart: cart, skipped: skipped);
   });
 
-  Future<void> delete(int id) => _db.heldCartsDao.deleteById(id);
+  /// Membuang transaksi tertahan (butuh hak "Hapus transaksi tertahan").
+  Future<void> delete(int id, {required AppUser actor}) async {
+    if (!actor.can(Permission.deleteHeldCart)) {
+      throw const HeldCartFailure(
+        'Anda tidak punya hak menghapus transaksi tertahan.',
+      );
+    }
+    await _db.heldCartsDao.deleteById(id);
+  }
 
   /// Menghapus transaksi tertahan dari hari-hari sebelumnya.
   Future<int> purgeExpired() => _db.heldCartsDao.deleteBefore(_startOfToday);

@@ -7,7 +7,9 @@ import '../tables/users.dart';
 
 part 'sales_dao.g.dart';
 
-@DriftAccessor(tables: [Sales, SaleItems, StockMovements, Products, Users])
+@DriftAccessor(
+  tables: [Sales, SaleItems, StockMovements, Products, Users, SalePayments],
+)
 class SalesDao extends DatabaseAccessor<AppDatabase> with _$SalesDaoMixin {
   SalesDao(super.attachedDatabase);
 
@@ -28,9 +30,20 @@ class SalesDao extends DatabaseAccessor<AppDatabase> with _$SalesDaoMixin {
     'WHERE r.return_of_id = sales.id)',
   );
 
-  /// Faktur dalam rentang [start, end), terbaru dulu, beserta nama kasir dan
-  /// nilai yang sudah diretur. [storeId] `null` = semua toko.
-  Stream<List<(SaleRow, String, int)>> watchSalesBetween(
+  /// Pembayaran terpisah: `nama␞nilai␞tunai(0/1)␞ref␞diterima` dipisah `␟`,
+  /// urut id.
+  late final _paymentList = CustomExpression<String>(
+    "(SELECT group_concat(x, char(31)) FROM (SELECT p.method_name || "
+    "char(30) || p.amount || char(30) || p.is_cash || char(30) || "
+    "COALESCE(p.ref, '') || char(30) || p.tendered AS x FROM sale_payments p "
+    'WHERE p.sale_id = sales.id ORDER BY p.id))',
+    watchedTables: [salePayments],
+  );
+
+  /// Faktur dalam rentang [start, end), terbaru dulu, beserta nama kasir,
+  /// nilai yang sudah diretur, dan pembayaran terpisahnya (lihat
+  /// [_paymentList]). [storeId] `null` = semua toko.
+  Stream<List<(SaleRow, String, int, String?)>> watchSalesBetween(
     DateTime start,
     DateTime end, {
     int? storeId,
@@ -45,16 +58,48 @@ class SalesDao extends DatabaseAccessor<AppDatabase> with _$SalesDaoMixin {
                     : sales.storeId.equals(storeId)),
           )
           ..orderBy([OrderingTerm.desc(sales.saleDate)])
-          ..addColumns([_returned]);
+          ..addColumns([_returned, _paymentList]);
     return query
         .map(
           (r) => (
             r.readTable(sales),
             r.readTable(users).fullName,
             r.read(_returned) ?? 0,
+            r.read(_paymentList),
           ),
         )
         .watch();
+  }
+
+  /// Faktur (semua tanggal) yang nomornya memuat [query], terbaru dulu.
+  /// Dipakai kasir untuk mencari faktur lama dari nomor di struk.
+  Future<List<(SaleRow, String, int, String?)>> searchSales(
+    String query, {
+    int? storeId,
+    int limit = 50,
+  }) {
+    final q = query.trim().toUpperCase().replaceAll(RegExp(r'[%_\\]'), '');
+    final found =
+        select(sales).join([innerJoin(users, users.id.equalsExp(sales.userId))])
+          ..where(
+            sales.invoiceNo.upper().like('%$q%') &
+                (storeId == null
+                    ? const Constant(true)
+                    : sales.storeId.equals(storeId)),
+          )
+          ..orderBy([OrderingTerm.desc(sales.saleDate)])
+          ..limit(limit)
+          ..addColumns([_returned, _paymentList]);
+    return found
+        .map(
+          (r) => (
+            r.readTable(sales),
+            r.readTable(users).fullName,
+            r.read(_returned) ?? 0,
+            r.read(_paymentList),
+          ),
+        )
+        .get();
   }
 
   /// Satu faktur beserta nama kasirnya.
@@ -85,6 +130,30 @@ class SalesDao extends DatabaseAccessor<AppDatabase> with _$SalesDaoMixin {
           (r.data['qty'] as num).toDouble(),
           (r.data['subtotal'] as num).toInt(),
         ),
+    };
+  }
+
+  /// Pembayaran terpisah faktur [saleId] (kosong = satu metode), urut
+  /// disimpan.
+  Future<List<SalePaymentRow>> paymentsOf(int saleId) =>
+      (select(salePayments)
+            ..where((p) => p.saleId.equals(saleId))
+            ..orderBy([(p) => OrderingTerm.asc(p.id)]))
+          .get();
+
+  /// Uang yang sudah dikembalikan nota retur faktur split [saleId] per
+  /// metode (positif): `id metode → nilai`.
+  Future<Map<int?, int>> refundedByMethod(int saleId) async {
+    final rows = await customSelect(
+      'SELECT p.payment_method_id AS method, -SUM(p.amount) AS amount '
+      'FROM sale_payments p JOIN sales s ON s.id = p.sale_id '
+      'WHERE s.return_of_id = ? GROUP BY p.payment_method_id',
+      variables: [Variable.withInt(saleId)],
+      readsFrom: {sales, salePayments},
+    ).get();
+    return {
+      for (final r in rows)
+        r.read<int?>('method'): (r.data['amount'] as num).toInt(),
     };
   }
 

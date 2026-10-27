@@ -16,6 +16,14 @@ class Tags extends Table {
 
   /// Warna `TagColor`: nama preset (blue, pink, …) atau hex (`#FF8800`).
   TextColumn get color => text().withDefault(const Constant('blue'))();
+
+  /// v17: awalan barcode otomatis barang di kategori ini (mis. BNK →
+  /// BNK0001). `null` = mengikuti barcode barang di kategori itu.
+  TextColumn get codePrefix => text().nullable()();
+
+  /// v19: jumlah digit nomor barcode otomatis kategori ini (mis. 4 →
+  /// BNK0001); `null` = mengikuti seri yang sudah ada.
+  IntColumn get codeDigits => integer().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
 

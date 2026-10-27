@@ -104,7 +104,7 @@ class SalesSummary {
   /// Omzet bersih (setelah potongan) = uang yang diterima.
   final int revenue;
 
-  /// Sebelum potongan (potongan hanya ada di faktur lama).
+  /// Sebelum potongan voucher.
   final int grossSales;
   final int discount;
 
@@ -354,6 +354,7 @@ class ReportBundle {
     required this.cashiers,
     required this.terminals,
     this.stores = const [],
+    this.vouchers = const [],
   });
 
   final ReportRange range;
@@ -372,6 +373,9 @@ class ReportBundle {
 
   /// Per toko; hanya berarti saat melihat semua toko.
   final List<GroupPerformance> stores;
+
+  /// Per kode voucher ([GroupPerformance.discount] = total potongan).
+  final List<GroupPerformance> vouchers;
 
   /// Jam dengan omzet terbesar, atau `null` jika belum ada penjualan.
   BucketPoint? get busiestHour => _max(byHour);

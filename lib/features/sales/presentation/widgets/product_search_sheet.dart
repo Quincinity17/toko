@@ -265,6 +265,20 @@ class _ResultTile extends StatelessWidget {
                       color: c.labelSecondary,
                     ),
                   ),
+                  // Satuan lain & harga grosir (isi keranjang bisa diganti
+                  // satuannya lewat kolom Satuan).
+                  if (p.units.isNotEmpty || p.tiers.isNotEmpty)
+                    Text(
+                      [
+                        for (final u in p.units)
+                          '${u.name} isi ${Fmt.number(u.factor)} '
+                              '${Fmt.rupiah(u.price)}',
+                        for (final t in p.tiers)
+                          'grosir ≥${Fmt.number(t.minQty)} '
+                              '${Fmt.rupiah(t.price)}',
+                      ].join(' · '),
+                      style: AppTypography.footnote.copyWith(color: c.accent),
+                    ),
                 ],
               ),
             ),

@@ -2,6 +2,10 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import 'package:go_router/go_router.dart';
+
+import '../../labels/presentation/label_queue.dart';
+import '../../../core/router/routes.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/number_input.dart';
@@ -74,7 +78,9 @@ class _AdjustFormState extends ConsumerState<_AdjustForm> {
     _qtyFocus.requestFocus();
   }
 
-  Future<void> _save() async {
+  /// [labels]: setelah barang masuk tersimpan, barang ditambahkan ke
+  /// daftar Cetak Label sebanyak jumlah yang masuk, lalu halamannya dibuka.
+  Future<void> _save({bool labels = false}) async {
     final qty = _qtyValue;
     if (_saving) return;
     if (qty == null) {
@@ -96,7 +102,15 @@ class _AdjustFormState extends ConsumerState<_AdjustForm> {
             qty: qty,
             note: _note.text,
           );
-      if (mounted) Navigator.pop(context);
+      if (!mounted) return;
+      final router = GoRouter.of(context);
+      Navigator.pop(context);
+      if (labels) {
+        ref
+            .read(labelQueueProvider.notifier)
+            .addProduct(widget.product, copies: qty.ceil());
+        router.go(AppRoutes.cetakLabel);
+      }
     } on StockFailure catch (e) {
       if (mounted) setState(() => _error = e.message);
     } finally {
@@ -114,6 +128,10 @@ class _AdjustFormState extends ConsumerState<_AdjustForm> {
     final history = ref.watch(
       stockHistoryProvider((widget.storeId, widget.product.id)),
     );
+    // Tanpa hak "Ubah stok": hanya stok sekarang + riwayat.
+    final canAdjust =
+        ref.watch(authControllerProvider)?.canAdjustStockAt(widget.storeId) ??
+        false;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(
@@ -149,66 +167,93 @@ class _AdjustFormState extends ConsumerState<_AdjustForm> {
               ],
             ),
           ),
-          const SizedBox(height: AppSpacing.md),
-          CupertinoSlidingSegmentedControl<StockAdjustMode>(
-            groupValue: _mode,
-            padding: const EdgeInsets.all(3),
-            onValueChanged: (m) {
-              if (m != null) _setMode(m);
-            },
-            children: {
-              for (final m in StockAdjustMode.values)
-                m: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: Text(m.label, style: AppTypography.subheadline),
-                ),
-            },
-          ),
-          const SizedBox(height: AppSpacing.md),
-          AppTextField(
-            controller: _qty,
-            focusNode: _qtyFocus,
-            autofocus: true,
-            label: unit.isEmpty ? _mode.qtyLabel : '${_mode.qtyLabel} ($unit)',
-            placeholder: '0',
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            onChanged: (_) => setState(() => _error = null),
-            onSubmitted: (_) => _save(),
-          ),
-          if (after != null) ...[
-            const SizedBox(height: AppSpacing.xs),
+          if (!canAdjust) ...[
+            const SizedBox(height: AppSpacing.sm),
             Text(
-              'Stok menjadi ${Fmt.number(after)} $unit'.trim(),
-              style: AppTypography.footnote.copyWith(
-                color: after < 0 ? c.warning : c.labelSecondary,
-                fontFeatures: tabular,
-              ),
+              'Anda hanya bisa melihat stok. Mengubah stok perlu hak akses '
+              '"Ubah stok" dari admin.',
+              style: AppTypography.footnote.copyWith(color: c.labelSecondary),
             ),
-          ],
-          const SizedBox(height: AppSpacing.md),
-          AppTextField(
-            controller: _note,
-            label: 'Catatan (opsional)',
-            placeholder: switch (_mode) {
-              StockAdjustMode.receive => 'mis. kiriman supplier',
-              StockAdjustMode.remove => 'mis. rusak, kedaluwarsa',
-              StockAdjustMode.count => 'mis. opname akhir bulan',
-            },
-            onSubmitted: (_) => _save(),
-          ),
-          if (_error != null) ...[
+          ] else ...[
             const SizedBox(height: AppSpacing.md),
-            ErrorBanner(message: _error!),
+            CupertinoSlidingSegmentedControl<StockAdjustMode>(
+              groupValue: _mode,
+              padding: const EdgeInsets.all(3),
+              onValueChanged: (m) {
+                if (m != null) _setMode(m);
+              },
+              children: {
+                for (final m in StockAdjustMode.values)
+                  m: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Text(m.label, style: AppTypography.subheadline),
+                  ),
+              },
+            ),
+            const SizedBox(height: AppSpacing.md),
+            AppTextField(
+              controller: _qty,
+              focusNode: _qtyFocus,
+              autofocus: true,
+              label: unit.isEmpty
+                  ? _mode.qtyLabel
+                  : '${_mode.qtyLabel} ($unit)',
+              placeholder: '0',
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              onChanged: (_) => setState(() => _error = null),
+              onSubmitted: (_) => _save(),
+            ),
+            if (after != null) ...[
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                'Stok menjadi ${Fmt.number(after)} $unit'.trim(),
+                style: AppTypography.footnote.copyWith(
+                  color: after < 0 ? c.warning : c.labelSecondary,
+                  fontFeatures: tabular,
+                ),
+              ),
+            ],
+            const SizedBox(height: AppSpacing.md),
+            AppTextField(
+              controller: _note,
+              label: 'Catatan (opsional)',
+              placeholder: switch (_mode) {
+                StockAdjustMode.receive => 'mis. kiriman supplier',
+                StockAdjustMode.remove => 'mis. rusak, kedaluwarsa',
+                StockAdjustMode.count => 'mis. opname akhir bulan',
+              },
+              onSubmitted: (_) => _save(),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: AppSpacing.md),
+              ErrorBanner(message: _error!),
+            ],
+            const SizedBox(height: AppSpacing.lg),
+            AppButton(
+              label: 'Simpan',
+              icon: CupertinoIcons.checkmark_alt,
+              size: AppButtonSize.large,
+              expand: true,
+              loading: _saving,
+              onPressed: _save,
+            ),
+            if (_mode == StockAdjustMode.receive &&
+                (ref
+                        .watch(authControllerProvider)
+                        ?.canAccess(AppRoutes.cetakLabel) ??
+                    false)) ...[
+              const SizedBox(height: AppSpacing.xs),
+              AppButton(
+                label: 'Simpan & Cetak Label',
+                icon: CupertinoIcons.tag,
+                variant: AppButtonVariant.plain,
+                expand: true,
+                onPressed: _saving ? null : () => _save(labels: true),
+              ),
+            ],
           ],
-          const SizedBox(height: AppSpacing.lg),
-          AppButton(
-            label: 'Simpan',
-            icon: CupertinoIcons.checkmark_alt,
-            size: AppButtonSize.large,
-            expand: true,
-            loading: _saving,
-            onPressed: _save,
-          ),
           const SizedBox(height: AppSpacing.xl),
           Text(
             'RIWAYAT STOK',

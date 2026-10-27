@@ -117,6 +117,14 @@ class _ReceiptSettingsPageState extends ConsumerState<ReceiptSettingsPage> {
     _refreshPreview();
   }
 
+  /// Menulis bagian retur / bayar terpisah yang belum ada ke template
+  /// supaya admin bisa mengatur letak & gayanya sendiri.
+  void _addMissingSections() {
+    final full = ReceiptSections.withFallbacks(_editor.text);
+    _editor.text = full;
+    _onEditorChanged(full);
+  }
+
   // ── Simpan ──
 
   /// Simpan ketikan yang masih menunggu jeda (mis. sebelum pindah toko).
@@ -510,6 +518,38 @@ class _ReceiptSettingsPageState extends ConsumerState<ReceiptSettingsPage> {
                   if (_templateError != null) ...[
                     const SizedBox(height: AppSpacing.sm),
                     ErrorBanner(message: _templateError!),
+                  ],
+                  if (ReceiptSections.missing(_editor.text) case final missing
+                      when missing.isNotEmpty) ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    Container(
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      decoration: BoxDecoration(
+                        color: c.warning.withValues(alpha: 0.12),
+                        borderRadius: AppRadius.mdAll,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Template ini belum punya bagian '
+                            '${missing.join(' dan ')}. Saat dicetak, bagian '
+                            'itu ditambahkan otomatis (judul NOTA RETUR di '
+                            'atas, rincian bayar terpisah di bawah).',
+                            style: AppTypography.footnote.copyWith(
+                              color: c.label,
+                            ),
+                          ),
+                          AppButton(
+                            label: 'Tambahkan ke Template',
+                            icon: CupertinoIcons.plus_circle,
+                            variant: AppButtonVariant.plain,
+                            size: AppButtonSize.small,
+                            onPressed: _addMissingSections,
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                   const SizedBox(height: AppSpacing.sm),
                   Wrap(

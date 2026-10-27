@@ -31,7 +31,10 @@ void main() {
     minStock: 24,
     tagNames: ['sarapan', 'Laris'],
   );
-  const stores = {1: (stock: 120.0, price: null), 2: (stock: 5.0, price: 4000)};
+  const stores = {
+    1: StoreProductSaved(stock: 120),
+    2: StoreProductSaved(stock: 5, price: 4000),
+  };
 
   List<FieldChange> diff(
     ProductDraft after, [

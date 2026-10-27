@@ -21,6 +21,7 @@ import 'package:toko/features/sales/data/checkout_service.dart';
 import 'package:toko/features/sales/data/sales_repository.dart';
 import 'package:toko/features/sales/domain/cart.dart';
 import 'package:toko/features/sync/data/terminal_repository.dart';
+import 'package:toko/features/vouchers/data/voucher_repository.dart';
 
 import '../../helpers/test_app.dart';
 
@@ -748,6 +749,52 @@ void main() {
       final audit = await db.select(db.auditLog).get();
       expect(audit.single.type, AuditType.sealsRebuilt);
       expect((await IntegrityService(db).check()).issues, isEmpty);
+    });
+
+    test('v12 → v13: voucher lama tetap ada & berlaku di semua toko', () async {
+      final schema = File('test/fixtures/schema_v12.sql').readAsStringSync();
+      final db = AppDatabase(
+        NativeDatabase.memory(
+          setup: (Database raw) {
+            for (final stmt in schema.split(';\n')) {
+              if (stmt.trim().isNotEmpty) raw.execute(stmt);
+            }
+            raw.execute(
+              "INSERT INTO stores (name, uuid) VALUES ('Toko Utama', 's-1')",
+            );
+            raw.execute(
+              "INSERT INTO vouchers (code, type, value, uuid) "
+              "VALUES ('LAMA', 'amount', 1000, 'v-1')",
+            );
+            raw.userVersion = 12;
+          },
+        ),
+      );
+      addTearDown(db.close);
+      final cols = await db.customSelect('PRAGMA table_info(vouchers)').get();
+      expect(cols.map((r) => r.read<String>('name')), contains('store_id'));
+      final v = await VoucherRepository(db).findUsable('lama', storeId: 1);
+      expect(v.storeId, isNull);
+    });
+
+    test('v14 → v15: kolom faktur tukar barang ditambahkan', () async {
+      final schema = File('test/fixtures/schema_v14.sql').readAsStringSync();
+      final db = AppDatabase(
+        NativeDatabase.memory(
+          setup: (Database raw) {
+            for (final stmt in schema.split(';\n')) {
+              if (stmt.trim().isNotEmpty) raw.execute(stmt);
+            }
+            raw.userVersion = 14;
+          },
+        ),
+      );
+      addTearDown(db.close);
+      final cols = await db.customSelect('PRAGMA table_info(sales)').get();
+      expect(
+        cols.map((r) => r.read<String>('name')),
+        contains('exchange_of_id'),
+      );
     });
 
     Future<AppDatabase> fromV8({required bool withTag}) async {

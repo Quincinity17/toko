@@ -1,13 +1,13 @@
 import 'package:drift/drift.dart';
 
 import '../uuid.dart';
+import 'stores.dart';
 
 /// Jenis voucher. Disimpan sebagai nama enum.
 enum VoucherType { percent, amount }
 
-/// Voucher potongan. **Fitur voucher sudah dihapus dari aplikasi** (keputusan
-/// user, Okt 2026); tabel ini dibiarkan agar skema database tidak berubah dan
-/// fitur bisa dihidupkan lagi. Tidak ada kode yang membaca/menulis tabel ini.
+/// Voucher promo yang dipakai kasir lewat kode (lihat `features/vouchers`).
+/// Sempat dihapus lalu dihidupkan lagi (permintaan user, Okt 2026).
 @DataClassName('VoucherRow')
 @TableIndex(name: 'idx_vouchers_uuid', columns: {#uuid}, unique: true)
 class Vouchers extends Table {
@@ -37,6 +37,9 @@ class Vouchers extends Table {
   // Catatan: kolom `quota` dan `used_count` (v3) dihapus di v4 atas
   // permintaan user (voucher cukup aktif/nonaktif). Pada database lama
   // kolomnya masih ada tetapi tidak dipakai.
+  /// v13: hanya berlaku di toko ini; `null` = semua toko.
+  IntColumn get storeId => integer().nullable().references(Stores, #id)();
+
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }

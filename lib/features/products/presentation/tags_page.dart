@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -14,6 +17,7 @@ import '../../../core/widgets/pressable_scale.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../data/tag_repository.dart';
+import '../domain/code_prefix.dart';
 import '../domain/tag.dart';
 import 'tag_chip.dart';
 
@@ -71,7 +75,9 @@ class TagsPage extends ConsumerWidget {
                                 color: t.color.color,
                               ),
                               title: t.name,
-                              subtitle: t.color.label,
+                              subtitle: t.codePrefix == null
+                                  ? t.color.label
+                                  : '${t.color.label} · barcode ${t.codePrefix}…',
                               value: '${t.productCount} barang',
                               onPressed: () =>
                                   showTagForm(context, existing: t),
@@ -107,24 +113,67 @@ class _TagForm extends ConsumerStatefulWidget {
 
 class _TagFormState extends ConsumerState<_TagForm> {
   late final _name = TextEditingController(text: widget.existing?.name);
+  late final _prefix = TextEditingController(text: widget.existing?.codePrefix);
+  late final _digits = TextEditingController(
+    text: widget.existing?.codeDigits?.toString(),
+  );
   late TagColor _color = widget.existing?.color ?? TagColor.blue;
   String? _nameError;
+  String? _prefixError;
+
+  /// Saran awalan barcode dari nama kategori (dihitung ulang setelah jeda).
+  List<String> _suggestions = const [];
+  Timer? _suggestTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSuggestions();
+  }
+
+  void _onNameChanged(String _) {
+    setState(() {});
+    _suggestTimer?.cancel();
+    _suggestTimer = Timer(const Duration(milliseconds: 300), _loadSuggestions);
+  }
+
+  Future<void> _loadSuggestions() async {
+    final name = _name.text.trim();
+    final list = name.isEmpty
+        ? const <String>[]
+        : await ref
+              .read(tagRepositoryProvider)
+              .suggestPrefixes(name, tagId: widget.existing?.id);
+    if (mounted) setState(() => _suggestions = list);
+  }
+
   String? _error;
   bool _saving = false;
 
   @override
   void dispose() {
+    _suggestTimer?.cancel();
     _name.dispose();
+    _prefix.dispose();
+    _digits.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
     final error = TagRules.name(_name.text);
+    final digits = int.tryParse(_digits.text.trim());
+    final prefixError =
+        CodePrefix.validate(_prefix.text) ??
+        (_digits.text.trim().isNotEmpty &&
+                (digits == null || digits < 2 || digits > 10)
+            ? 'Jumlah digit 2–10.'
+            : null);
     setState(() {
       _nameError = error;
+      _prefixError = prefixError;
       _error = null;
     });
-    if (error != null) return;
+    if (error != null || prefixError != null) return;
     setState(() => _saving = true);
     try {
       await ref
@@ -134,6 +183,8 @@ class _TagFormState extends ConsumerState<_TagForm> {
             id: widget.existing?.id,
             name: _name.text,
             color: _color,
+            codePrefix: _prefix.text,
+            codeDigits: digits,
           );
       if (mounted) Navigator.pop(context);
     } on TagFailure catch (e) {
@@ -202,9 +253,86 @@ class _TagFormState extends ConsumerState<_TagForm> {
             placeholder: 'mis. Mainan, Boneka, Alat Tulis',
             autofocus: widget.existing == null,
             errorText: _nameError,
-            onChanged: (_) => setState(() {}),
+            onChanged: _onNameChanged,
             onSubmitted: (_) => _save(),
           ),
+          const SizedBox(height: AppSpacing.md),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 3,
+                child: AppTextField(
+                  controller: _prefix,
+                  label: 'Awalan barcode otomatis (opsional)',
+                  placeholder: 'mis. BNK',
+                  prefixIcon: CupertinoIcons.barcode,
+                  errorText: _prefixError,
+                  helper: switch (CodePrefix.normalize(_prefix.text)) {
+                    final p? when CodePrefix.validate(p) == null =>
+                      'Barcode otomatis barang baru di kategori ini diawali $p '
+                          '(nomor terlewat diisi dulu).',
+                    _ =>
+                      'Kosong = mengikuti barcode barang yang sudah ada di '
+                          'kategori ini.',
+                  },
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp('[A-Za-z0-9-]')),
+                    LengthLimitingTextInputFormatter(CodePrefix.maxLength),
+                  ],
+                  onChanged: (_) => setState(() => _prefixError = null),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                flex: 2,
+                child: AppTextField(
+                  controller: _digits,
+                  label: 'Jumlah digit',
+                  placeholder: 'mis. 4',
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(2),
+                  ],
+                  helper: switch ((
+                    CodePrefix.normalize(_prefix.text),
+                    int.tryParse(_digits.text),
+                  )) {
+                    (final p?, final d?) when d >= 2 && d <= 10 =>
+                      'Contoh: $p${'1'.padLeft(d, '0')}',
+                    _ => 'Kosong = ikut seri yang ada.',
+                  },
+                  onChanged: (_) => setState(() => _prefixError = null),
+                ),
+              ),
+            ],
+          ),
+          if (_suggestions.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Wrap(
+              spacing: AppSpacing.xs,
+              runSpacing: AppSpacing.xs,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(
+                  'Saran:',
+                  style: AppTypography.footnote.copyWith(
+                    color: c.labelSecondary,
+                  ),
+                ),
+                for (final p in _suggestions)
+                  _PrefixChip(
+                    label: p,
+                    selected: CodePrefix.normalize(_prefix.text) == p,
+                    onTap: () => setState(() {
+                      _prefix.text = p;
+                      _prefixError = null;
+                    }),
+                  ),
+              ],
+            ),
+          ],
           const SizedBox(height: AppSpacing.lg),
           Text(
             'Warna',
@@ -346,6 +474,43 @@ class _CustomColorSwatch extends StatelessWidget {
                 : CupertinoIcons.eyedropper,
             size: 14,
             color: sel?.onColor ?? c.labelSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Kapsul saran awalan barcode.
+class _PrefixChip extends StatelessWidget {
+  const _PrefixChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return PressableScale(
+      onPressed: onTap,
+      pressedScale: 0.94,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? c.accent : c.fill,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Text(
+          label,
+          style: AppTypography.subheadline.copyWith(
+            color: selected ? const Color(0xFFFFFFFF) : c.label,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ),

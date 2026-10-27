@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:toko/core/database/app_database.dart';
 import 'package:toko/core/database/seed.dart';
 import 'package:toko/features/auth/data/auth_repository.dart';
+import 'package:toko/features/auth/domain/app_user.dart';
+import 'package:toko/features/auth/domain/permission.dart';
 import 'package:toko/features/auth/domain/user_role.dart';
 
 import '../../helpers/test_app.dart';
@@ -76,13 +78,31 @@ void main() {
   });
 
   test('hak akses: kasir hanya halaman Kasir', () {
-    expect(UserRole.kasir.canAccess('/kasir'), isTrue);
-    expect(UserRole.kasir.canAccess('/dashboard'), isFalse);
-    expect(UserRole.kasir.canAccess('/produk'), isFalse);
-    expect(UserRole.kasir.canAccess('/pengaturan'), isTrue); // ringkas
-    expect(UserRole.kasir.canAccess('/pengaturan/akun'), isFalse);
-    expect(UserRole.supervisor.canAccess('/pengaturan'), isTrue);
-    expect(UserRole.supervisor.canAccess('/pengaturan/struk'), isFalse);
-    expect(UserRole.admin.canAccess('/pengaturan'), isTrue);
+    expect(_withDefaults(UserRole.kasir).canAccess('/kasir'), isTrue);
+    expect(_withDefaults(UserRole.kasir).canAccess('/dashboard'), isFalse);
+    expect(_withDefaults(UserRole.kasir).canAccess('/produk'), isFalse);
+    expect(
+      _withDefaults(UserRole.kasir).canAccess('/pengaturan'),
+      isTrue,
+    ); // ringkas
+    expect(
+      _withDefaults(UserRole.kasir).canAccess('/pengaturan/akun'),
+      isFalse,
+    );
+    expect(_withDefaults(UserRole.supervisor).canAccess('/pengaturan'), isTrue);
+    expect(
+      _withDefaults(UserRole.supervisor).canAccess('/pengaturan/struk'),
+      isFalse,
+    );
+    expect(_withDefaults(UserRole.admin).canAccess('/pengaturan'), isTrue);
   });
 }
+
+/// User dengan hak akses bawaan perannya (= perilaku sebelum bisa diatur).
+AppUser _withDefaults(UserRole role) => AppUser(
+  id: 1,
+  username: 'u',
+  fullName: 'U',
+  role: role,
+  permissions: PermissionRules.defaults(role),
+);

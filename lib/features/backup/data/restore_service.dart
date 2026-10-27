@@ -263,6 +263,21 @@ class RestoreService {
       ];
       if (!sealer.verify(sp['seal'] as String?, f)) return BackupSeals.tampered;
     }
+    // Hak akses peran (v14; backup lama belum punya tabelnya).
+    final hasPermissions = db
+        .select(
+          "SELECT 1 FROM sqlite_master WHERE type = 'table' "
+          "AND name = 'role_permissions'",
+        )
+        .isNotEmpty;
+    if (hasPermissions) {
+      for (final r in db.select('SELECT * FROM role_permissions')) {
+        final f = [r['role'], r['permission']];
+        if (!sealer.verify(r['seal'] as String?, f)) {
+          return BackupSeals.tampered;
+        }
+      }
+    }
     return BackupSeals.intact;
   }
 

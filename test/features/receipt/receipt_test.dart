@@ -140,6 +140,32 @@ void main() {
       expect(html, contains('INV-K01-20261002-0001'));
       expect(html, contains('base64,AAAA'));
       expect(html, isNot(contains('{{')));
+      expect(html, isNot(contains('Voucher')));
+    });
+
+    test('template bawaan: baris voucher dengan kodenya', () {
+      final base = ReceiptData.sample();
+      final withVoucher = ReceiptData(
+        storeName: base.storeName,
+        invoiceNo: base.invoiceNo,
+        date: base.date,
+        cashierName: base.cashierName,
+        items: base.items,
+        subtotal: 51000,
+        discount: 5000,
+        voucherCode: 'HEMAT10',
+        total: 46000,
+        paid: 50000,
+        change: 4000,
+        paymentMethod: 'Tunai',
+      );
+      final html = ReceiptHtml.render(
+        defaultReceiptHtml,
+        withVoucher.toTemplateValues(),
+      );
+      expect(html, contains('Voucher HEMAT10'));
+      expect(html, contains('-5.000'));
+      expect(html, contains('46.000'));
     });
   });
 

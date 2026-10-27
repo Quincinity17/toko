@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import 'product_pricing.dart';
 import 'tag.dart';
 
 /// Barang beserta satuan dan kategorinya (hasil join).
@@ -19,6 +20,8 @@ class Product {
     required this.minStock,
     this.isActive = true,
     this.tags = const [],
+    this.units = const [],
+    this.tiers = const [],
   }) : defaultSellingPrice = defaultSellingPrice ?? sellingPrice;
 
   final int id;
@@ -49,6 +52,20 @@ class Product {
   /// dan database disebut "tag"; di layar disebut "Kategori".
   final List<Tag> tags;
 
+  /// Satuan lain (multi-satuan), urut isi terkecil.
+  final List<ProductUnit> units;
+
+  /// Harga grosir satuan dasar, urut jumlah minimal terkecil.
+  final List<PriceTier> tiers;
+
+  ProductUnit? unitById(int? id) {
+    if (id == null) return null;
+    for (final u in units) {
+      if (u.id == id) return u;
+    }
+    return null;
+  }
+
   bool get isLowStock => stock <= minStock;
 
   /// Toko ini memakai harga khusus (berbeda dari harga default).
@@ -78,6 +95,8 @@ class ProductDraft {
     this.minStock = 0,
     this.isActive = true,
     this.tagNames,
+    this.units,
+    this.tiers,
   });
 
   final String code;
@@ -94,6 +113,12 @@ class ProductDraft {
   /// Nama kategori (yang belum ada dibuat otomatis). `null` = kategori tidak
   /// diubah (mis. kolom Kategori tidak ada di file import).
   final List<String>? tagNames;
+
+  /// Satuan lain (diganti semua); `null` = tidak diubah.
+  final List<ProductUnit>? units;
+
+  /// Harga grosir (diganti semua); `null` = tidak diubah.
+  final List<PriceTier>? tiers;
 }
 
 /// Stok dan harga khusus satu toko, diisi di form barang admin.
@@ -103,6 +128,8 @@ class StoreProductValues {
     required this.storeId,
     required this.stock,
     this.price,
+    this.unitPrices,
+    this.tiers,
   });
 
   final int storeId;
@@ -110,6 +137,36 @@ class StoreProductValues {
 
   /// `null` = memakai harga default barang.
   final int? price;
+
+  /// Harga khusus toko per satuan lain (nama satuan huruf besar → harga;
+  /// `null` = harga satuan itu). `null` = tidak diubah.
+  final Map<String, int?>? unitPrices;
+
+  /// Grosir khusus toko ini; kosong = ikut grosir semua toko. `null` =
+  /// tidak diubah.
+  final List<PriceTier>? tiers;
+}
+
+/// Stok & harga tersimpan satu toko (form barang, konfirmasi perubahan).
+@immutable
+class StoreProductSaved {
+  const StoreProductSaved({
+    this.stock = 0,
+    this.price,
+    this.unitPrices = const {},
+    this.tiers = const [],
+  });
+
+  final double stock;
+
+  /// Harga khusus toko; `null` = harga default.
+  final int? price;
+
+  /// Nama satuan lain (huruf besar) → harga khusus toko.
+  final Map<String, int> unitPrices;
+
+  /// Grosir khusus toko (kosong = ikut grosir semua toko).
+  final List<PriceTier> tiers;
 }
 
 /// Validasi isian barang. Setiap fungsi mengembalikan pesan error atau `null`.

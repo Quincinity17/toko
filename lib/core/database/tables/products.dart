@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../uuid.dart';
+import 'stores.dart';
 
 @DataClassName('CategoryRow')
 @TableIndex(name: 'idx_categories_uuid', columns: {#uuid}, unique: true)
@@ -60,4 +61,83 @@ class Products extends Table {
 
   /// v12: segel (`Sealer`) atas id, kode, harga beli, harga jual, aktif.
   TextColumn get seal => text().nullable()();
+}
+
+/// v16: satuan lain sebuah barang (mis. DUS = 24 PCS). Stok tetap disimpan
+/// dalam satuan dasar barang; menjual 1 DUS mengurangi stok 24. Harga satuan
+/// ini berlaku di semua toko.
+@DataClassName('ProductUnitRow')
+@TableIndex(name: 'idx_product_units_uuid', columns: {#uuid}, unique: true)
+@TableIndex(name: 'idx_product_units_product', columns: {#productId})
+class ProductUnits extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get uuid => text().nullable().clientDefault(newUuid)();
+  IntColumn get productId =>
+      integer().references(Products, #id, onDelete: KeyAction.cascade)();
+
+  /// Nama satuan, huruf besar (DUS, PAK, LUSIN).
+  TextColumn get name => text().withLength(min: 1, max: 20)();
+
+  /// Isi satu satuan ini dalam satuan dasar (> 0, bukan 1).
+  RealColumn get factor => real()();
+
+  /// Barcode kemasan (opsional, unik di antara semua barcode barang).
+  TextColumn get barcode =>
+      text().withLength(min: 1, max: 40).nullable().unique()();
+  IntColumn get sellingPrice => integer()();
+
+  /// Segel (`Sealer`) atas id, barang, isi, harga.
+  TextColumn get seal => text().nullable()();
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+    {productId, name},
+  ];
+}
+
+/// v16: harga grosir/bertingkat satuan dasar barang: beli minimal [minQty]
+/// → harga [price] per satuan. v19: [storeId] `null` = berlaku di semua
+/// toko; toko yang punya baris sendiri memakai barisnya sendiri saja.
+@DataClassName('PriceTierRow')
+@TableIndex(name: 'idx_price_tiers_uuid', columns: {#uuid}, unique: true)
+@TableIndex(name: 'idx_price_tiers_product', columns: {#productId})
+class PriceTiers extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get uuid => text().nullable().clientDefault(newUuid)();
+  IntColumn get productId =>
+      integer().references(Products, #id, onDelete: KeyAction.cascade)();
+  RealColumn get minQty => real()();
+  IntColumn get price => integer()();
+
+  /// v19: grosir khusus toko ini; `null` = semua toko.
+  IntColumn get storeId => integer().nullable().references(Stores, #id)();
+
+  /// Segel (`Sealer`) atas id, barang, jumlah minimal, harga, toko.
+  TextColumn get seal => text().nullable()();
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+    {productId, storeId, minQty},
+  ];
+}
+
+/// v19: harga satuan lain (mis. DUS) khusus satu toko; tanpa baris =
+/// harga satuan itu ([ProductUnits.sellingPrice]).
+@DataClassName('StoreUnitPriceRow')
+@TableIndex(name: 'idx_store_unit_prices_uuid', columns: {#uuid}, unique: true)
+class StoreUnitPrices extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get uuid => text().nullable().clientDefault(newUuid)();
+  IntColumn get storeId => integer().references(Stores, #id)();
+  IntColumn get productUnitId =>
+      integer().references(ProductUnits, #id, onDelete: KeyAction.cascade)();
+  IntColumn get sellingPrice => integer()();
+
+  /// Segel (`Sealer`) atas toko, satuan, harga.
+  TextColumn get seal => text().nullable()();
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+    {storeId, productUnitId},
+  ];
 }

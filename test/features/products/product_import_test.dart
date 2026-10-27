@@ -230,6 +230,53 @@ void main() {
         'BRG500,Kecap Bango,Bumbu,BTL,9000,11000,12\n'
         'BRG501,Saus ABC,Bumbu,BTL,7000,,3\n';
 
+    test('satuan lain & harga grosir: import, export, import ulang', () async {
+      final rows = await rowsOf(
+        'Kode,Nama,Satuan,Harga Jual,Satuan Lain,Harga Grosir\n'
+        'BRG600,Teh Kotak,PCS,5000,"DUS:24:110.000:TK-DUS; PAK:6:29000",'
+        '12:4700\n'
+        'BRG601,Salah,PCS,5000,DUS-24,\n'
+        'BRG602,Grosir Mahal,PCS,5000,,10:5000\n',
+      );
+      expect(rows[0].isValid, isTrue);
+      expect(rows[1].errors.single, contains('NAMA:ISI:HARGA'));
+      expect(rows[2].errors.single, contains('lebih murah'));
+      await service.run(
+        actor: admin,
+        rows: rows,
+        existingAction: ExistingProductAction.overwrite,
+      );
+      final repo = ProductRepository(db);
+      final p = (await repo.findByCodeOrBarcode('BRG600'))!;
+      expect(p.units.map((u) => (u.name, u.factor, u.price, u.barcode)), [
+        ('PAK', 6.0, 29000, null),
+        ('DUS', 24.0, 110000, 'TK-DUS'),
+      ]);
+      expect(p.tiers.single.price, 4700);
+      expect((await repo.scan('TK-DUS'))!.unit?.name, 'DUS');
+
+      // Export → import ulang (update): satuan tetap, id satuan tetap.
+      final csv = utf8.decode(exportProductsCsv([p]));
+      expect(csv, contains('PAK:6:29000; DUS:24:110000:TK-DUS'));
+      expect(csv, contains('12:4700'));
+      final again = validateImport(
+        parseProductFile(csvBytes(csv), ProductFileFormat.csv),
+        guessMapping(
+          parseProductFile(csvBytes(csv), ProductFileFormat.csv).headers,
+        ),
+        await service.existingIndex(),
+      );
+      expect(again.single.isValid, isTrue);
+      await service.run(
+        actor: admin,
+        rows: again,
+        existingAction: ExistingProductAction.updateStockPrice,
+        stockStoreId: await mainStoreId(db),
+      );
+      final after = (await repo.findByCodeOrBarcode('BRG600'))!;
+      expect(after.units.map((u) => u.id), p.units.map((u) => u.id));
+    });
+
     test(
       'barang baru dibuat, kategori/satuan baru otomatis, error dilewati',
       () async {

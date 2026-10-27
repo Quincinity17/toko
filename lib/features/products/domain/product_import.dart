@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/utils/number_input.dart';
 import 'product.dart';
+import 'product_pricing.dart';
 import 'tag.dart';
 
 /// Kolom data barang di file import/export. [label] juga menjadi judul kolom
@@ -129,7 +130,15 @@ enum ProductField {
       'min stock',
     ],
   ),
-  isActive('Aktif', synonyms: ['aktif', 'status', 'active']);
+  isActive('Aktif', synonyms: ['aktif', 'status', 'active']),
+  otherUnits(
+    'Satuan Lain',
+    synonyms: ['satuan lain', 'multi satuan', 'satuan besar', 'satuan 2'],
+  ),
+  wholesale(
+    'Harga Grosir',
+    synonyms: ['harga grosir', 'grosir', 'harga bertingkat'],
+  );
 
   const ProductField(
     this.label, {
@@ -253,11 +262,18 @@ class ImportRow {
 
 /// Kode/barcode yang sudah ada di database, untuk pemeriksaan sebelum import.
 class ExistingIndex {
-  ExistingIndex({required this.idByCode, required this.idByBarcode});
+  ExistingIndex({
+    required this.idByCode,
+    required this.idByBarcode,
+    this.idByUnitBarcode = const {},
+  });
 
   /// Kunci huruf kecil.
   final Map<String, int> idByCode;
   final Map<String, int> idByBarcode;
+
+  /// Barcode kemasan (satuan lain) → id barang pemiliknya.
+  final Map<String, int> idByUnitBarcode;
 }
 
 /// Memeriksa semua baris: kolom wajib, format angka, duplikat di dalam file,
@@ -348,6 +364,51 @@ List<ImportRow> validateImport(
       if (tagError != null) errors.add('Kategori "$t": $tagError');
     }
 
+    // Satuan lain & grosir (teks satu sel, lihat PricingText).
+    List<ProductUnit>? units;
+    if (provided.contains(ProductField.otherUnits)) {
+      final r = PricingText.parseUnits(cell(ProductField.otherUnits));
+      if (r.error != null) {
+        errors.add(r.error!);
+      } else {
+        final ruleError = PricingRules.units(
+          r.units,
+          baseUnit: cell(ProductField.unit),
+          code: code,
+          barcode: barcode,
+        );
+        if (ruleError != null) errors.add(ruleError);
+        for (final u in r.units) {
+          final b = u.barcode;
+          if (b == null) continue;
+          final owner =
+              existing.idByUnitBarcode[b] ??
+              existing.idByCode[b.toLowerCase()] ??
+              existing.idByBarcode[b];
+          if (owner != null && owner != existingId) {
+            errors.add(
+              'Barcode satuan ${u.name} ($b) sudah dipakai barang lain.',
+            );
+          }
+        }
+        units = r.units;
+      }
+    }
+    List<PriceTier>? tiers;
+    if (provided.contains(ProductField.wholesale)) {
+      final r = PricingText.parseTiers(cell(ProductField.wholesale));
+      if (r.error != null) {
+        errors.add(r.error!);
+      } else if (sell != null) {
+        final ruleError = PricingRules.tiers(
+          r.tiers,
+          sellingPrice: sell.toInt(),
+        );
+        if (ruleError != null) errors.add(ruleError);
+        tiers = r.tiers;
+      }
+    }
+
     final active = cell(ProductField.isActive).toLowerCase();
     final isActive = ![
       '0',
@@ -380,6 +441,8 @@ List<ImportRow> validateImport(
                 tagNames: provided.contains(ProductField.category)
                     ? categories
                     : null,
+                units: units,
+                tiers: tiers,
               ),
       ),
     );

@@ -17,8 +17,10 @@ const defaultReceiptHtml = '''<style>
 </div>
 
 <div class="garis"></div>
+{{#retur}}<div class="tengah"><b>NOTA RETUR</b></div>{{/retur}}
 <div class="kecil">
   <div class="baris"><span>No</span><span>{{faktur.no}}</span></div>
+  {{#retur}}<div class="baris"><span>Retur dari</span><span>{{retur.dari}}</span></div>{{/retur}}
   <div class="baris"><span>{{faktur.tanggal}} {{faktur.jam}}</span><span>{{kasir}}</span></div>
 </div>
 <div class="garis"></div>
@@ -33,12 +35,20 @@ const defaultReceiptHtml = '''<style>
 <div class="garis"></div>
 {{#potongan}}
 <div class="baris"><span>Subtotal</span><span>{{subtotal}}</span></div>
-<div class="baris"><span>Potongan</span><span>-{{potongan}}</span></div>
+<div class="baris"><span>{{#voucher}}Voucher {{voucher}}{{/voucher}}{{^voucher}}Potongan{{/voucher}}</span><span>-{{potongan}}</span></div>
 {{/potongan}}
 <div class="baris total"><span>TOTAL</span><span>{{total}}</span></div>
-<div class="baris"><span>{{metode}}</span><span>{{bayar}}</span></div>
+{{#retur}}
+<div class="baris"><span>Dikembalikan ({{metode}})</span><span>{{retur.kembali}}</span></div>
+{{#retur.alasan}}<div class="kecil">Alasan: {{retur.alasan}}</div>{{/retur.alasan}}
+{{/retur}}
+{{^retur}}
+{{#tukar}}<div class="baris"><span>Tukar {{tukar.dari}}</span><span>-{{tukar.kredit}}</span></div>{{/tukar}}
+{{#pembayaran}}<div class="baris"><span>{{metode}}</span><span>{{jumlah}}</span></div>{{#ref}}<div class="kecil">Ref: {{ref}}</div>{{/ref}}{{/pembayaran}}
+{{^pembayaran}}<div class="baris"><span>{{metode}}</span><span>{{bayar}}</span></div>{{/pembayaran}}
 {{#kembali}}<div class="baris"><span>Kembali</span><span>{{kembali}}</span></div>{{/kembali}}
-{{#ref}}<div class="kecil">Ref: {{ref}}</div>{{/ref}}
+{{^pembayaran}}{{#ref}}<div class="kecil">Ref: {{ref}}</div>{{/ref}}{{/pembayaran}}
+{{/retur}}
 <div class="kecil">{{jumlah_barang}} barang, {{jumlah_item}} item</div>
 
 <div class="garis"></div>

@@ -31,15 +31,24 @@ class CartTable extends StatelessWidget {
     required this.onQtyChanged,
     required this.onEditQty,
     required this.onRemove,
+    this.onChangeUnit,
+    this.canReduce = true,
   });
 
   final Cart cart;
+
+  /// `false` = tidak punya hak mengurangi/menghapus barang: tombol − mati
+  /// dan tombol hapus disembunyikan.
+  final bool canReduce;
   final int? selectedIndex;
   final ScrollController scrollController;
   final ValueChanged<int> onSelect;
   final void Function(int index, double qty) onQtyChanged;
   final ValueChanged<int> onEditQty;
   final ValueChanged<int> onRemove;
+
+  /// Ganti satuan baris (hanya barang yang punya satuan lain).
+  final ValueChanged<int>? onChangeUnit;
 
   /// Di bawah lebar ini (HP) keranjang tampil sebagai daftar ringkas.
   static const compactWidth = 560.0;
@@ -85,15 +94,24 @@ class CartTable extends StatelessWidget {
                     ),
                     itemBuilder: (context, i) => _Row(
                       compact: compact,
-                      key: ValueKey(cart.lines[i].product.id),
+                      key: ValueKey(
+                        '${cart.lines[i].product.id}-${cart.lines[i].unit?.id}',
+                      ),
                       index: i,
                       line: cart.lines[i],
                       selected: i == selectedIndex,
                       onTap: () => onSelect(i),
-                      onMinus: () => onQtyChanged(i, cart.lines[i].qty - 1),
+                      onMinus: canReduce
+                          ? () => onQtyChanged(i, cart.lines[i].qty - 1)
+                          : null,
                       onPlus: () => onQtyChanged(i, cart.lines[i].qty + 1),
                       onEditQty: () => onEditQty(i),
-                      onRemove: () => onRemove(i),
+                      onRemove: canReduce ? () => onRemove(i) : null,
+                      onChangeUnit:
+                          onChangeUnit == null ||
+                              cart.lines[i].product.units.isEmpty
+                          ? null
+                          : () => onChangeUnit!(i),
                     ),
                   ),
           ),
@@ -146,6 +164,7 @@ class _Row extends StatelessWidget {
     required this.onPlus,
     required this.onEditQty,
     required this.onRemove,
+    this.onChangeUnit,
   });
 
   /// HP: nama + barcode·harga, ± jumlah, total. Hapus barang = kurangi
@@ -155,10 +174,68 @@ class _Row extends StatelessWidget {
   final CartLine line;
   final bool selected;
   final VoidCallback onTap;
-  final VoidCallback onMinus;
+  final VoidCallback? onMinus;
   final VoidCallback onPlus;
   final VoidCallback onEditQty;
-  final VoidCallback onRemove;
+  final VoidCallback? onRemove;
+  final VoidCallback? onChangeUnit;
+
+  /// Keterangan harga grosir / stok di bawah nama barang.
+  List<Widget> _notes(AppColors c) {
+    final caption = AppTypography.caption;
+    final tier = line.tier;
+    final next = line.nextTier;
+    return [
+      if (tier != null)
+        Text(
+          'Harga grosir (min. ${Fmt.number(tier.minQty)})',
+          style: caption.copyWith(color: c.success),
+        )
+      else if (next != null)
+        Text(
+          'Grosir ${Fmt.number(next.price)} mulai ${Fmt.number(next.minQty)}',
+          style: caption.copyWith(color: c.labelSecondary),
+        ),
+      if (line.exceedsStock)
+        Text(
+          'Stok tercatat ${Fmt.number(line.product.stock)}'
+          '${line.unit == null ? '' : ' ${line.product.unitName ?? ''}'.trimRight()}',
+          style: caption.copyWith(color: c.warning),
+        ),
+    ];
+  }
+
+  Widget _unit(AppColors c, TextStyle body) {
+    final name = line.unitName ?? '–';
+    if (onChangeUnit == null) {
+      return Text(name, style: body.copyWith(color: c.labelSecondary));
+    }
+    return Tooltip(
+      message: 'Ganti satuan',
+      child: PressableScale(
+        onPressed: onChangeUnit,
+        pressedScale: 0.92,
+        borderRadius: AppRadius.smAll,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: body.copyWith(
+                  color: c.accent,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            Icon(CupertinoIcons.chevron_down, size: 11, color: c.accent),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -214,13 +291,7 @@ class _Row extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: body.copyWith(fontWeight: FontWeight.w500),
                         ),
-                        if (line.exceedsStock)
-                          Text(
-                            'Stok tercatat ${Fmt.number(p.stock)}',
-                            style: AppTypography.caption.copyWith(
-                              color: c.warning,
-                            ),
-                          ),
+                        ..._notes(c),
                       ],
                     ),
                   ),
@@ -233,13 +304,7 @@ class _Row extends StatelessWidget {
                       onTapValue: onEditQty,
                     ),
                   ),
-                  _cell(
-                    _cols[4].$2,
-                    Text(
-                      p.unitName ?? '–',
-                      style: body.copyWith(color: c.labelSecondary),
-                    ),
-                  ),
+                  _cell(_cols[4].$2, _unit(c, body)),
                   _cell(
                     _cols[5].$2,
                     Text(
@@ -265,19 +330,21 @@ class _Row extends StatelessWidget {
                   ),
                   _cell(
                     _cols[7].$2,
-                    Tooltip(
-                      message: 'Hapus barang',
-                      child: CupertinoButton(
-                        padding: EdgeInsets.zero,
-                        minimumSize: const Size(36, 36),
-                        onPressed: onRemove,
-                        child: Icon(
-                          CupertinoIcons.minus_circle_fill,
-                          size: 20,
-                          color: c.danger.withValues(alpha: 0.85),
-                        ),
-                      ),
-                    ),
+                    onRemove == null
+                        ? const SizedBox.shrink()
+                        : Tooltip(
+                            message: 'Hapus barang',
+                            child: CupertinoButton(
+                              padding: EdgeInsets.zero,
+                              minimumSize: const Size(36, 36),
+                              onPressed: onRemove,
+                              child: Icon(
+                                CupertinoIcons.minus_circle_fill,
+                                size: 20,
+                                color: c.danger.withValues(alpha: 0.85),
+                              ),
+                            ),
+                          ),
                   ),
                 ],
               ),
@@ -315,18 +382,31 @@ class _Row extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: body.copyWith(fontWeight: FontWeight.w500),
               ),
-              Text(
-                '${p.code} · ${Fmt.number(line.price)}'
-                '${p.unitName == null ? '' : '/${p.unitName}'}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppTypography.caption.copyWith(color: c.labelSecondary),
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      '${p.code} · ${Fmt.number(line.price)}'
+                      '${line.unitName == null || onChangeUnit != null ? '' : '/${line.unitName}'}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.caption.copyWith(
+                        color: c.labelSecondary,
+                      ),
+                    ),
+                  ),
+                  if (onChangeUnit != null) ...[
+                    Text(
+                      '/',
+                      style: AppTypography.caption.copyWith(
+                        color: c.labelSecondary,
+                      ),
+                    ),
+                    _unit(c, AppTypography.caption),
+                  ],
+                ],
               ),
-              if (line.exceedsStock)
-                Text(
-                  'Stok tercatat ${Fmt.number(p.stock)}',
-                  style: AppTypography.caption.copyWith(color: c.warning),
-                ),
+              ..._notes(c),
             ],
           ),
         ),
@@ -361,14 +441,14 @@ class _QtyStepper extends StatelessWidget {
   });
 
   final double qty;
-  final VoidCallback onMinus;
+  final VoidCallback? onMinus;
   final VoidCallback onPlus;
   final VoidCallback onTapValue;
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    Widget button(IconData icon, VoidCallback onPressed) => CupertinoButton(
+    Widget button(IconData icon, VoidCallback? onPressed) => CupertinoButton(
       padding: EdgeInsets.zero,
       minimumSize: const Size(32, 32),
       onPressed: onPressed,
@@ -376,7 +456,11 @@ class _QtyStepper extends StatelessWidget {
         width: 28,
         height: 28,
         decoration: BoxDecoration(color: c.fill, shape: BoxShape.circle),
-        child: Icon(icon, size: 14, color: c.accent),
+        child: Icon(
+          icon,
+          size: 14,
+          color: onPressed == null ? c.labelTertiary : c.accent,
+        ),
       ),
     );
 

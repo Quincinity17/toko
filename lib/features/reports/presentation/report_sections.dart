@@ -155,14 +155,14 @@ class SummarySection extends StatelessWidget {
               'Laba bersih (laba kotor dikurangi sewa, gaji, listrik, dll.) '
               'butuh fitur pencatatan pengeluaran, belum tersedia.',
           children: [
-            // Potongan hanya ada pada faktur lama (fitur voucher dihapus).
+            // Hanya tampil bila ada potongan voucher pada periode ini.
             if (s.discount > 0) ...[
               InsetGroupedTile(
                 title: 'Penjualan kotor',
                 value: Fmt.rupiah(s.grossSales),
               ),
               InsetGroupedTile(
-                title: '− Potongan',
+                title: '− Potongan voucher',
                 value: Fmt.rupiah(s.discount),
               ),
             ],
@@ -714,7 +714,7 @@ class StockSection extends StatelessWidget {
 }
 
 // -----------------------------------------------------------------------------
-// 6. Pembayaran
+// 6. Pembayaran & voucher
 // -----------------------------------------------------------------------------
 
 class PaymentsSection extends StatelessWidget {
@@ -725,6 +725,8 @@ class PaymentsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final total = bundle.payments.fold<int>(0, (s, g) => s + g.revenue);
+    final vouchers = bundle.vouchers;
+    final discount = vouchers.fold<int>(0, (s, v) => s + v.discount);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -748,6 +750,37 @@ class PaymentsSection extends StatelessWidget {
                 CellText(Fmt.rupiah(g.revenue), number: true),
               ]),
           ],
+        ),
+        _gap,
+        SectionTitle(
+          'Efektivitas voucher',
+          subtitle: vouchers.isEmpty
+              ? null
+              : 'Total potongan ${Fmt.rupiah(discount)}. Bandingkan laba '
+                    'kotor dengan potongan yang diberikan.',
+        ),
+        DataTableCard(
+          columns: const [
+            TableColumnSpec('Kode', flex: 2),
+            TableColumnSpec.number('Dipakai', width: 90),
+            TableColumnSpec.number('Potongan', width: 130),
+            TableColumnSpec.number('Omzet', width: 130),
+            TableColumnSpec.number('Laba kotor', width: 130),
+          ],
+          emptyMessage: 'Tidak ada voucher yang dipakai pada periode ini.',
+          rows: [
+            for (final v in vouchers)
+              TableRowData([
+                CellText(v.name, bold: true),
+                CellText('${v.transactions}×', number: true),
+                CellText(Fmt.rupiah(v.discount), number: true),
+                CellText(Fmt.rupiah(v.revenue), number: true),
+                CellText(Fmt.rupiah(v.grossProfit), number: true),
+              ]),
+          ],
+          footer:
+              'Omzet dan laba kotor dari transaksi yang memakai voucher '
+              'tersebut, setelah potongan (retur ikut memotong).',
         ),
       ],
     );

@@ -5,6 +5,7 @@ import '../../../core/database/app_database.dart';
 import '../../../core/database/tables/audit.dart';
 import '../../auth/domain/app_user.dart';
 import '../domain/payment_method.dart';
+import '../../sync/data/terminal_repository.dart';
 
 class PaymentMethodFailure implements Exception {
   const PaymentMethodFailure(this.message);
@@ -43,6 +44,7 @@ class PaymentMethodRepository {
     required bool isActive,
   }) async {
     _requireAdmin(actor);
+    await _requireMaster();
     final trimmed = name.trim();
     if (trimmed.isEmpty) {
       throw const PaymentMethodFailure('Nama metode wajib diisi.');
@@ -99,6 +101,7 @@ class PaymentMethodRepository {
 
   Future<void> delete({required AppUser actor, required int id}) async {
     _requireAdmin(actor);
+    await _requireMaster();
     final dao = _db.paymentMethodsDao;
     await _db.transaction(() async {
       final current = await dao.findById(id);
@@ -125,6 +128,12 @@ class PaymentMethodRepository {
     userId: actor.id,
     userName: actor.fullName,
   );
+
+  /// Data master hanya diubah di komputer server (lihat sinkron).
+  Future<void> _requireMaster() async {
+    final message = await TerminalRepository.masterLockMessage(_db);
+    if (message != null) throw PaymentMethodFailure(message);
+  }
 
   void _requireAdmin(AppUser actor) {
     if (!actor.isAdmin) {

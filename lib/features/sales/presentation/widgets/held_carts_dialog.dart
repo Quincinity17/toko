@@ -9,6 +9,8 @@ import '../../../../core/widgets/app_dialogs.dart';
 import '../../../../core/widgets/app_text_field.dart';
 import '../../../../core/widgets/pressable_scale.dart';
 import '../../../../core/widgets/state_views.dart';
+import '../../../auth/domain/permission.dart';
+import '../../../auth/presentation/auth_controller.dart';
 import '../../data/cashier_audit.dart';
 import '../../data/held_cart_repository.dart';
 import '../../domain/cart.dart';
@@ -145,21 +147,32 @@ class _HeldList extends ConsumerWidget {
       confirmLabel: 'Hapus',
       destructive: true,
     );
-    if (ok) {
+    if (!ok) return;
+    try {
       await ref
-          .read(cashierAuditProvider)
-          .heldCartDeleted(
-            note: h.note,
-            itemCount: h.items.length,
-            total: h.total,
-          );
-      await ref.read(heldCartRepositoryProvider).delete(h.id);
+          .read(heldCartRepositoryProvider)
+          .delete(h.id, actor: ref.read(authControllerProvider)!);
+    } on HeldCartFailure catch (e) {
+      if (context.mounted) {
+        await AppDialogs.alert(context, title: 'Gagal', message: e.message);
+      }
+      return;
     }
+    await ref
+        .read(cashierAuditProvider)
+        .heldCartDeleted(
+          note: h.note,
+          itemCount: h.items.length,
+          total: h.total,
+        );
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final held = ref.watch(heldCartsProvider(storeId));
+    final canDelete =
+        ref.watch(authControllerProvider)?.can(Permission.deleteHeldCart) ??
+        false;
 
     return held.when(
       loading: () => const SizedBox(height: 160, child: LoadingState()),
@@ -189,7 +202,9 @@ class _HeldList extends ConsumerWidget {
               itemBuilder: (context, i) => _HeldTile(
                 held: list[i],
                 onResume: () => Navigator.pop(context, list[i].id),
-                onDelete: () => _delete(context, ref, list[i]),
+                onDelete: canDelete
+                    ? () => _delete(context, ref, list[i])
+                    : null,
               ),
             ),
     );
@@ -205,7 +220,9 @@ class _HeldTile extends StatelessWidget {
 
   final HeldCart held;
   final VoidCallback onResume;
-  final VoidCallback onDelete;
+
+  /// `null` = tidak punya hak menghapus (tombol disembunyikan).
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -279,11 +296,12 @@ class _HeldTile extends StatelessWidget {
               size: AppButtonSize.small,
               onPressed: onResume,
             ),
-            AppIconButton(
-              icon: CupertinoIcons.trash,
-              tooltip: 'Hapus',
-              onPressed: onDelete,
-            ),
+            if (onDelete != null)
+              AppIconButton(
+                icon: CupertinoIcons.trash,
+                tooltip: 'Hapus',
+                onPressed: onDelete,
+              ),
           ],
         ),
       ),

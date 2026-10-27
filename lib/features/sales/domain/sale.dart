@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import 'split_payment.dart';
+
 /// Ringkasan faktur untuk daftar transaksi.
 @immutable
 class SaleSummary {
@@ -12,6 +14,7 @@ class SaleSummary {
     required this.subtotal,
     required this.discount,
     this.discountPercent,
+    this.voucherCode,
     required this.total,
     required this.paid,
     required this.change,
@@ -21,6 +24,8 @@ class SaleSummary {
     this.returnOfId,
     this.returnReason,
     this.returnedAmount = 0,
+    this.exchangeOfId,
+    this.payments = const [],
   });
 
   final int id;
@@ -33,6 +38,9 @@ class SaleSummary {
 
   /// Hanya faktur lama yang punya potongan persen manual.
   final double? discountPercent;
+
+  /// Kode voucher yang dipakai (sumber [discount]).
+  final String? voucherCode;
   final int total;
   final int paid;
   final int change;
@@ -46,6 +54,21 @@ class SaleSummary {
 
   /// Faktur penjualan: nilai yang sudah diretur (positif).
   final int returnedAmount;
+
+  /// Faktur tukar barang: nota retur yang menjadi kreditnya.
+  final int? exchangeOfId;
+
+  /// Split payment: nilai per metode (kosong = hanya [paymentMethod]).
+  final List<SalePart> payments;
+
+  bool get isSplit => payments.isNotEmpty;
+
+  /// Nilai per metode bayar (faktur biasa: total ke [paymentMethod]).
+  List<(String, int)> get amountsByMethod => isSplit
+      ? [for (final p in payments) (p.name, p.amount)]
+      : [(paymentMethod, total)];
+
+  bool get isExchange => exchangeOfId != null;
 
   bool get isReturn => returnOfId != null;
 
@@ -66,6 +89,7 @@ class SaleLine {
     required this.price,
     required this.discountPercent,
     required this.subtotal,
+    this.unitFactor = 1,
   });
 
   final String code;
@@ -75,4 +99,7 @@ class SaleLine {
   final int price;
   final double discountPercent;
   final int subtotal;
+
+  /// Isi satuan baris ini dalam satuan dasar (multi-satuan).
+  final double unitFactor;
 }

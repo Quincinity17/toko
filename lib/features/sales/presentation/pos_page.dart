@@ -7,6 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/state_views.dart';
+import '../../auth/domain/permission.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../receipt/data/receipt_settings_repository.dart';
 import '../../receipt/presentation/printer_settings_section.dart';
@@ -54,6 +55,9 @@ class _PosPageState extends ConsumerState<PosPage> {
     final hasStore = ref.watch(storeScopeProvider) != null;
     final printerReady =
         ref.watch(printerConfigProvider).value?.isReady ?? false;
+    final canSetPrinter =
+        ref.watch(authControllerProvider)?.can(Permission.printerSettings) ??
+        false;
 
     return ColoredBox(
       color: c.background,
@@ -80,12 +84,15 @@ class _PosPageState extends ConsumerState<PosPage> {
                           style: AppTypography.title1.copyWith(color: c.label),
                         ),
                       ),
-                      AppIconButton(
-                        icon: CupertinoIcons.printer,
-                        tooltip: printerReady ? 'Printer Nota' : 'Atur Printer',
-                        filled: true,
-                        onPressed: _openPrinterSettings,
-                      ),
+                      if (canSetPrinter)
+                        AppIconButton(
+                          icon: CupertinoIcons.printer,
+                          tooltip: printerReady
+                              ? 'Printer Nota'
+                              : 'Atur Printer',
+                          filled: true,
+                          onPressed: _openPrinterSettings,
+                        ),
                     ],
                   ),
                   if (hasStore) ...[
@@ -135,15 +142,16 @@ class _PosPageState extends ConsumerState<PosPage> {
                   const SizedBox(width: AppSpacing.md),
                   const Expanded(child: _InfoBar()),
                   const SizedBox(width: AppSpacing.md),
-                  // Printer menempel ke komputer kasir, jadi semua peran boleh
-                  // mengaturnya dari sini (bentuk struk tetap diatur admin).
-                  AppButton(
-                    label: printerReady ? 'Printer Nota' : 'Atur Printer',
-                    icon: CupertinoIcons.printer,
-                    variant: AppButtonVariant.tinted,
-                    size: AppButtonSize.small,
-                    onPressed: _openPrinterSettings,
-                  ),
+                  // Printer menempel ke komputer kasir, jadi diatur dari sini
+                  // (hak "Atur printer"; bentuk struk tetap diatur admin).
+                  if (canSetPrinter)
+                    AppButton(
+                      label: printerReady ? 'Printer Nota' : 'Atur Printer',
+                      icon: CupertinoIcons.printer,
+                      variant: AppButtonVariant.tinted,
+                      size: AppButtonSize.small,
+                      onPressed: _openPrinterSettings,
+                    ),
                 ],
               ),
             ),

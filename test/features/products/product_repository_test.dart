@@ -67,6 +67,26 @@ void main() {
       expect(next?.next, 'BMM0000002');
       expect(next?.basedOn, 'BMM0000001');
 
+      // Seri per kategori: barang berkategori Mainan memakai MNN, nomor
+      // terlewat diisi dulu.
+      for (final code in ['MNN001', 'MNN004']) {
+        await repo.save(
+          actor: admin,
+          draft: ProductDraft(
+            code: code,
+            name: 'Mainan $code',
+            sellingPrice: 1000,
+            tagNames: const ['Mainan'],
+          ),
+        );
+      }
+      final mainan = await repo.nextCode(categories: ['mainan']);
+      expect(mainan?.next, 'MNN002');
+      expect(mainan?.category, 'Mainan');
+      expect(mainan?.fillsGap, isTrue);
+      // Kategori lain tanpa seri → seri barang terbaru (MNN004 terbaru).
+      expect((await repo.nextCode(categories: ['Kosong']))?.category, isNull);
+
       expect(await repo.autoCodeEnabled(), isFalse);
       await repo.setAutoCode(true);
       expect(await repo.autoCodeEnabled(), isTrue);

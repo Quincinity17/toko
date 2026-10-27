@@ -96,7 +96,7 @@ class AppShell extends ConsumerWidget {
 
     final destinations = [
       for (final d in appDestinations)
-        if (user.role.canAccess(d.path)) d,
+        if (user.canAccess(d.path)) d,
     ];
     final selected = destinations.indexWhere(
       (d) => location.startsWith(d.path),

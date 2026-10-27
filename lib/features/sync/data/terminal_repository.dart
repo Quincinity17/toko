@@ -52,6 +52,14 @@ class TerminalRepository {
     }
     final error = Terminal.validateCode(code);
     if (error != null) throw TerminalFailure(error);
+    // Server mengenali komputer ini dengan kodenya; nomor faktur antar
+    // komputer tidak boleh bentrok.
+    if ((await _db.settingsDao.get('sync.token') ?? '').isNotEmpty) {
+      throw const TerminalFailure(
+        'Komputer ini tersambung ke server. Putuskan sambungan dulu, ganti '
+        'kode, lalu sambungkan lagi.',
+      );
+    }
     final old = await _db.settingsDao.get(kCode);
     await _db.settingsDao.set(kCode, Terminal.normalizeCode(code));
     await _db.auditDao.append(
@@ -61,6 +69,18 @@ class TerminalRepository {
       userName: actor.fullName,
     );
   }
+
+  /// Peran komputer di sinkron (diatur saat pairing).
+  Future<void> setMode(TerminalMode mode) =>
+      _db.settingsDao.set(_kMode, mode.name);
+
+  /// Komputer cabang tidak boleh mengubah data master (barang, akun, toko,
+  /// dll.): pesan error, atau `null` bila boleh.
+  static Future<String?> masterLockMessage(AppDatabase db) async =>
+      await db.settingsDao.get(_kMode) == TerminalMode.client.name
+      ? 'Komputer cabang tidak bisa mengubah data master. Ubah di komputer '
+            'server; perubahan ikut terkirim saat sinkron.'
+      : null;
 
   Terminal _build(String? id, String? code, String? mode) => Terminal(
     id: id ?? '',

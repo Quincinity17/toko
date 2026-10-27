@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../payments/domain/payment_method.dart';
+import '../../sales/data/sales_repository.dart';
 import '../domain/escpos.dart';
 import '../domain/printer_config.dart';
 import '../domain/receipt.dart';
@@ -45,6 +46,16 @@ class ReceiptPrinter {
     final method = sale.paymentMethodId == null
         ? null
         : await _db.paymentMethodsDao.findById(sale.paymentMethodId!);
+    final sales = SalesRepository(_db);
+    final exchange = sale.exchangeOfId == null
+        ? null
+        : await sales.exchangeInfo(sale.exchangeOfId!);
+    final original = sale.returnOfId == null
+        ? null
+        : await (_db.select(
+            _db.sales,
+          )..where((s) => s.id.equals(sale.returnOfId!))).getSingleOrNull();
+    final payments = await sales.paymentsOf(saleId);
     return ReceiptData(
       storeId: sale.storeId,
       storeName: store?.name ?? 'Toko',
@@ -65,12 +76,22 @@ class ReceiptPrinter {
       ],
       subtotal: sale.subtotal,
       discount: sale.discount,
+      voucherCode: sale.voucherCode,
+      exchangeCredit: exchange?.credit ?? 0,
+      exchangeFrom: exchange?.originalNo,
       total: sale.total,
       paid: sale.paid,
       change: sale.changeAmount,
       paymentMethod: sale.paymentMethod,
-      isCash: method == null || method.kind == PaymentKind.cash,
+      isCash: payments.isEmpty
+          ? method == null || method.kind == PaymentKind.cash
+          : payments.any((p) => p.isCash),
       paymentRef: sale.paymentRef,
+      payments: payments,
+      returnOf: sale.returnOfId == null
+          ? null
+          : original?.invoiceNo ?? '(faktur dihapus)',
+      returnReason: sale.returnReason,
     );
   }
 
@@ -95,7 +116,7 @@ class ReceiptPrinter {
     );
   }
 
-  /// Dipanggil setelah checkout: cetak otomatis dan/atau buka laci sesuai
+  /// Dipanggil setelah checkout atau retur (nota retur): cetak otomatis dan/atau buka laci sesuai
   /// pengaturan. Gagal cetak dilempar sebagai [PrinterFailure]; transaksi
   /// sendiri sudah tersimpan.
   Future<AfterCheckout> afterCheckout(
@@ -175,7 +196,9 @@ class ReceiptPrinter {
     final String html;
     try {
       html = ReceiptHtml.render(
-        template.html,
+        // Template buatan admin tanpa bagian retur / bayar terpisah: bagian
+        // itu ditambahkan otomatis.
+        ReceiptSections.withFallbacks(template.html),
         data.toTemplateValues(logo: template.logo, reprint: reprint),
       );
     } on ReceiptTemplateError catch (e) {

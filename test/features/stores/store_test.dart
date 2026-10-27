@@ -5,6 +5,7 @@ import 'package:toko/core/database/app_database.dart';
 import 'package:toko/features/auth/data/auth_repository.dart';
 import 'package:toko/features/auth/data/user_repository.dart';
 import 'package:toko/features/auth/domain/app_user.dart';
+import 'package:toko/features/auth/domain/permission.dart';
 import 'package:toko/features/auth/domain/user_role.dart';
 import 'package:toko/features/payments/data/payment_method_repository.dart';
 import 'package:toko/features/products/data/product_repository.dart';
@@ -137,11 +138,11 @@ void main() {
     });
 
     test('hak akses supervisor: Kasir dan Stok saja', () {
-      expect(UserRole.supervisor.canAccess('/kasir'), isTrue);
-      expect(UserRole.supervisor.canAccess('/stok'), isTrue);
-      expect(UserRole.supervisor.canAccess('/produk'), isFalse);
-      expect(UserRole.supervisor.canAccess('/laporan'), isFalse);
-      expect(UserRole.kasir.canAccess('/stok'), isFalse);
+      expect(_withDefaults(UserRole.supervisor).canAccess('/kasir'), isTrue);
+      expect(_withDefaults(UserRole.supervisor).canAccess('/stok'), isTrue);
+      expect(_withDefaults(UserRole.supervisor).canAccess('/produk'), isFalse);
+      expect(_withDefaults(UserRole.supervisor).canAccess('/laporan'), isFalse);
+      expect(_withDefaults(UserRole.kasir).canAccess('/stok'), isFalse);
     });
   });
 
@@ -323,3 +324,12 @@ void main() {
     });
   });
 }
+
+/// User dengan hak akses bawaan perannya (= perilaku sebelum bisa diatur).
+AppUser _withDefaults(UserRole role) => AppUser(
+  id: 1,
+  username: 'u',
+  fullName: 'U',
+  role: role,
+  permissions: PermissionRules.defaults(role),
+);

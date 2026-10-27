@@ -6,14 +6,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/utils/device.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/formatters.dart';
 import '../../../../core/utils/number_input.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_card.dart';
 import '../../../../core/widgets/app_dialogs.dart';
 import '../../../../core/widgets/app_text_field.dart';
+import '../../../../core/widgets/barcode_scanner.dart';
+import '../../../auth/domain/permission.dart';
 import '../../../auth/presentation/auth_controller.dart';
 import '../../../products/data/product_repository.dart';
 import '../../../products/domain/product.dart';
+import '../../../products/domain/product_pricing.dart';
 import '../../../receipt/data/printer_failure.dart';
 import '../../../receipt/data/receipt_printer.dart';
 import '../../../receipt/data/receipt_settings_repository.dart';
@@ -27,13 +31,14 @@ import 'cart_table.dart';
 import 'held_carts_dialog.dart';
 import 'payment_dialog.dart';
 import 'product_search_sheet.dart';
+import 'voucher_dialog.dart';
 
 /// Tab "Transaksi Baru": input barang, tabel keranjang, dan panel total.
 ///
 /// Kolom kode selalu kembali fokus supaya scanner barcode USB (yang mengetik
 /// seperti keyboard lalu menekan Enter) bisa langsung dipakai.
 /// Shortcut: F2 / End = bayar, F3 = cari barang, F4 = tahan transaksi,
-/// F5 = daftar transaksi tertahan, F6 = buka laci.
+/// F5 = daftar transaksi tertahan, F6 = buka laci, F7 = pakai voucher.
 class CheckoutView extends ConsumerStatefulWidget {
   const CheckoutView({super.key});
 
@@ -75,15 +80,18 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
 
   CartController get _cart => ref.read(cartControllerProvider.notifier);
 
+  /// Hak akses user yang login (admin selalu boleh).
+  bool _can(Permission p) => ref.read(authControllerProvider)?.can(p) ?? false;
+
   /// Halaman Kasir hanya menampilkan view ini bila toko sudah dipilih.
   int get _storeId => ref.read(storeScopeProvider)!;
 
-  void _addProduct(Product product) {
+  void _addProduct(Product product, {ProductUnit? unit}) {
     final qty = parseIdNumber(_qty.text);
-    _cart.add(product, qty: qty == null || qty <= 0 ? 1 : qty);
+    _cart.add(product, qty: qty == null || qty <= 0 ? 1 : qty, unit: unit);
     final cart = ref.read(cartControllerProvider);
     setState(() {
-      _selected = cart.lines.indexWhere((l) => l.product.id == product.id);
+      _selected = cart.indexOf(product, unit);
       _codeError = null;
     });
     _qty.text = '1';
@@ -103,17 +111,48 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
   Future<void> _submitCode() async {
     final text = _code.text.trim();
     if (text.isEmpty || _busy) return;
-    final product = await ref
+    final match = await ref
         .read(productRepositoryProvider)
-        .findByCodeOrBarcode(text, storeId: _storeId);
+        .scan(text, storeId: _storeId);
     if (!mounted) return;
-    if (product != null) {
-      _addProduct(product);
+    if (match != null) {
+      _addProduct(match.product, unit: match.unit);
       focusEntry(force: true);
       return;
     }
     // Bukan kode/barcode persis: buka pencarian dengan teks yang sama.
     await _openSearch(initial: text);
+  }
+
+  /// Kamera HP (beruntun): setiap barcode langsung masuk keranjang.
+  Future<void> _scanWithCamera() async {
+    if (_busy) return;
+    _busy = true;
+    try {
+      await scanBarcodesContinuous(
+        context,
+        onCode: (code) async {
+          final match = await ref
+              .read(productRepositoryProvider)
+              .scan(code, storeId: _storeId);
+          if (!mounted) return const ScanFeedback.fail('Ditutup');
+          if (match == null) {
+            return ScanFeedback.fail('Barcode $code tidak ditemukan');
+          }
+          final product = match.product;
+          _addProduct(product, unit: match.unit);
+          final cart = ref.read(cartControllerProvider);
+          final line = cart.lines[cart.indexOf(product, match.unit)];
+          return ScanFeedback.ok(
+            '${product.name} · ${Fmt.number(line.qty)} '
+                    '${line.unitName ?? ''}'
+                .trim(),
+          );
+        },
+      );
+    } finally {
+      _busy = false;
+    }
   }
 
   Future<void> _openSearch({String initial = ''}) async {
@@ -148,6 +187,59 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
       await showCheckoutSuccessDialog(context, result);
     }
     _busy = false;
+    focusEntry();
+  }
+
+  /// Ganti satuan baris [index] (mis. PCS → DUS). Ke satuan yang lebih
+  /// kecil = nilai berkurang, jadi butuh hak mengurangi barang.
+  Future<void> _changeUnit(int index) async {
+    final line = ref.read(cartControllerProvider).lines[index];
+    final p = line.product;
+    // Nilai: id satuan, 0 = satuan dasar; null = batal.
+    final pickedId = await AppDialogs.actionSheet<int>(
+      context,
+      title: 'Satuan ${p.name}',
+      options: [
+        ActionSheetOption(
+          label:
+              '${p.unitName ?? 'PCS'} · ${Fmt.rupiah(p.sellingPrice)}'
+              '${line.unit == null ? '  ✓' : ''}',
+          value: 0,
+        ),
+        for (final u in p.units)
+          ActionSheetOption(
+            label:
+                '${u.name} (isi ${Fmt.number(u.factor)}) · '
+                '${Fmt.rupiah(u.price)}${line.unit?.id == u.id ? '  ✓' : ''}',
+            value: u.id!,
+          ),
+      ],
+    );
+    if (!mounted) return;
+    if (pickedId == null || pickedId == (line.unit?.id ?? 0)) {
+      return focusEntry();
+    }
+    final picked = p.unitById(pickedId);
+    final factor = picked?.factor ?? 1;
+    if (factor < line.factor) {
+      if (!_can(Permission.reduceCartItem)) {
+        await AppDialogs.alert(
+          context,
+          title: 'Tidak bisa',
+          message: 'Anda tidak punya hak mengurangi barang di keranjang.',
+        );
+        return focusEntry();
+      }
+      unawaited(
+        ref
+            .read(cashierAuditProvider)
+            .unitChanged(line, picked?.name ?? p.unitName ?? 'PCS'),
+      );
+    }
+    _cart.setUnit(index, picked);
+    setState(
+      () => _selected = ref.read(cartControllerProvider).indexOf(p, picked),
+    );
     focusEntry();
   }
 
@@ -229,7 +321,7 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
   }
 
   Future<void> _openDrawer() async {
-    if (_busy) return;
+    if (_busy || !_can(Permission.openDrawer)) return;
     if (!(ref.read(printerConfigProvider).value?.isReady ?? false)) return;
     try {
       await ref.read(receiptPrinterProvider).openDrawer();
@@ -246,7 +338,18 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
     focusEntry();
   }
 
+  Future<void> _applyVoucher() async {
+    final cart = ref.read(cartControllerProvider);
+    if (cart.isEmpty || _busy || !_can(Permission.useVoucher)) return;
+    _busy = true;
+    final voucher = await showVoucherDialog(context, _storeId);
+    _busy = false;
+    if (voucher != null) _cart.setVoucher(voucher);
+    focusEntry();
+  }
+
   Future<void> _confirmClear() async {
+    if (!_can(Permission.clearCart)) return;
     final ok = await AppDialogs.confirm(
       context,
       title: 'Batalkan transaksi?',
@@ -277,6 +380,19 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
       initial: line.qty,
       suffix: line.product.unitName,
     );
+    if (qty != null && qty < line.qty && !_can(Permission.reduceCartItem)) {
+      if (mounted) {
+        await AppDialogs.alert(
+          context,
+          title: 'Tidak bisa mengurangi',
+          message:
+              'Anda tidak punya hak mengurangi atau menghapus barang di '
+              'keranjang. Minta admin/supervisor, atau batalkan transaksi.',
+        );
+      }
+      focusEntry();
+      return;
+    }
     if (qty != null) {
       unawaited(
         ref.read(cashierAuditProvider).itemReduced(line, line.qty, qty),
@@ -288,6 +404,7 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
   }
 
   void _remove(int index) {
+    if (!_can(Permission.reduceCartItem)) return;
     final line = ref.read(cartControllerProvider).lines[index];
     unawaited(ref.read(cashierAuditProvider).itemReduced(line, line.qty, 0));
     _cart.removeAt(index);
@@ -299,13 +416,18 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
   Widget build(BuildContext context) {
     final cart = ref.watch(cartControllerProvider);
 
+    final user = ref.watch(authControllerProvider);
+    bool can(Permission p) => user?.can(p) ?? false;
+
     final table = CartTable(
       cart: cart,
+      canReduce: can(Permission.reduceCartItem),
       selectedIndex: _selected,
       scrollController: _scroll,
       onSelect: (i) => setState(() => _selected = i),
       onQtyChanged: (i, q) {
         final line = cart.lines[i];
+        if (q < line.qty && !can(Permission.reduceCartItem)) return;
         unawaited(
           ref.read(cashierAuditProvider).itemReduced(line, line.qty, q),
         );
@@ -314,6 +436,7 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
       },
       onEditQty: _editQty,
       onRemove: _remove,
+      onChangeUnit: _changeUnit,
     );
 
     final compact = AppBreakpoints.isCompact(context);
@@ -324,8 +447,15 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
       onPay: _pay,
       onHold: _hold,
       onShowHeld: _showHeld,
-      onClear: _confirmClear,
-      onOpenDrawer: ref.watch(printerConfigProvider).value?.isReady ?? false
+      onClear: can(Permission.clearCart) ? _confirmClear : null,
+      onApplyVoucher: can(Permission.useVoucher) ? _applyVoucher : null,
+      onRemoveVoucher: () {
+        _cart.setVoucher(null);
+        focusEntry();
+      },
+      onOpenDrawer:
+          can(Permission.openDrawer) &&
+              (ref.watch(printerConfigProvider).value?.isReady ?? false)
           ? _openDrawer
           : null,
     );
@@ -338,6 +468,7 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
         const SingleActivator(LogicalKeyboardKey.f4): _hold,
         const SingleActivator(LogicalKeyboardKey.f5): _showHeld,
         const SingleActivator(LogicalKeyboardKey.f6): _openDrawer,
+        const SingleActivator(LogicalKeyboardKey.f7): _applyVoucher,
       },
       child: Padding(
         padding: compact
@@ -359,6 +490,7 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
             final left = Column(
               children: [
                 _EntryBar(
+                  onScan: _touch ? _scanWithCamera : null,
                   autofocus: !_touch,
                   compact: compact,
                   code: _code,
@@ -411,6 +543,7 @@ class CheckoutViewState extends ConsumerState<CheckoutView> {
 
 class _EntryBar extends StatelessWidget {
   const _EntryBar({
+    this.onScan,
     this.autofocus = true,
     this.compact = false,
     required this.code,
@@ -425,6 +558,9 @@ class _EntryBar extends StatelessWidget {
   /// HP: kolom jumlah lebih sempit, tombol cari berupa ikon.
   final bool compact;
   final bool autofocus;
+
+  /// HP/tablet: scan barcode dengan kamera; `null` = tombol disembunyikan.
+  final VoidCallback? onScan;
   final TextEditingController code;
   final FocusNode codeFocus;
   final TextEditingController qty;
@@ -468,7 +604,20 @@ class _EntryBar extends StatelessWidget {
               onSubmitted: (_) => onSubmit(),
             ),
           ),
-          const SizedBox(width: AppSpacing.sm),
+          if (onScan != null) ...[
+            const SizedBox(width: AppSpacing.xs),
+            Padding(
+              padding: EdgeInsets.only(top: compact ? 26 : 22),
+              child: AppIconButton(
+                icon: CupertinoIcons.camera_viewfinder,
+                tooltip: 'Scan dengan kamera',
+                size: 44,
+                filled: true,
+                onPressed: onScan,
+              ),
+            ),
+          ],
+          SizedBox(width: onScan != null ? AppSpacing.xs : AppSpacing.sm),
           Padding(
             // Sejajarkan tombol dengan field (melewati tinggi label).
             padding: EdgeInsets.only(top: compact ? 26 : 22),

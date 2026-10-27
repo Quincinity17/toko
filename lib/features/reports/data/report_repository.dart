@@ -157,6 +157,9 @@ class ReportRepository {
   Future<List<GroupPerformance>> payments(ReportRange range) =>
       _groups(_dao.paymentSales(range.start, range.end, storeId: storeId));
 
+  Future<List<GroupPerformance>> vouchers(ReportRange range) =>
+      _groups(_dao.voucherSales(range.start, range.end, storeId: storeId));
+
   Future<List<GroupPerformance>> cashiers(ReportRange range) =>
       _groups(_dao.cashierSales(range.start, range.end, storeId: storeId));
 
@@ -187,6 +190,7 @@ class ReportRepository {
       cashiers(range),
       terminals(range),
       stores(range),
+      vouchers(range),
     ]);
     return ReportBundle(
       range: range,
@@ -201,6 +205,7 @@ class ReportRepository {
       cashiers: results[8] as List<GroupPerformance>,
       terminals: results[9] as List<GroupPerformance>,
       stores: results[10] as List<GroupPerformance>,
+      vouchers: results[11] as List<GroupPerformance>,
     );
   }
 

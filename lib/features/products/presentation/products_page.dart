@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/widgets/barcode_scanner.dart';
 import '../../../core/router/routes.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
@@ -19,9 +20,13 @@ import '../domain/product.dart';
 import '../domain/tag.dart';
 import 'tag_chip.dart';
 import 'product_export_dialog.dart';
+import '../../labels/presentation/label_queue.dart';
+import '../data/product_repository.dart';
 import 'product_form_sheet.dart';
 import 'product_providers.dart';
 import '../../stores/presentation/store_scope.dart';
+import '../../sync/data/terminal_repository.dart';
+import '../../sync/domain/terminal.dart';
 
 /// Master barang (khusus admin): cari, filter, urutkan, tambah, ubah, hapus.
 class ProductsPage extends ConsumerStatefulWidget {
@@ -87,6 +92,24 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
     if (sort != null) _setFilter(_filter.copyWith(sort: sort));
   }
 
+  bool get _filtered =>
+      _filter.text.trim().isNotEmpty ||
+      _filter.tagId != null ||
+      _filter.lowStockOnly;
+
+  Future<void> _printLabels(ProductFilter filter) async {
+    if (_filtered) {
+      final list = await ref
+          .read(productRepositoryProvider)
+          .allMatching(filter);
+      final queue = ref.read(labelQueueProvider.notifier);
+      for (final p in list) {
+        queue.addProduct(p);
+      }
+    }
+    if (mounted) context.go(AppRoutes.cetakLabel);
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
@@ -106,6 +129,16 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
           : '${Fmt.number(count)} barang · '
                 '${storeId == null ? 'stok semua toko' : 'stok & harga ${store?.name ?? 'toko'}'}',
       actions: [
+        AppButton(
+          // Daftar sedang difilter: semua barang hasil filter masuk ke
+          // daftar label.
+          label: _filtered && count != null
+              ? 'Cetak Label ($count)'
+              : 'Cetak Label',
+          icon: CupertinoIcons.tag,
+          variant: AppButtonVariant.gray,
+          onPressed: () => _printLabels(filter),
+        ),
         AppButton(
           label: 'Input Tabel',
           icon: CupertinoIcons.table,
@@ -134,13 +167,31 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
       bottom: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SizedBox(
-            height: 40,
-            child: CupertinoSearchTextField(
-              controller: _search,
-              placeholder: 'Cari nama atau barcode',
-              style: AppTypography.body.copyWith(color: c.label),
-              onChanged: _onSearch,
+          if (ref.watch(terminalProvider).value?.mode == TerminalMode.client)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              child: Text(
+                'Komputer cabang: data barang dari server pusat dan hanya '
+                'bisa diubah di komputer server.',
+                style: AppTypography.footnote.copyWith(color: c.warning),
+              ),
+            ),
+          // HP/tablet: cari barang dengan memotret barcodenya.
+          WithScanButton(
+            topOffset: 0,
+            size: 40,
+            onScanned: (code) {
+              _search.text = code;
+              _onSearch(code);
+            },
+            field: SizedBox(
+              height: 40,
+              child: CupertinoSearchTextField(
+                controller: _search,
+                placeholder: 'Cari nama atau barcode',
+                style: AppTypography.body.copyWith(color: c.label),
+                onChanged: _onSearch,
+              ),
             ),
           ),
           const SizedBox(height: AppSpacing.sm),

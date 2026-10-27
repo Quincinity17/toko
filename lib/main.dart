@@ -10,9 +10,11 @@ import 'core/database/tables/audit.dart';
 import 'core/database/seed.dart';
 import 'core/security/password_hasher.dart';
 import 'features/backup/data/backup_service.dart';
+import 'features/backup/data/history_cleanup_service.dart';
 import 'features/backup/data/restore_service.dart';
 import 'features/backup/presentation/database_locked_app.dart';
 import 'features/sales/data/held_cart_repository.dart';
+import 'features/sync/data/sync_service.dart';
 import 'features/sync/data/terminal_repository.dart';
 
 Future<void> main() async {
@@ -49,7 +51,15 @@ Future<void> main() async {
   // Transaksi tertahan hanya berlaku hari itu.
   await HeldCartRepository(db).purgeExpired();
   // Backup database + Excel barang seminggu sekali (2 terbaru disimpan).
-  BackupScheduler(BackupService(db)).start();
+  // Lalu hapus riwayat penjualan lama bila diatur admin (bawaan: tidak).
+  final backup = BackupService(db);
+  BackupScheduler(
+    backup,
+    then: HistoryCleanupService(db, backup).runIfDue,
+  ).start();
+
+  // Sinkron dengan server pusat (bila komputer ini sudah disambungkan).
+  SyncScheduler(SyncService(db)).start();
 
   runApp(
     ProviderScope(

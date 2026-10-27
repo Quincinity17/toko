@@ -5,6 +5,7 @@ import '../../../core/database/app_database.dart';
 import '../../../core/database/tables/audit.dart';
 import '../../auth/domain/app_user.dart';
 import '../domain/store.dart';
+import '../../sync/data/terminal_repository.dart';
 
 class StoreFailure implements Exception {
   const StoreFailure(this.message);
@@ -48,6 +49,7 @@ class StoreRepository {
     bool isActive = true,
   }) async {
     _requireAdmin(actor);
+    await _requireMaster();
     final n = name.trim();
     if (n.isEmpty) throw const StoreFailure('Nama toko wajib diisi.');
     if (n.length > 60) {
@@ -88,8 +90,9 @@ class StoreRepository {
   }
 
   /// Menghapus toko yang belum dipakai; yang sudah dipakai dinonaktifkan.
-  Future<StoreRemoval> remove({required AppUser actor, required int id}) {
+  Future<StoreRemoval> remove({required AppUser actor, required int id}) async {
     _requireAdmin(actor);
+    await _requireMaster();
     final dao = _db.storesDao;
     return _db.transaction(() async {
       final current = await dao.findById(id);
@@ -123,6 +126,12 @@ class StoreRepository {
     if (await _db.storesDao.countActive() <= 1) {
       throw const StoreFailure('Harus ada minimal satu toko aktif.');
     }
+  }
+
+  /// Data master hanya diubah di komputer server (lihat sinkron).
+  Future<void> _requireMaster() async {
+    final message = await TerminalRepository.masterLockMessage(_db);
+    if (message != null) throw StoreFailure(message);
   }
 
   void _requireAdmin(AppUser actor) {

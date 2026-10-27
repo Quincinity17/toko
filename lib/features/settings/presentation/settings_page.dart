@@ -13,6 +13,7 @@ import '../../../core/widgets/large_title_page.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../auth/presentation/password_sheet.dart';
 import '../../backup/presentation/backup_section.dart';
+import '../../backup/presentation/history_section.dart';
 import '../../products/data/tag_repository.dart';
 import '../../receipt/data/receipt_settings_repository.dart';
 import '../../sync/presentation/terminal_section.dart';
@@ -53,6 +54,17 @@ class SettingsPage extends ConsumerWidget {
                           subtitle:
                               'Admin, supervisor, dan kasir beserta tokonya',
                           onPressed: () => context.go(AppRoutes.kelolaAkun),
+                        ),
+                        InsetGroupedTile(
+                          leading: TileIcon(
+                            icon: CupertinoIcons.checkmark_shield_fill,
+                            color: c.purple,
+                          ),
+                          title: 'Hak Akses Peran',
+                          subtitle:
+                              'Halaman & tindakan yang boleh dipakai '
+                              'supervisor dan kasir',
+                          onPressed: () => context.go(AppRoutes.hakAkses),
                         ),
                         InsetGroupedTile(
                           leading: TileIcon(
@@ -102,6 +114,15 @@ class SettingsPage extends ConsumerWidget {
                           subtitle: 'Tunai, QRIS, transfer, kartu, dll.',
                           onPressed: () => context.go(AppRoutes.metodeBayar),
                         ),
+                        InsetGroupedTile(
+                          leading: TileIcon(
+                            icon: CupertinoIcons.tag_fill,
+                            color: c.purple,
+                          ),
+                          title: 'Voucher Promo',
+                          subtitle: 'Kode diskon persen atau nominal',
+                          onPressed: () => context.go(AppRoutes.voucher),
+                        ),
                       ],
                     ),
                     const SizedBox(height: AppSpacing.xl),
@@ -110,6 +131,10 @@ class SettingsPage extends ConsumerWidget {
                   const SizedBox(height: AppSpacing.xl),
                   const BackupSection(),
                   const SizedBox(height: AppSpacing.xl),
+                  if (isAdmin) ...[
+                    const HistorySection(),
+                    const SizedBox(height: AppSpacing.xl),
+                  ],
                   InsetGroupedSection(
                     header: 'Tampilan',
                     dividerIndent: 58,

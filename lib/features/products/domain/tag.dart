@@ -99,11 +99,21 @@ class Tag {
     required this.name,
     this.color = TagColor.blue,
     this.productCount = 0,
+    this.codePrefix,
+    this.codeDigits,
   });
 
   final int id;
   final String name;
   final TagColor color;
+
+  /// Awalan barcode otomatis barang di kategori ini (mis. BNK); `null` =
+  /// mengikuti barcode barang di kategori itu.
+  final String? codePrefix;
+
+  /// Jumlah digit nomor barcode otomatis (mis. 4 → BNK0001); `null` =
+  /// mengikuti seri yang sudah ada.
+  final int? codeDigits;
 
   /// Jumlah barang yang memakai tag ini (hanya terisi di daftar tag).
   final int productCount;
@@ -114,10 +124,13 @@ class Tag {
       other.id == id &&
       other.name == name &&
       other.color == color &&
-      other.productCount == productCount;
+      other.productCount == productCount &&
+      other.codePrefix == codePrefix &&
+      other.codeDigits == codeDigits;
 
   @override
-  int get hashCode => Object.hash(id, name, color, productCount);
+  int get hashCode =>
+      Object.hash(id, name, color, productCount, codePrefix, codeDigits);
 }
 
 /// Validasi nama tag.

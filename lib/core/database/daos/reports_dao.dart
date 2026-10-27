@@ -26,6 +26,8 @@ part 'reports_dao.g.dart';
     StoreProducts,
     Tags,
     ProductTags,
+    Units,
+    SalePayments,
   ],
 )
 class ReportsDao extends DatabaseAccessor<AppDatabase> with _$ReportsDaoMixin {
@@ -71,7 +73,7 @@ class ReportsDao extends DatabaseAccessor<AppDatabase> with _$ReportsDaoMixin {
          FROM sale_items si JOIN sales s ON s.id = si.sale_id
          WHERE s.sale_date >= ?1 AND s.sale_date < ?2
          AND ${_store('s')}) AS cost,
-      (SELECT COALESCE(SUM(si.qty), 0)
+      (SELECT COALESCE(SUM(si.qty * si.unit_factor), 0)
          FROM sale_items si JOIN sales s ON s.id = si.sale_id
          WHERE s.sale_date >= ?1 AND s.sale_date < ?2
          AND ${_store('s')}) AS qty,
@@ -140,23 +142,27 @@ class ReportsDao extends DatabaseAccessor<AppDatabase> with _$ReportsDaoMixin {
   }) => customSelect(
     '''
     SELECT si.product_id, MAX(si.product_code) AS code,
-           MAX(si.product_name) AS name, MAX(si.unit_name) AS unit,
+           MAX(si.product_name) AS name,
+           COALESCE((SELECT u.name FROM products p JOIN units u
+                       ON u.id = p.unit_id WHERE p.id = si.product_id),
+                    MAX(CASE WHEN si.unit_factor = 1 THEN si.unit_name END))
+             AS unit,
            (SELECT group_concat(t.name, ', ') FROM product_tags pt
             JOIN tags t ON t.id = pt.tag_id
             WHERE pt.product_id = si.product_id) AS category,
-           SUM(si.qty) AS qty, SUM(si.subtotal) AS revenue,
+           SUM(si.qty * si.unit_factor) AS qty, SUM(si.subtotal) AS revenue,
            SUM(si.qty * si.purchase_price) AS cost,
            $_txDistinct AS tx
     FROM sale_items si
     JOIN sales s ON s.id = si.sale_id
     WHERE s.sale_date >= ?1 AND s.sale_date < ?2 AND ${_store('s')}
     GROUP BY si.product_id
-    ${limit == null ? '' : 'HAVING SUM(si.qty) > 0'}
+    ${limit == null ? '' : 'HAVING SUM(si.qty * si.unit_factor) > 0'}
     ORDER BY qty DESC, revenue DESC
     ${limit == null ? '' : 'LIMIT $limit'}
     ''',
     variables: _range(start, end, storeId),
-    readsFrom: {sales, saleItems, productTags, tags},
+    readsFrom: {sales, saleItems, productTags, tags, products, units},
   );
 
   /// Per kategori (tag, kategori saat ini). Barang dengan beberapa kategori
@@ -168,7 +174,7 @@ class ReportsDao extends DatabaseAccessor<AppDatabase> with _$ReportsDaoMixin {
   }) => customSelect(
     '''
         SELECT COALESCE(t.name, 'Tanpa kategori') AS grp,
-               $_txDistinct AS tx, SUM(si.qty) AS qty,
+               $_txDistinct AS tx, SUM(si.qty * si.unit_factor) AS qty,
                SUM(si.subtotal) AS revenue,
                SUM(si.qty * si.purchase_price) AS cost
         FROM sale_items si
@@ -183,7 +189,7 @@ class ReportsDao extends DatabaseAccessor<AppDatabase> with _$ReportsDaoMixin {
   );
 
   /// Dikelompokkan per [groupExpr] milik tabel sales (alias `s`), mis.
-  /// metode bayar, kasir, terminal. Biaya per faktur dihitung dari
+  /// metode bayar, kasir, terminal, voucher. Biaya per faktur dihitung dari
   /// item supaya laba per kelompok bisa diketahui.
   Selectable<QueryRow> _bySale(
     DateTime start,
@@ -209,11 +215,50 @@ class ReportsDao extends DatabaseAccessor<AppDatabase> with _$ReportsDaoMixin {
     readsFrom: {sales, saleItems, users, stores},
   );
 
+  /// Per metode bayar. Faktur split payment (`sale_payments`) dibagi ke
+  /// tiap metodenya; potongan & harga pokoknya dibagi sebanding nilainya.
   Selectable<QueryRow> paymentSales(
     DateTime start,
     DateTime end, {
     int? storeId,
-  }) => _bySale(start, end, 's.payment_method', storeId: storeId);
+  }) => customSelect(
+    '''
+    SELECT COALESCE(p.method_name, s.payment_method) AS grp,
+           COUNT(DISTINCT CASE WHEN s.return_of_id IS NULL THEN s.id END)
+             AS tx,
+           SUM(COALESCE(p.amount, s.total)) AS revenue,
+           SUM(s.discount * $_share) AS discount,
+           SUM(COALESCE(ic.cost, 0) * $_share) AS cost
+    FROM sales s
+    LEFT JOIN sale_payments p ON p.sale_id = s.id
+    LEFT JOIN (
+      SELECT sale_id, SUM(qty * purchase_price) AS cost
+      FROM sale_items GROUP BY sale_id
+    ) ic ON ic.sale_id = s.id
+    WHERE s.sale_date >= ?1 AND s.sale_date < ?2 AND ${_store('s')}
+    GROUP BY grp ORDER BY revenue DESC
+    ''',
+    variables: _range(start, end, storeId),
+    readsFrom: {sales, saleItems, salePayments},
+  );
+
+  /// Porsi satu baris `sale_payments` (alias `p`) dari faktur `s`.
+  static const _share =
+      '(CASE WHEN p.id IS NULL OR s.total = 0 THEN 1.0 '
+      'ELSE p.amount * 1.0 / s.total END)';
+
+  /// Per kode voucher (nota retur faktur bervoucher ikut memotong).
+  Selectable<QueryRow> voucherSales(
+    DateTime start,
+    DateTime end, {
+    int? storeId,
+  }) => _bySale(
+    start,
+    end,
+    's.voucher_code',
+    storeId: storeId,
+    where: 'AND s.voucher_code IS NOT NULL',
+  );
 
   Selectable<QueryRow> cashierSales(
     DateTime start,
@@ -279,7 +324,7 @@ class ReportsDao extends DatabaseAccessor<AppDatabase> with _$ReportsDaoMixin {
         FROM products p
         LEFT JOIN units u ON u.id = p.unit_id
         LEFT JOIN (
-          SELECT si.product_id, SUM(si.qty) AS qty
+          SELECT si.product_id, SUM(si.qty * si.unit_factor) AS qty
           FROM sale_items si JOIN sales s ON s.id = si.sale_id
           WHERE s.sale_date >= ?1 AND (?2 IS NULL OR s.store_id = ?2)
           GROUP BY si.product_id

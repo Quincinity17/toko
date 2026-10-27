@@ -64,7 +64,43 @@ class AuditRepository {
       )
       ..orderBy([(t) => OrderingTerm.desc(t.id)])
       ..limit(limit);
-    return (await query.get()).map(_entry).toList();
+    final local = (await query.get()).map(_entry).toList();
+
+    // Komputer master: catatan komputer cabang (lewat sinkron).
+    final r = _db.remoteAuditLog;
+    final remoteQuery = _db.select(r)
+      ..where(
+        (t) =>
+            t.createdAt.isBiggerOrEqualValue(start) &
+            t.createdAt.isSmallerThanValue(end) &
+            (storeId == null
+                ? const Constant(true)
+                : t.storeId.isNull() | t.storeId.equals(storeId)),
+      )
+      ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
+      ..limit(limit);
+    final types = AuditType.values.asNameMap();
+    final remote = [
+      for (final row in await remoteQuery.get())
+        if (types[row.type] case final type?)
+          AuditEntry(
+            // Negatif supaya tidak bentrok dengan id catatan lokal.
+            id: -row.id,
+            at: row.createdAt,
+            type: type,
+            summary: row.summary,
+            userId: row.userId,
+            userName: row.userName,
+            storeId: row.storeId,
+            terminalCode: row.terminalCode,
+            data: row.data,
+          ),
+    ];
+    if (remote.isEmpty) return local;
+    return ([
+      ...local,
+      ...remote,
+    ]..sort((a, b) => b.at.compareTo(a.at))).take(limit).toList();
   }
 
   /// Tindakan yang perlu diperhatikan per user dalam [start, end), terbanyak

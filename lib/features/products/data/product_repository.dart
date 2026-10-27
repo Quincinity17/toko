@@ -1,6 +1,7 @@
 import 'dart:isolate';
 
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
@@ -12,8 +13,10 @@ import '../domain/bulk_entry.dart';
 import '../domain/code_sequence.dart';
 import '../domain/fuzzy_match.dart';
 import '../domain/product.dart';
+import '../domain/product_pricing.dart';
 import '../domain/similar_names.dart';
 import '../domain/tag.dart';
+import '../../sync/data/terminal_repository.dart';
 
 class ProductFailure implements Exception {
   const ProductFailure(this.message);
@@ -49,6 +52,21 @@ class ProductRepository {
   Future<Product?> findByCodeOrBarcode(String value, {int? storeId}) {
     if (value.trim().isEmpty) return Future.value(null);
     return _db.productsDao.findActiveByCodeOrBarcode(value, storeId: storeId);
+  }
+
+  /// Untuk kasir: barcode/kode barang, atau barcode kemasan satuan lain
+  /// (hasilnya membawa satuan itu).
+  Future<ScanMatch?> scan(String value, {int? storeId}) async {
+    final product = await findByCodeOrBarcode(value, storeId: storeId);
+    if (product != null) return ScanMatch(product);
+    if (value.trim().isEmpty) return null;
+    final byUnit = await _db.productsDao.findActiveByUnitBarcode(
+      value,
+      storeId: storeId,
+    );
+    if (byUnit == null) return null;
+    final (p, unitId) = byUnit;
+    return ScanMatch(p, unit: p.unitById(unitId));
   }
 
   Future<List<Product>> search(String text, {int? storeId, int limit = 50}) =>
@@ -93,21 +111,77 @@ class ProductRepository {
     (rows) => [for (final r in rows) r.name],
   );
 
-  /// Stok dan harga khusus barang [productId] di setiap toko yang punya
-  /// datanya (`storeId → (stok, harga khusus)`), untuk form barang.
-  Future<Map<int, ({double stock, int? price})>> storeValues(
-    int productId,
-  ) async => {
-    for (final e in await _db.storesDao.entriesOf(productId))
-      e.storeId: (stock: e.stock, price: e.sellingPrice),
-  };
+  /// Stok, harga khusus, harga satuan lain, dan grosir barang
+  /// [productId] di setiap toko yang punya datanya, untuk form barang.
+  Future<Map<int, StoreProductSaved>> storeValues(int productId) async {
+    final dao = _db.productsDao;
+    final entries = await _db.storesDao.entriesOf(productId);
+    final unitPrices = await dao.storeUnitPricesOf(productId);
+    final tiers = await dao.storeTiersOf(productId);
+    final ids = {
+      for (final e in entries) e.storeId,
+      for (final (store, _, _) in unitPrices) store,
+      for (final t in tiers) t.storeId!,
+    };
+    final entryOf = {for (final e in entries) e.storeId: e};
+    return {
+      for (final id in ids)
+        id: StoreProductSaved(
+          stock: entryOf[id]?.stock ?? 0,
+          price: entryOf[id]?.sellingPrice,
+          unitPrices: {
+            for (final (store, name, price) in unitPrices)
+              if (store == id) name: price,
+          },
+          tiers: [
+            for (final t in tiers)
+              if (t.storeId == id) PriceTier(minQty: t.minQty, price: t.price),
+          ],
+        ),
+    };
+  }
 
   static const kAutoCodeSetting = 'products.auto_code';
 
-  /// Barcode berikutnya untuk barang baru (lihat [CodeSequence]); `null`
-  /// bila belum ada barcode berakhiran angka.
-  Future<({String next, String basedOn})?> nextCode() async =>
-      CodeSequence.next(await codesNewestFirst());
+  /// Barcode berikutnya untuk barang baru (lihat [CodeSequence]): seri
+  /// mengikuti kategori pertama di [categories] yang sudah punya barcode
+  /// bernomor, dan nomor yang terlewat diisi dulu. `null` bila belum ada
+  /// barcode berakhiran angka.
+  Future<CodeSuggestion?> nextCode({
+    List<String> categories = const [],
+    Iterable<String> alsoTaken = const [],
+  }) async {
+    final all = await codesNewestFirst();
+    final taken = [...alsoTaken, ...await _db.productsDao.unitBarcodes()];
+    for (final name in categories) {
+      final tag = await _db.tagsDao.findByName(name.trim());
+      final next = CodeSequence.next(
+        all,
+        series: await _db.productsDao.codesInTag(name),
+        fixedPrefix: tag?.codePrefix,
+        minWidth: tag?.codeDigits,
+        category: tag?.name ?? name.trim(),
+        alsoTaken: taken,
+      );
+      if (next?.category != null) return next;
+    }
+    return CodeSequence.next(all, alsoTaken: taken);
+  }
+
+  /// Kode barang & awalan barcode per kategori (kunci huruf kecil), untuk
+  /// barcode otomatis Input Tabel.
+  Future<Map<String, ({List<String> codes, String? prefix, int? digits})>>
+  codesByCategory(Iterable<String> names) async => {
+    for (final n in {for (final n in names) n.trim().toLowerCase()})
+      n: (
+        codes: await _db.productsDao.codesInTag(n),
+        prefix: (await _db.tagsDao.findByName(n))?.codePrefix,
+        digits: (await _db.tagsDao.findByName(n))?.codeDigits,
+      ),
+  };
+
+  /// Barcode kemasan (satuan lain); tidak boleh dipakai barcode otomatis.
+  Future<List<String>> unitBarcodes() => _db.productsDao.unitBarcodes();
 
   /// Semua barcode (kode) barang, terbaru dulu; bahan [CodeSequence].
   Future<List<String>> codesNewestFirst() => _db.productsDao.codesNewestFirst();
@@ -153,6 +227,7 @@ class ProductRepository {
     List<StoreProductValues> stores = const [],
   }) async {
     _requireAdmin(actor);
+    await _requireMaster();
     final code = draft.code.trim();
     final barcode = (draft.barcode?.trim().isEmpty ?? true)
         ? null
@@ -170,6 +245,32 @@ class ProductRepository {
       if (v.price != null) {
         _check(ProductRules.price(v.price, label: 'Harga jual toko'));
       }
+      for (final p in (v.unitPrices ?? const <String, int?>{}).values) {
+        if (p != null) {
+          _check(ProductRules.price(p, label: 'Harga satuan toko'));
+        }
+      }
+      if (v.tiers case final tiers?) {
+        _check(
+          PricingRules.tiers(
+            tiers,
+            sellingPrice: v.price ?? draft.sellingPrice,
+          ),
+        );
+      }
+    }
+    if (draft.units case final units?) {
+      _check(
+        PricingRules.units(
+          units,
+          baseUnit: draft.unitName,
+          code: code,
+          barcode: barcode,
+        ),
+      );
+    }
+    if (draft.tiers case final tiers?) {
+      _check(PricingRules.tiers(tiers, sellingPrice: draft.sellingPrice));
     }
 
     final dao = _db.productsDao;
@@ -191,6 +292,32 @@ class ProductRepository {
           throw ProductFailure(
             'Barcode bawaan $barcode sudah dipakai oleh '
             '"${sameBarcode.name}".',
+          );
+        }
+      }
+      // Barcode barang tidak boleh sama dengan barcode kemasan barang lain,
+      // dan sebaliknya.
+      for (final b in {code, ?barcode}) {
+        final unit = await dao.findUnitByBarcode(b);
+        if (unit != null && unit.productId != id) {
+          final owner = await dao.findById(unit.productId);
+          throw ProductFailure(
+            'Barcode $b sudah dipakai satuan ${unit.name} '
+            '"${owner?.name ?? '-'}".',
+          );
+        }
+      }
+      for (final u in draft.units ?? const <ProductUnit>[]) {
+        final b = u.barcode?.trim() ?? '';
+        if (b.isEmpty) continue;
+        final other =
+            await dao.findByCode(b) ??
+            await dao.findByBarcode(b) ??
+            await _unitOwner(b, exceptProduct: id);
+        if (other != null && other.id != id) {
+          throw ProductFailure(
+            'Barcode satuan ${PricingRules.unitName(u.name)} ($b) sudah '
+            'dipakai oleh "${other.name}".',
           );
         }
       }
@@ -224,8 +351,22 @@ class ProductRepository {
                 '${Fmt.rupiah(draft.sellingPrice)}',
           if (current.isActive != draft.isActive)
             draft.isActive ? 'diaktifkan' : 'dinonaktifkan',
+          if (draft.units case final u? when !_sameUnits(current.units, u))
+            'satuan lain ${_unitsText(current.units)} → ${_unitsText(u)}',
+          if (draft.tiers case final t? when !listEquals(current.tiers, t))
+            'harga grosir ${_tiersText(current.tiers)} → ${_tiersText(t)}',
         ],
       ];
+      if (draft.units != null || draft.tiers != null) {
+        await dao.setPricing(
+          savedId,
+          unitList: draft.units,
+          tierList: draft.tiers == null
+              ? null
+              : ([...draft.tiers!]
+                  ..sort((a, b) => a.minQty.compareTo(b.minQty))),
+        );
+      }
 
       final storesDao = _db.storesDao;
       for (final v in stores) {
@@ -247,6 +388,12 @@ class ProductRepository {
             price: price,
           );
         }
+        await _saveStorePricing(
+          savedId,
+          v,
+          storeName,
+          changes: current == null ? null : changes,
+        );
         final change = v.stock - (entry?.stock ?? 0);
         if (change != 0) {
           changes.add(
@@ -296,6 +443,7 @@ class ProductRepository {
     required int id,
   }) async {
     _requireAdmin(actor);
+    await _requireMaster();
     final dao = _db.productsDao;
     return _db.transaction(() async {
       final product = await dao.findById(id);
@@ -324,6 +472,91 @@ class ProductRepository {
     });
   }
 
+  /// Harga satuan lain & grosir khusus toko [v] (lihat
+  /// [StoreProductValues]). Perubahan dicatat di [changes] (ubah barang).
+  Future<void> _saveStorePricing(
+    int productId,
+    StoreProductValues v,
+    String storeName, {
+    List<String>? changes,
+  }) async {
+    final dao = _db.productsDao;
+    final unitPrices = v.unitPrices;
+    final tiers = v.tiers;
+    if (unitPrices == null && tiers == null) return;
+    final saved = (await storeValues(productId))[v.storeId];
+    final units = (await dao.findById(productId))?.units ?? const [];
+    if (unitPrices != null) {
+      for (final u in units) {
+        var price = unitPrices[PricingRules.unitName(u.name)];
+        // Sama dengan harga satuan itu = tanpa harga khusus.
+        if (price == u.defaultPrice) price = null;
+        final before = saved?.unitPrices[u.name];
+        if (price == before) continue;
+        changes?.add(
+          'harga ${u.name} $storeName '
+          '${before == null ? 'default' : Fmt.rupiah(before)} → '
+          '${price == null ? 'default' : Fmt.rupiah(price)}',
+        );
+        await dao.setStoreUnitPrice(v.storeId, u.id!, price);
+      }
+    }
+    if (tiers != null) {
+      final sorted = [...tiers]..sort((a, b) => a.minQty.compareTo(b.minQty));
+      final before = saved?.tiers ?? const <PriceTier>[];
+      if (!listEquals(before, sorted)) {
+        changes?.add(
+          'grosir $storeName ${before.isEmpty ? 'ikut semua toko' : _tiersText(before)}'
+          ' → ${sorted.isEmpty ? 'ikut semua toko' : _tiersText(sorted)}',
+        );
+        await dao.setStoreTiers(productId, v.storeId, sorted);
+      }
+    }
+    await _db.sealsDao.resealPricing(productId);
+  }
+
+  /// Barang pemilik satuan dengan barcode kemasan [barcode], selain
+  /// [exceptProduct].
+  Future<ProductRow?> _unitOwner(String barcode, {int? exceptProduct}) async {
+    final unit = await _db.productsDao.findUnitByBarcode(barcode);
+    if (unit == null || unit.productId == exceptProduct) return null;
+    return (_db.select(
+      _db.products,
+    )..where((p) => p.id.equals(unit.productId))).getSingleOrNull();
+  }
+
+  static bool _sameUnits(List<ProductUnit> a, List<ProductUnit> b) {
+    String key(ProductUnit u) =>
+        '${PricingRules.unitName(u.name)}|${u.factor}|'
+        '${u.barcode?.trim() ?? ''}|${u.defaultPrice}';
+    return listEquals(
+      [for (final u in a) key(u)]..sort(),
+      [for (final u in b) key(u)]..sort(),
+    );
+  }
+
+  static String _unitsText(List<ProductUnit> units) => units.isEmpty
+      ? '(tidak ada)'
+      : units
+            .map(
+              (u) =>
+                  '${PricingRules.unitName(u.name)} isi ${Fmt.number(u.factor)} '
+                  '${Fmt.rupiah(u.defaultPrice)}',
+            )
+            .join(', ');
+
+  static String _tiersText(List<PriceTier> tiers) => tiers.isEmpty
+      ? '(tidak ada)'
+      : tiers
+            .map((t) => '≥${Fmt.number(t.minQty)} ${Fmt.rupiah(t.price)}')
+            .join(', ');
+
+  /// Data master hanya diubah di komputer server (lihat sinkron).
+  Future<void> _requireMaster() async {
+    final message = await TerminalRepository.masterLockMessage(_db);
+    if (message != null) throw ProductFailure(message);
+  }
+
   void _requireAdmin(AppUser actor) {
     if (!actor.isAdmin) {
       throw const ProductFailure('Hanya admin yang bisa mengelola barang.');
@@ -333,6 +566,15 @@ class ProductRepository {
   void _check(String? error) {
     if (error != null) throw ProductFailure(error);
   }
+}
+
+/// Hasil scan kasir: barang, dan satuan lainnya bila yang di-scan barcode
+/// kemasan.
+class ScanMatch {
+  const ScanMatch(this.product, {this.unit});
+
+  final Product product;
+  final ProductUnit? unit;
 }
 
 final productRepositoryProvider = Provider<ProductRepository>(

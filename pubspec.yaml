@@ -57,6 +57,9 @@ dependencies:
   # Membaca file backup database tanpa membuka AppDatabase (restore).
   sqlite3: ^3.7.0
   crypto: ^3.0.7
+  mobile_scanner: ^7.4.2
+  pdf: ^3.12.0
+  barcode: ^2.2.9
 
 dev_dependencies:
   flutter_test:

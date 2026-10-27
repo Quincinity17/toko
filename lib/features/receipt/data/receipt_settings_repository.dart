@@ -7,6 +7,7 @@ import '../../auth/domain/app_user.dart';
 import '../domain/printer_config.dart';
 import '../domain/receipt_template.dart';
 import 'printer_failure.dart';
+import '../../sync/data/terminal_repository.dart';
 
 /// Bentuk struk per toko (kolom `stores.receipt_template`, khusus admin) dan
 /// pengaturan printer komputer ini (tabel `settings`, semua peran boleh
@@ -30,15 +31,17 @@ class ReceiptSettingsRepository {
     AppUser actor,
     ReceiptTemplate t, {
     required int storeId,
-  }) {
+  }) async {
     _requireAdmin(actor);
+    await _requireMaster();
     return _db.storesDao.setReceiptTemplate(storeId, jsonEncode(t.toJson()));
   }
 
   /// Memakai template HTML [html] di semua toko. Logo tiap toko tetap
   /// (logo bisa berbeda per toko).
-  Future<void> applyHtmlToAllStores(AppUser actor, String html) {
+  Future<void> applyHtmlToAllStores(AppUser actor, String html) async {
     _requireAdmin(actor);
+    await _requireMaster();
     return _db.transaction(() async {
       for (final id in await _db.storesDao.allIds()) {
         final current = await templateFor(id);
@@ -48,6 +51,12 @@ class ReceiptSettingsRepository {
         );
       }
     });
+  }
+
+  /// Data master hanya diubah di komputer server (lihat sinkron).
+  Future<void> _requireMaster() async {
+    final message = await TerminalRepository.masterLockMessage(_db);
+    if (message != null) throw PrinterFailure(message);
   }
 
   void _requireAdmin(AppUser actor) {

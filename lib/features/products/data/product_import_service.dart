@@ -6,9 +6,11 @@ import '../../../core/database/tables/audit.dart';
 import '../../../core/database/tables/sales.dart';
 import '../../auth/domain/app_user.dart';
 import '../domain/product.dart';
+import '../domain/product_pricing.dart';
 import '../domain/product_import.dart';
 import '../domain/tag.dart';
 import 'product_repository.dart';
+import '../../sync/data/terminal_repository.dart';
 
 /// Menjalankan import barang dari baris yang sudah diperiksa
 /// ([validateImport]). Semua perubahan dalam satu database transaction:
@@ -37,7 +39,12 @@ class ProductImportService {
       final b = r.read(_db.products.barcode);
       if (b != null) byBarcode[b] = id;
     }
-    return ExistingIndex(idByCode: byCode, idByBarcode: byBarcode);
+    final unitRows = await _db.select(_db.productUnits).get();
+    return ExistingIndex(
+      idByCode: byCode,
+      idByBarcode: byBarcode,
+      idByUnitBarcode: {for (final u in unitRows) ?u.barcode: u.productId},
+    );
   }
 
   /// Harga jual di file menjadi harga default barang; kolom Stok masuk ke
@@ -51,6 +58,9 @@ class ProductImportService {
   }) async {
     if (!actor.isAdmin) {
       throw const ProductFailure('Hanya admin yang bisa import barang.');
+    }
+    if (await TerminalRepository.masterLockMessage(_db) case final m?) {
+      throw ProductFailure(m);
     }
     final valid = rows.where((r) => r.isValid).toList();
     final failed = rows.where((r) => !r.isValid).toList();
@@ -133,6 +143,9 @@ class ProductImportService {
           if (d.tagNames case final names? when names.isNotEmpty) {
             await _db.tagsDao.setProductTags(id, await categoryIds(names));
           }
+          if (d.units != null || d.tiers != null) {
+            await dao.setPricing(id, unitList: d.units, tierList: d.tiers);
+          }
           if (row.stock != 0 && stockStoreId != null) {
             await storesDao.changeStock(
               storeId: stockStoreId,
@@ -173,6 +186,30 @@ class ProductImportService {
               updatedAt: Value(now),
             ),
           );
+          // Satuan lain & grosir = harga: ikut "Timpa" maupun "Update stok
+          // & harga". Satuan yang namanya sama tetap memakai id lamanya.
+          if (d.units != null || d.tiers != null) {
+            final old = (await dao.findById(id))?.units ?? const [];
+            await dao.setPricing(
+              id,
+              unitList: d.units == null
+                  ? null
+                  : [
+                      for (final u in d.units!)
+                        ProductUnit(
+                          id: old
+                              .where((o) => o.name == u.name)
+                              .firstOrNull
+                              ?.id,
+                          name: u.name,
+                          factor: u.factor,
+                          barcode: u.barcode,
+                          price: u.price,
+                        ),
+                    ],
+              tierList: d.tiers,
+            );
+          }
           if (overwrite && d.tagNames != null) {
             await _db.tagsDao.setProductTags(
               id,

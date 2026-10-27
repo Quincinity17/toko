@@ -67,6 +67,15 @@ class Sales extends Table {
 
   /// v11: alasan retur/batal (wajib diisi untuk nota retur).
   TextColumn get returnReason => text().nullable()();
+
+  /// v15: faktur penukaran barang = penjualan baru yang dibayar sebagian
+  /// dengan kredit dari nota retur ini (`RET-…`). Kredit = −total nota retur.
+  /// `SET NULL` supaya penghapusan riwayat lama tidak terhalang.
+  IntColumn get exchangeOfId => integer().nullable().references(
+    Sales,
+    #id,
+    onDelete: KeyAction.setNull,
+  )();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
 
@@ -98,6 +107,37 @@ class SaleItems extends Table {
   /// v11: baris nota retur → baris faktur asal yang dikembalikan (qty &
   /// subtotal negatif). `null` = baris penjualan.
   IntColumn get returnOfItemId => integer().nullable()();
+
+  /// v16: isi satu [unitName] dalam satuan dasar barang (1 = satuan dasar,
+  /// 24 = DUS isi 24). Stok berubah [qty] × [unitFactor]; [purchasePrice]
+  /// sudah per satuan yang dijual.
+  RealColumn get unitFactor => real().withDefault(const Constant(1))();
+}
+
+/// v16: pembayaran terpisah (split payment): satu faktur dibayar dengan
+/// lebih dari satu metode. Hanya diisi untuk faktur yang memakai ≥ 2 metode
+/// (dan nota returnya); faktur biasa cukup `sales.payment_method_id`.
+/// [amount] = nilai yang masuk ke metode itu (tunai: setelah kembalian),
+/// jumlahnya = `sales.total`.
+@DataClassName('SalePaymentRow')
+@TableIndex(name: 'idx_sale_payments_uuid', columns: {#uuid}, unique: true)
+@TableIndex(name: 'idx_sale_payments_sale', columns: {#saleId})
+class SalePayments extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get uuid => text().nullable().clientDefault(newUuid)();
+  IntColumn get saleId =>
+      integer().references(Sales, #id, onDelete: KeyAction.cascade)();
+  IntColumn get paymentMethodId =>
+      integer().nullable().references(PaymentMethods, #id)();
+
+  /// Nama metode saat transaksi (salinan).
+  TextColumn get methodName => text()();
+  BoolColumn get isCash => boolean().withDefault(const Constant(false))();
+  IntColumn get amount => integer()();
+
+  /// Tunai: uang yang diterima (sebelum kembalian); non-tunai = [amount].
+  IntColumn get tendered => integer()();
+  TextColumn get ref => text().nullable()();
 }
 
 /// `saleReturn` (v11): barang kembali karena retur/batal faktur.
@@ -130,4 +170,24 @@ class StockMovements extends Table {
   IntColumn get refId => integer().nullable()();
   TextColumn get note => text().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+/// v19: promo yang dijalankan dari Laporan › Saran Promo (ubah harga barang
+/// / buat voucher), untuk membandingkan penjualan sebelum & sesudahnya.
+/// Lokal per komputer (tidak disinkron).
+@DataClassName('PromoActionRow')
+class PromoActions extends Table {
+  IntColumn get id => integer().autoIncrement()();
+
+  /// Nama `PromoKind`.
+  TextColumn get kind => text()();
+  TextColumn get title => text()();
+  IntColumn get productId => integer().nullable().references(
+    Products,
+    #id,
+    onDelete: KeyAction.setNull,
+  )();
+  TextColumn get voucherCode => text().nullable()();
+  IntColumn get storeId => integer().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
 }

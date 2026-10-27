@@ -12,6 +12,7 @@ import '../../../../core/widgets/app_dialogs.dart';
 import '../../../../core/widgets/pressable_scale.dart';
 import '../../../../core/widgets/state_views.dart';
 import '../../../auth/presentation/auth_controller.dart';
+import '../../../auth/domain/permission.dart';
 import '../../../payments/data/payment_method_repository.dart';
 import '../../../payments/domain/payment_method.dart';
 import '../../../payments/presentation/payment_method_icon.dart';
@@ -22,6 +23,7 @@ import '../../../stores/presentation/store_scope.dart';
 import '../../data/checkout_service.dart';
 import '../../domain/cart.dart';
 import '../../domain/cash_suggestions.dart';
+import '../../domain/split_payment.dart';
 
 /// Popup pembayaran: pilih metode, isi uang (tunai) atau referensi
 /// (non-tunai), lalu simpan. Mengembalikan hasil, atau `null` jika batal.
@@ -54,12 +56,19 @@ class _PaymentFormState extends ConsumerState<_PaymentForm> {
   bool _saving = false;
   String? _error;
 
+  /// Bayar terpisah (split payment): metode yang dipilih, urut dipilih.
+  bool _split = false;
+  final _splitMethods = <PaymentMethod>[];
+  final _splitAmount = <int, TextEditingController>{};
+  final _splitRef = <int, TextEditingController>{};
+
   int get _total => widget.cart.total;
   int get _paidValue => (parseIdNumber(_paid.text) ?? 0).round();
   bool get _isCash => _method?.isCash ?? true;
   bool get _paidEmpty => _paid.text.isEmpty;
-  bool get _canSubmit =>
-      _method != null && (!_isCash || _paidEmpty || _paidValue >= _total);
+  bool get _canSubmit => _split
+      ? _splitPlan().error == null
+      : _method != null && (!_isCash || _paidEmpty || _paidValue >= _total);
 
   @override
   void dispose() {
@@ -67,7 +76,90 @@ class _PaymentFormState extends ConsumerState<_PaymentForm> {
     _paidFocus.dispose();
     _ref.dispose();
     _refFocus.dispose();
+    for (final c in [..._splitAmount.values, ..._splitRef.values]) {
+      c.dispose();
+    }
     super.dispose();
+  }
+
+  void _toggleSplit(List<PaymentMethod> all) => setState(() {
+    _split = !_split;
+    _error = null;
+    if (_split && _splitMethods.isEmpty) {
+      // Mulai dari metode yang sedang dipilih + satu metode lain.
+      final first = _method ?? all.first;
+      _splitMethods.add(first);
+      final other = all.firstWhere(
+        (m) => m.id != first.id && m.isCash != first.isCash,
+        orElse: () => all.firstWhere((m) => m.id != first.id),
+      );
+      _splitMethods.add(other);
+    }
+  });
+
+  void _toggleSplitMethod(PaymentMethod m) => setState(() {
+    _error = null;
+    final i = _splitMethods.indexWhere((x) => x.id == m.id);
+    if (i != -1) {
+      _splitMethods.removeAt(i);
+      return;
+    }
+    if (m.isCash && _splitMethods.any((x) => x.isCash)) {
+      _error = 'Hanya boleh satu bagian tunai.';
+      return;
+    }
+    _splitMethods.add(m);
+  });
+
+  /// Mengisi bagian [m] dengan sisa tagihan (total − bagian lain).
+  void _fillRest(PaymentMethod m) {
+    var others = 0;
+    for (final x in _splitMethods) {
+      if (x.id == m.id) continue;
+      others += parseIdNumber(_amountOf(x).text)?.round() ?? 0;
+    }
+    final rest = _total - others;
+    if (rest <= 0) return;
+    final text = Fmt.number(rest);
+    _amountOf(m).value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+    setState(() => _error = null);
+  }
+
+  TextEditingController _amountOf(PaymentMethod m) =>
+      _splitAmount.putIfAbsent(m.id, TextEditingController.new);
+
+  TextEditingController _refOf(PaymentMethod m) =>
+      _splitRef.putIfAbsent(m.id, TextEditingController.new);
+
+  /// Bagian split dari isian. Satu kolom jumlah yang kosong = sisa tagihan.
+  ({List<PaymentPart> parts, String? error, int change, int rest})
+  _splitPlan() {
+    final amounts = {
+      for (final m in _splitMethods)
+        m.id: parseIdNumber(_amountOf(m).text)?.round(),
+    };
+    final empty = amounts.values.where((v) => v == null).length;
+    final filled = amounts.values.fold<int>(0, (s, v) => s + (v ?? 0));
+    final rest = _total - filled;
+    final parts = [
+      for (final m in _splitMethods)
+        PaymentPart(
+          methodId: m.id,
+          name: m.name,
+          isCash: m.isCash,
+          amount: amounts[m.id] ?? (empty == 1 && rest > 0 ? rest : 0),
+          ref: m.isCash ? null : _refOf(m).text,
+        ),
+    ];
+    try {
+      final r = SplitPayment.settle(parts, _total);
+      return (parts: parts, error: null, change: r.change, rest: 0);
+    } on SplitPaymentFailure catch (e) {
+      return (parts: parts, error: e.message, change: 0, rest: rest);
+    }
   }
 
   void _selectMethod(PaymentMethod m) {
@@ -91,7 +183,36 @@ class _PaymentFormState extends ConsumerState<_PaymentForm> {
     setState(() {});
   }
 
+  Future<void> _submitSplit() async {
+    final plan = _splitPlan();
+    if (_saving) return;
+    if (plan.error != null) {
+      setState(() => _error = plan.error);
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      final result = await ref
+          .read(checkoutServiceProvider)
+          .checkout(
+            cart: widget.cart,
+            cashier: ref.read(authControllerProvider)!,
+            storeId: ref.read(storeScopeProvider)!,
+            split: plan.parts,
+          );
+      if (mounted) Navigator.pop(context, result);
+    } on CheckoutFailure catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   Future<void> _submit() async {
+    if (_split) return _submitSplit();
     final method = _method;
     if (_saving || method == null) return;
     // Tunai: kolom kosong + Enter = uang pas.
@@ -156,6 +277,18 @@ class _PaymentFormState extends ConsumerState<_PaymentForm> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                if (widget.cart.discount > 0) ...[
+                  _AmountRow(
+                    label: 'Subtotal',
+                    value: Fmt.rupiah(widget.cart.subtotal),
+                  ),
+                  _AmountRow(
+                    label: 'Voucher ${widget.cart.voucher!.code}',
+                    value: '− ${Fmt.rupiah(widget.cart.discount)}',
+                    color: c.success,
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                ],
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
@@ -199,18 +332,45 @@ class _PaymentFormState extends ConsumerState<_PaymentForm> {
                       for (final m in list)
                         _MethodChip(
                           method: m,
-                          selected: m.id == _method?.id,
-                          onTap: _saving ? null : () => _selectMethod(m),
+                          selected: _split
+                              ? _splitMethods.any((x) => x.id == m.id)
+                              : m.id == _method?.id,
+                          onTap: _saving
+                              ? null
+                              : () => _split
+                                    ? _toggleSplitMethod(m)
+                                    : _selectMethod(m),
                         ),
                     ],
                   ),
           ),
+          if (list.length >= 2) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: AppButton(
+                label: _split
+                    ? 'Bayar dengan satu metode'
+                    : 'Bayar terpisah (beberapa metode)',
+                icon: _split
+                    ? CupertinoIcons.minus_circle
+                    : CupertinoIcons.square_split_2x1,
+                variant: AppButtonVariant.plain,
+                size: AppButtonSize.small,
+                onPressed: _saving ? null : () => _toggleSplit(list),
+              ),
+            ),
+          ],
           const SizedBox(height: AppSpacing.lg),
           AnimatedSize(
             duration: AppDurations.medium,
             curve: SpringCurve.smooth,
             alignment: Alignment.topCenter,
-            child: _isCash ? _cashSection(c, tabular) : _nonCashSection(c),
+            child: _split
+                ? _splitSection(c, tabular)
+                : _isCash
+                ? _cashSection(c, tabular)
+                : _nonCashSection(c),
           ),
           if (_error != null) ...[
             const SizedBox(height: AppSpacing.md),
@@ -227,7 +387,7 @@ class _PaymentFormState extends ConsumerState<_PaymentForm> {
           ),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            _isCash
+            _isCash && !_split
                 ? 'Enter = selesaikan · kosong + Enter = uang pas · Esc = batal'
                 : 'Enter = selesaikan · Esc = batal',
             textAlign: TextAlign.center,
@@ -317,6 +477,148 @@ class _PaymentFormState extends ConsumerState<_PaymentForm> {
                   fontFeatures: tabular,
                 ),
               ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _splitSection(AppColors c, List<FontFeature> tabular) {
+    final plan = _splitPlan();
+    final fieldStyle = AppTypography.body.copyWith(
+      color: c.label,
+      fontFeatures: tabular,
+    );
+    final decoration = BoxDecoration(
+      color: c.fill,
+      borderRadius: AppRadius.mdAll,
+    );
+    const pad = EdgeInsets.symmetric(
+      horizontal: AppSpacing.md,
+      vertical: AppSpacing.sm + 2,
+    );
+    final Color tone;
+    final String label;
+    final int value;
+    if (plan.error == null) {
+      tone = c.success;
+      label = 'Kembalian';
+      value = plan.change;
+    } else if (plan.rest > 0) {
+      tone = c.danger;
+      label = 'Kurang';
+      value = plan.rest;
+    } else {
+      tone = c.warning;
+      label = plan.error!;
+      value = 0;
+    }
+    return Column(
+      key: const ValueKey('split'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _Label('Jumlah per metode (satu kolom kosong = sisa tagihan)'),
+        for (final m in _splitMethods) ...[
+          Row(
+            children: [
+              SizedBox(
+                width: 132,
+                child: Text(
+                  m.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.subheadline.copyWith(
+                    color: c.label,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: CupertinoTextField(
+                  key: ValueKey('split-amount-${m.id}'),
+                  controller: _amountOf(m),
+                  enabled: !_saving,
+                  placeholder: m.isCash ? 'Uang diterima' : 'Jumlah',
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [RupiahInputFormatter()],
+                  onChanged: (_) => setState(() => _error = null),
+                  onSubmitted: (_) => _submit(),
+                  style: fieldStyle,
+                  placeholderStyle: AppTypography.body.copyWith(
+                    color: c.labelTertiary,
+                  ),
+                  padding: pad,
+                  prefix: Padding(
+                    padding: const EdgeInsets.only(left: AppSpacing.md),
+                    child: Text(
+                      'Rp',
+                      style: AppTypography.body.copyWith(
+                        color: c.labelSecondary,
+                      ),
+                    ),
+                  ),
+                  decoration: decoration,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              AppButton(
+                key: ValueKey('split-rest-${m.id}'),
+                label: 'Sisa',
+                variant: AppButtonVariant.gray,
+                size: AppButtonSize.small,
+                onPressed: _saving ? null : () => _fillRest(m),
+              ),
+            ],
+          ),
+          if (!m.isCash) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Padding(
+              padding: const EdgeInsets.only(left: 132),
+              child: CupertinoTextField(
+                controller: _refOf(m),
+                enabled: !_saving,
+                placeholder: 'No. referensi ${m.name} (opsional)',
+                onSubmitted: (_) => _submit(),
+                style: AppTypography.subheadline.copyWith(color: c.label),
+                placeholderStyle: AppTypography.subheadline.copyWith(
+                  color: c.labelTertiary,
+                ),
+                padding: pad,
+                decoration: decoration,
+              ),
+            ),
+          ],
+          const SizedBox(height: AppSpacing.sm),
+        ],
+        if (_splitMethods.length < 2)
+          Text(
+            'Ketuk metode di atas untuk menambah bagian pembayaran.',
+            style: AppTypography.footnote.copyWith(color: c.labelSecondary),
+          ),
+        const SizedBox(height: AppSpacing.xs),
+        Container(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            color: tone.withValues(alpha: 0.1),
+            borderRadius: AppRadius.mdAll,
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: AppTypography.headline.copyWith(color: c.label),
+                ),
+              ),
+              if (plan.error == null || plan.rest > 0)
+                Text(
+                  Fmt.rupiah(value),
+                  style: AppTypography.title2.copyWith(
+                    color: tone,
+                    fontFeatures: tabular,
+                  ),
+                ),
             ],
           ),
         ),
@@ -545,8 +847,14 @@ class _SuccessViewState extends ConsumerState<_SuccessView> {
     }
   }
 
+  /// Cetak pertama selalu boleh; cetak ulang butuh hak "Cetak ulang struk".
+  bool get _canPrint =>
+      !_printedOnce ||
+      (ref.read(authControllerProvider)?.can(Permission.reprintReceipt) ??
+          false);
+
   Future<void> _printReceipt() async {
-    if (_print == _PrintState.working) return;
+    if (_print == _PrintState.working || !_canPrint) return;
     setState(() => _print = _PrintState.working);
     try {
       await ref
@@ -575,6 +883,10 @@ class _SuccessViewState extends ConsumerState<_SuccessView> {
     final c = context.colors;
     final result = widget.result;
     final hasChange = result.change > 0;
+    // Tukar barang: kredit nota retur ikut membayar; [money] = uang dari
+    // pelanggan.
+    final exchange = result.credit > 0;
+    final money = result.paid - result.credit;
     final printerReady =
         ref.watch(printerConfigProvider).value?.isReady ?? false;
     void close() => Navigator.pop(context);
@@ -614,7 +926,7 @@ class _SuccessViewState extends ConsumerState<_SuccessView> {
               ),
               const SizedBox(height: AppSpacing.sm),
               Text(
-                'Transaksi Berhasil',
+                exchange ? 'Tukar Berhasil' : 'Transaksi Berhasil',
                 style: AppTypography.title2.copyWith(color: c.label),
               ),
               Text(
@@ -625,13 +937,25 @@ class _SuccessViewState extends ConsumerState<_SuccessView> {
               ),
               const SizedBox(height: AppSpacing.xl),
               Text(
-                hasChange ? 'Kembalian' : 'Total dibayar',
+                hasChange
+                    ? (exchange && money == 0
+                          ? 'Kembalikan ke pelanggan'
+                          : 'Kembalian')
+                    : exchange
+                    ? 'Dibayar pelanggan'
+                    : 'Total dibayar',
                 style: AppTypography.subheadline.copyWith(
                   color: c.labelSecondary,
                 ),
               ),
               Text(
-                Fmt.rupiah(hasChange ? result.change : result.total),
+                Fmt.rupiah(
+                  hasChange
+                      ? result.change
+                      : exchange
+                      ? money
+                      : result.total,
+                ),
                 style: AppTypography.displayAmount.copyWith(
                   color: hasChange ? c.success : c.label,
                 ),
@@ -640,7 +964,8 @@ class _SuccessViewState extends ConsumerState<_SuccessView> {
               Text(
                 [
                   'Total ${Fmt.rupiah(result.total)}',
-                  if (hasChange) 'Dibayar ${Fmt.rupiah(result.paid)}',
+                  if (exchange) 'Kredit tukar −${Fmt.rupiah(result.credit)}',
+                  if (hasChange && money > 0) 'Dibayar ${Fmt.rupiah(money)}',
                 ].join(' · '),
                 textAlign: TextAlign.center,
                 style: AppTypography.footnote.copyWith(color: c.labelSecondary),
@@ -656,7 +981,7 @@ class _SuccessViewState extends ConsumerState<_SuccessView> {
                 expand: true,
                 onPressed: close,
               ),
-              if (printerReady) ...[
+              if (printerReady && _canPrint) ...[
                 const SizedBox(height: AppSpacing.xs),
                 AppButton(
                   label: _printedOnce
@@ -729,6 +1054,39 @@ class _PrintStatus extends StatelessWidget {
               style: AppTypography.footnote.copyWith(color: c.label),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Baris kecil "label ...... nilai" di ringkasan tagihan.
+class _AmountRow extends StatelessWidget {
+  const _AmountRow({required this.label, required this.value, this.color});
+
+  final String label;
+  final String value;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = AppTypography.subheadline.copyWith(
+      color: color ?? context.colors.labelSecondary,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: style,
+            ),
+          ),
+          Text(value, style: style),
         ],
       ),
     );

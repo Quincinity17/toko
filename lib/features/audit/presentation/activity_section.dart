@@ -8,7 +8,6 @@ import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/choice_chips.dart';
 import '../../../core/widgets/data_table_card.dart';
-import '../../../core/widgets/inset_grouped_list.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../reports/domain/report_models.dart';
 import '../../reports/presentation/report_sections.dart' show SectionTitle;
@@ -130,43 +129,6 @@ class _ActivitySectionState extends ConsumerState<ActivitySection> {
   Widget _attentionTable(List<AttentionSummary> list) {
     String count(AttentionSummary s, AuditType t) =>
         s.counts[t] == null ? '–' : Fmt.number(s.counts[t]!);
-    if (AppBreakpoints.isCompact(context)) {
-      // HP: daftar, satu baris per akun.
-      String part(AttentionSummary s, AuditType t, String label, [int? v]) {
-        final n = s.counts[t];
-        if (n == null) return '';
-        return '$label $n${v == null || v == 0 ? '' : ' (${Fmt.compact(v)})'}';
-      }
-
-      return InsetGroupedSection(
-        footer: list.isEmpty
-            ? 'Tidak ada tindakan yang perlu diperhatikan.'
-            : 'Bandingkan dengan uang di laci; kasir yang sering membatalkan '
-                  'transaksi perlu diperiksa.',
-        children: [
-          for (final s in list)
-            InsetGroupedTile(
-              title: s.userName,
-              below: Text(
-                [
-                  part(s, AuditType.cartCleared, 'Batal', s.cartClearedValue),
-                  part(s, AuditType.cartItemReduced, 'Kurangi'),
-                  part(s, AuditType.drawerOpened, 'Laci'),
-                  part(s, AuditType.heldCartDeleted, 'Tertahan dihapus'),
-                  part(s, AuditType.saleReturn, 'Retur', s.returnValue),
-                  part(s, AuditType.loginFailed, 'Login gagal'),
-                  part(s, AuditType.clockBack, 'Jam mundur'),
-                ].where((x) => x.isNotEmpty).join(' · '),
-                style: AppTypography.footnote.copyWith(
-                  color: context.colors.labelSecondary,
-                ),
-              ),
-              value: '${s.total}',
-            ),
-          if (list.isEmpty) const InsetGroupedTile(title: '–'),
-        ],
-      );
-    }
     return DataTableCard(
       columns: const [
         TableColumnSpec('Akun', flex: 2),
@@ -212,28 +174,8 @@ class _ActivitySectionState extends ConsumerState<ActivitySection> {
     final c = context.colors;
     final list = all.where(_filter.matches).toList();
     final time = DateFormat('d MMM HH:mm', 'id_ID');
-    if (AppBreakpoints.isCompact(context)) {
-      return InsetGroupedSection(
-        footer: list.isEmpty
-            ? 'Tidak ada catatan pada periode ini.'
-            : list.length > _listLimit
-            ? 'Menampilkan $_listLimit dari ${Fmt.number(list.length)} '
-                  'catatan terbaru.'
-            : null,
-        children: [
-          for (final e in list.take(_listLimit))
-            InsetGroupedTile(
-              title: e.type.label,
-              subtitle: '${time.format(e.at)} · ${e.userName ?? '–'}',
-              below: Text(
-                e.summary,
-                style: AppTypography.footnote.copyWith(color: c.label),
-              ),
-            ),
-          if (list.isEmpty) const InsetGroupedTile(title: '–'),
-        ],
-      );
-    }
+    // Ada catatan dari komputer cabang (sinkron): tampilkan kode terminal.
+    final terminals = {for (final e in all) ?e.terminalCode}.length > 1;
     return DataTableCard(
       columns: const [
         TableColumnSpec('Waktu', width: 110),
@@ -251,7 +193,12 @@ class _ActivitySectionState extends ConsumerState<ActivitySection> {
               bold: e.type.needsAttention,
               color: e.type.needsAttention ? c.warning : null,
             ),
-            CellText(e.userName ?? '–', muted: true),
+            CellText(
+              terminals && e.terminalCode != null
+                  ? '${e.userName ?? '–'} · ${e.terminalCode}'
+                  : e.userName ?? '–',
+              muted: true,
+            ),
             CellText(e.summary),
           ]),
       ],

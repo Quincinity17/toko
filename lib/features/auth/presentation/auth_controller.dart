@@ -30,7 +30,10 @@ class AuthController extends Notifier<AppUser?> {
   void refreshIfCurrent(AppUser updated) {
     final current = state;
     if (current != null && current.id == updated.id) {
-      state = updated.copyWith(lastLoginAt: current.lastLoginAt);
+      state = updated.copyWith(
+        lastLoginAt: current.lastLoginAt,
+        permissions: current.permissions,
+      );
     }
   }
 }

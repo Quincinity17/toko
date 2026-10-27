@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../../../features/products/domain/product.dart';
+import '../../../features/products/domain/product_pricing.dart';
 import '../../../features/products/domain/tag.dart';
 import '../app_database.dart';
 import '../tables/products.dart';
@@ -15,28 +16,54 @@ part 'products_dao.g.dart';
 /// `store_products`; [watchedTables] membuat stream ikut terbarui saat stok
 /// atau harga toko berubah.
 class _StoreCols {
-  _StoreCols(this.storeId, TableInfo sp, $ProductsTable products)
-    : stock = CustomExpression<double>(
-        storeId == null
-            ? '(SELECT COALESCE(SUM(sp.stock), 0) FROM store_products sp '
-                  'WHERE sp.product_id = products.id)'
-            : 'COALESCE((SELECT sp.stock FROM store_products sp '
-                  'WHERE sp.product_id = products.id '
-                  'AND sp.store_id = $storeId), 0)',
-        watchedTables: [sp],
-      ),
-      price = storeId == null
-          ? products.sellingPrice
-          : CustomExpression<int>(
-              'COALESCE((SELECT sp.selling_price FROM store_products sp '
-              'WHERE sp.product_id = products.id AND sp.store_id = $storeId), '
-              'products.selling_price)',
-              watchedTables: [sp],
-            );
+  _StoreCols(
+    this.storeId,
+    TableInfo sp,
+    $ProductsTable products, {
+    required TableInfo productUnits,
+    required TableInfo priceTiers,
+    required TableInfo storeUnitPrices,
+  }) : unitList = CustomExpression<String>(
+         // Satuan lain: `id␞nama␞isi␞barcode␞harga toko␞harga default`
+         // dipisah `␟`.
+         "(SELECT group_concat(pu.id || char(30) || pu.name || char(30) || "
+         "pu.factor || char(30) || COALESCE(pu.barcode, '') || char(30) || "
+         '${storeId == null ? 'pu.selling_price' : 'COALESCE((SELECT sup.selling_price FROM store_unit_prices sup WHERE sup.product_unit_id = pu.id AND sup.store_id = $storeId), pu.selling_price)'}'
+         ' || char(30) || pu.selling_price, char(31)) FROM product_units pu '
+         'WHERE pu.product_id = products.id)',
+         watchedTables: [productUnits, storeUnitPrices],
+       ),
+       // Harga grosir: `jumlah minimal␞harga`. Toko yang punya grosir
+       // sendiri memakai miliknya saja; lainnya grosir semua toko.
+       tierList = CustomExpression<String>(
+         '(SELECT group_concat(pt.min_qty || char(30) || pt.price, char(31)) '
+         'FROM price_tiers pt WHERE pt.product_id = products.id AND '
+         '${storeId == null ? 'pt.store_id IS NULL' : 'pt.store_id IS (CASE WHEN EXISTS (SELECT 1 FROM price_tiers x WHERE x.product_id = products.id AND x.store_id = $storeId) THEN $storeId END)'})',
+         watchedTables: [priceTiers],
+       ),
+       stock = CustomExpression<double>(
+         storeId == null
+             ? '(SELECT COALESCE(SUM(sp.stock), 0) FROM store_products sp '
+                   'WHERE sp.product_id = products.id)'
+             : 'COALESCE((SELECT sp.stock FROM store_products sp '
+                   'WHERE sp.product_id = products.id '
+                   'AND sp.store_id = $storeId), 0)',
+         watchedTables: [sp],
+       ),
+       price = storeId == null
+           ? products.sellingPrice
+           : CustomExpression<int>(
+               'COALESCE((SELECT sp.selling_price FROM store_products sp '
+               'WHERE sp.product_id = products.id AND sp.store_id = $storeId), '
+               'products.selling_price)',
+               watchedTables: [sp],
+             );
 
   final int? storeId;
   final Expression<double> stock;
   final Expression<int> price;
+  final Expression<String> unitList;
+  final Expression<String> tierList;
 }
 
 @DriftAccessor(
@@ -48,14 +75,23 @@ class _StoreCols {
     StoreProducts,
     Tags,
     ProductTags,
+    ProductUnits,
+    PriceTiers,
+    StoreUnitPrices,
   ],
 )
 class ProductsDao extends DatabaseAccessor<AppDatabase>
     with _$ProductsDaoMixin {
   ProductsDao(super.attachedDatabase);
 
-  _StoreCols _cols(int? storeId) =>
-      _StoreCols(storeId, storeProducts, products);
+  _StoreCols _cols(int? storeId) => _StoreCols(
+    storeId,
+    storeProducts,
+    products,
+    productUnits: productUnits,
+    priceTiers: priceTiers,
+    storeUnitPrices: storeUnitPrices,
+  );
 
   /// Tag barang dalam satu teks: `id␞nama␞warna` dipisah `␟` (karakter
   /// kontrol yang tidak mungkin ada di nama tag).
@@ -69,7 +105,45 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
   JoinedSelectStatement<HasResultSet, dynamic> _joined(_StoreCols cols) {
     return select(products)
         .join([leftOuterJoin(units, units.id.equalsExp(products.unitId))])
-      ..addColumns([cols.stock, cols.price, _tagList]);
+      ..addColumns([
+        cols.stock,
+        cols.price,
+        _tagList,
+        cols.unitList,
+        cols.tierList,
+      ]);
+  }
+
+  static List<ProductUnit> _parseUnits(String? raw) {
+    if (raw == null || raw.isEmpty) return const [];
+    return [
+      for (final item in raw.split('\u001f'))
+        if (item.split('\u001e') case [
+          final id,
+          final name,
+          final factor,
+          final barcode,
+          final price,
+          final defaultPrice,
+        ])
+          ProductUnit(
+            id: int.parse(id),
+            name: name,
+            factor: double.parse(factor),
+            barcode: barcode.isEmpty ? null : barcode,
+            price: int.parse(price),
+            defaultPrice: int.parse(defaultPrice),
+          ),
+    ]..sort((a, b) => a.factor.compareTo(b.factor));
+  }
+
+  static List<PriceTier> _parseTiers(String? raw) {
+    if (raw == null || raw.isEmpty) return const [];
+    return [
+      for (final item in raw.split('\u001f'))
+        if (item.split('\u001e') case [final min, final price])
+          PriceTier(minQty: double.parse(min), price: int.parse(price)),
+    ]..sort((a, b) => a.minQty.compareTo(b.minQty));
   }
 
   static List<Tag> _parseTags(String? raw) {
@@ -99,6 +173,8 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
       minStock: p.minStock,
       isActive: p.isActive,
       tags: _parseTags(r.read(_tagList)),
+      units: _parseUnits(r.read(cols.unitList)),
+      tiers: _parseTiers(r.read(cols.tierList)),
     );
   }
 
@@ -123,6 +199,153 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
       ..limit(1);
     final row = await query.getSingleOrNull();
     return row == null ? null : _read(row, cols);
+  }
+
+  /// Barang aktif yang punya satuan lain dengan barcode kemasan [value]:
+  /// `(barang, id satuan)`.
+  Future<(Product, int)?> findActiveByUnitBarcode(
+    String value, {
+    required int? storeId,
+  }) async {
+    final unit = await (select(
+      productUnits,
+    )..where((u) => u.barcode.equals(value.trim()))).getSingleOrNull();
+    if (unit == null) return null;
+    final product = await findById(unit.productId, storeId: storeId);
+    if (product == null || !product.isActive) return null;
+    return (product, unit.id);
+  }
+
+  /// Satuan lain mana pun dengan barcode kemasan [barcode].
+  Future<ProductUnitRow?> findUnitByBarcode(String barcode) => (select(
+    productUnits,
+  )..where((u) => u.barcode.equals(barcode.trim()))).getSingleOrNull();
+
+  /// Mengganti satuan lain & harga grosir barang [productId]. Satuan yang
+  /// sudah ada (id sama) diubah di tempat supaya id-nya tetap (keranjang &
+  /// transaksi tertahan menyimpan id satuan).
+  Future<void> setPricing(
+    int productId, {
+    List<ProductUnit>? unitList,
+    List<PriceTier>? tierList,
+  }) async {
+    if (unitList != null) {
+      final keep = {for (final u in unitList) ?u.id};
+      await (delete(
+        productUnits,
+      )..where((u) => u.productId.equals(productId) & u.id.isNotIn(keep))).go();
+      // Lepas barcode dulu supaya tukar barcode antar satuan tidak bentrok.
+      await (update(productUnits)..where((u) => u.productId.equals(productId)))
+          .write(const ProductUnitsCompanion(barcode: Value(null)));
+      for (final u in unitList) {
+        final data = ProductUnitsCompanion(
+          productId: Value(productId),
+          name: Value(PricingRules.unitName(u.name)),
+          factor: Value(u.factor),
+          barcode: Value(
+            (u.barcode?.trim().isEmpty ?? true) ? null : u.barcode!.trim(),
+          ),
+          sellingPrice: Value(u.price),
+        );
+        final id = u.id;
+        if (id == null) {
+          await into(productUnits).insert(data);
+        } else {
+          await (update(
+            productUnits,
+          )..where((t) => t.id.equals(id))).write(data);
+        }
+      }
+    }
+    if (tierList != null) {
+      await (delete(
+        priceTiers,
+      )..where((t) => t.productId.equals(productId) & t.storeId.isNull())).go();
+      for (final t in tierList) {
+        await into(priceTiers).insert(
+          PriceTiersCompanion.insert(
+            productId: productId,
+            minQty: t.minQty,
+            price: t.price,
+          ),
+        );
+      }
+    }
+    await attachedDatabase.sealsDao.resealPricing(productId);
+  }
+
+  /// Harga khusus toko satuan lain barang [productId]:
+  /// `(toko, nama satuan, harga)`.
+  Future<List<(int, String, int)>> storeUnitPricesOf(int productId) async {
+    final rows = await customSelect(
+      'SELECT sup.store_id, pu.name, sup.selling_price FROM store_unit_prices '
+      'sup JOIN product_units pu ON pu.id = sup.product_unit_id '
+      'WHERE pu.product_id = ?',
+      variables: [Variable.withInt(productId)],
+      readsFrom: {storeUnitPrices, productUnits},
+    ).get();
+    return [
+      for (final r in rows)
+        (
+          r.read<int>('store_id'),
+          r.read<String>('name'),
+          r.read<int>('selling_price'),
+        ),
+    ];
+  }
+
+  /// Grosir khusus toko barang [productId], urut jumlah minimal.
+  Future<List<PriceTierRow>> storeTiersOf(int productId) =>
+      (select(priceTiers)
+            ..where(
+              (t) => t.productId.equals(productId) & t.storeId.isNotNull(),
+            )
+            ..orderBy([(t) => OrderingTerm.asc(t.minQty)]))
+          .get();
+
+  /// Harga satuan [unitId] di toko [storeId]; `null` = harga satuan itu.
+  Future<void> setStoreUnitPrice(int storeId, int unitId, int? price) async {
+    if (price == null) {
+      await (delete(storeUnitPrices)..where(
+            (t) => t.storeId.equals(storeId) & t.productUnitId.equals(unitId),
+          ))
+          .go();
+      return;
+    }
+    await into(storeUnitPrices).insert(
+      StoreUnitPricesCompanion.insert(
+        storeId: storeId,
+        productUnitId: unitId,
+        sellingPrice: price,
+      ),
+      onConflict: DoUpdate(
+        (_) => StoreUnitPricesCompanion(sellingPrice: Value(price)),
+        target: [storeUnitPrices.storeId, storeUnitPrices.productUnitId],
+      ),
+    );
+  }
+
+  /// Mengganti grosir khusus toko [storeId]; kosong = ikut grosir semua
+  /// toko.
+  Future<void> setStoreTiers(
+    int productId,
+    int storeId,
+    List<PriceTier> tiers,
+  ) async {
+    await (delete(priceTiers)..where(
+          (t) => t.productId.equals(productId) & t.storeId.equals(storeId),
+        ))
+        .go();
+    for (final t in tiers) {
+      await into(priceTiers).insert(
+        PriceTiersCompanion.insert(
+          productId: productId,
+          minQty: t.minQty,
+          price: t.price,
+          storeId: Value(storeId),
+        ),
+      );
+    }
   }
 
   /// Pencarian per kata: setiap kata harus ada di nama, atau menjadi awalan
@@ -169,6 +392,28 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
       ..addColumns([products.code])
       ..orderBy([OrderingTerm.desc(products.id)]);
     return query.map((r) => r.read(products.code)!).get();
+  }
+
+  /// Kode barang yang punya kategori (tag) bernama [tagName] (tanpa peduli
+  /// huruf besar), terbaru dulu; seri barcode otomatis per kategori.
+  Future<List<String>> codesInTag(String tagName) async {
+    final rows = await customSelect(
+      'SELECT p.code FROM products p '
+      'JOIN product_tags pt ON pt.product_id = p.id '
+      'JOIN tags t ON t.id = pt.tag_id '
+      'WHERE lower(t.name) = lower(?) ORDER BY p.id DESC',
+      variables: [Variable.withString(tagName.trim())],
+      readsFrom: {products, productTags, tags},
+    ).get();
+    return [for (final r in rows) r.read<String>('code')];
+  }
+
+  /// Semua barcode kemasan (satuan lain); ikut dianggap terpakai.
+  Future<List<String>> unitBarcodes() async {
+    final query = selectOnly(productUnits)
+      ..addColumns([productUnits.barcode])
+      ..where(productUnits.barcode.isNotNull());
+    return query.map((r) => r.read(productUnits.barcode)!).get();
   }
 
   /// Barang berdasarkan id, mengikuti urutan [ids].
@@ -322,6 +567,8 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
     await (delete(stockMovements)..where((m) => m.productId.equals(id))).go();
     await (delete(storeProducts)..where((p) => p.productId.equals(id))).go();
     await (delete(productTags)..where((p) => p.productId.equals(id))).go();
+    await (delete(productUnits)..where((p) => p.productId.equals(id))).go();
+    await (delete(priceTiers)..where((p) => p.productId.equals(id))).go();
     await (delete(products)..where((p) => p.id.equals(id))).go();
   }
 

@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/daos/audit_dao.dart';
+import '../../../core/database/daos/role_permissions_dao.dart';
 import '../../../core/database/daos/seals_dao.dart';
+import '../../auth/domain/permission.dart';
 import '../../../core/utils/formatters.dart';
 import '../domain/audit_entry.dart';
 import '../domain/sale_digest.dart';
@@ -52,7 +54,8 @@ class IntegrityReport {
 ///    yang dihapus, diubah, atau disisipkan.
 /// 3. Nomor faktur terminal ini tanpa lubang.
 /// 4. Jam perangkat yang pernah dimundurkan ([AuditType.clockBack]).
-/// 5. Segel akun, barang (harga), dan stok/harga per toko (`SealsDao`).
+/// 5. Segel akun, barang (harga), stok/harga per toko, satuan lain & harga
+///    grosir (`SealsDao`).
 ///
 /// Dimulai dari titik jangkar terakhir: segel dibuat (v12/database baru)
 /// atau data dipulihkan (backup bisa dari perangkat lain, disegel ulang).
@@ -102,9 +105,45 @@ class IntegrityService {
     }
     final since = chain.isEmpty ? null : chain.first.createdAt;
 
-    // 2. Faktur vs catatan.
-    final logged = <String, ({String invoice, String digest})>{};
+    // 2. Faktur vs catatan. Faktur sebelum batas penghapusan riwayat lewat
+    // aplikasi (Pengaturan › Riwayat Penjualan) memang sudah tidak ada.
+    DateTime? purgedBefore;
+    for (final r in chain.where((r) => r.type == AuditType.salesPurged)) {
+      final d = AuditEntry(
+        id: r.id,
+        at: r.createdAt,
+        type: r.type,
+        summary: r.summary,
+        data: r.data,
+      ).details;
+      if (d['before'] case final int ms) {
+        final t = DateTime.fromMillisecondsSinceEpoch(ms);
+        if (purgedBefore == null || t.isAfter(purgedBefore)) purgedBefore = t;
+      }
+    }
+    final logged = <String, ({String invoice, String digest, DateTime at})>{};
     for (final r in chain) {
+      // Faktur dari komputer lain (sinkron): sidik jari dicatat saat
+      // diterima.
+      if (r.type == AuditType.syncReceived) {
+        final d = AuditEntry(
+          id: r.id,
+          at: r.createdAt,
+          type: r.type,
+          summary: r.summary,
+          data: r.data,
+        ).details;
+        for (final s in (d['sales'] as List? ?? const [])) {
+          if (s case {'uuid': final String uuid}) {
+            logged[uuid] = (
+              invoice: '${s['invoice']}',
+              digest: '${s['digest']}',
+              at: r.createdAt,
+            );
+          }
+        }
+        continue;
+      }
       if (r.type != AuditType.sale && r.type != AuditType.saleReturn) continue;
       final d = AuditEntry(
         id: r.id,
@@ -114,7 +153,11 @@ class IntegrityService {
         data: r.data,
       ).details;
       if (d['uuid'] case final String uuid) {
-        logged[uuid] = (invoice: '${d['invoice']}', digest: '${d['digest']}');
+        logged[uuid] = (
+          invoice: '${d['invoice']}',
+          digest: '${d['digest']}',
+          at: r.createdAt,
+        );
       }
     }
     final sales = since == null
@@ -170,7 +213,9 @@ class IntegrityService {
     }
     var deleted = 0;
     for (final MapEntry(key: uuid, value: e) in logged.entries) {
-      if (!salesByUuid.containsKey(uuid) && deleted++ < _maxPerKind) {
+      if (salesByUuid.containsKey(uuid)) continue;
+      if (purgedBefore != null && e.at.isBefore(purgedBefore)) continue;
+      if (deleted++ < _maxPerKind) {
         issues.add(
           IntegrityIssue(
             IntegritySeverity.danger,
@@ -189,6 +234,18 @@ class IntegrityService {
       byPrefix.putIfAbsent(m[1]!, () => []).add(int.parse(m[2]!));
     }
     for (final MapEntry(key: prefix, value: numbers) in byPrefix.entries) {
+      // Hari sebelum batas penghapusan riwayat: sebagian faktur sengaja
+      // dihapus (yang punya retur setelah batas tetap disimpan).
+      final day = RegExp(r'-(\d{4})(\d{2})(\d{2})-$').firstMatch(prefix);
+      if (purgedBefore != null &&
+          day != null &&
+          DateTime(
+            int.parse(day[1]!),
+            int.parse(day[2]!),
+            int.parse(day[3]!),
+          ).isBefore(purgedBefore)) {
+        continue;
+      }
       numbers.sort();
       final missing = [
         for (var n = numbers.first; n <= numbers.last; n++)
@@ -266,12 +323,97 @@ class IntegrityService {
       }
     }
 
+    final units = await _db.select(_db.productUnits).get();
+    final tiers = await _db.select(_db.priceTiers).get();
+    final storeUnitPrices = await _db.select(_db.storeUnitPrices).get();
+    final unitProduct = {for (final u in units) u.id: u.productId};
+    var badPricing = 0;
+    for (final (code, ok) in [
+      for (final r in units)
+        (
+          codes[r.productId],
+          sealer.verify(r.seal, SealsDao.productUnitFields(r)),
+        ),
+      for (final r in tiers)
+        (
+          codes[r.productId],
+          sealer.verify(r.seal, SealsDao.priceTierFields(r)),
+        ),
+      for (final r in storeUnitPrices)
+        (
+          codes[unitProduct[r.productUnitId]],
+          sealer.verify(r.seal, SealsDao.storeUnitPriceFields(r)),
+        ),
+    ]) {
+      if (!ok && badPricing++ < _maxPerKind) {
+        issues.add(
+          IntegrityIssue(
+            IntegritySeverity.danger,
+            'Satuan/harga grosir ${code ?? 'barang'} diubah di luar aplikasi',
+            'Isi satuan, harga satuan lain, atau harga grosir diubah tanpa '
+                'lewat Produk.',
+          ),
+        );
+      }
+    }
+
+    // 6. Catatan aktivitas komputer cabang (komputer master): setiap
+    // catatan harus menyambung ke catatan sebelumnya dari komputer yang
+    // sama. Catatan yang dihapus di cabang memutus rantai.
+    final remote =
+        await (_db.select(_db.remoteAuditLog)..orderBy([
+              (t) => OrderingTerm.asc(t.origin),
+              (t) => OrderingTerm.asc(t.remoteId),
+            ]))
+            .get();
+    var breaks = 0;
+    for (var i = 1; i < remote.length; i++) {
+      final prev = remote[i - 1];
+      final r = remote[i];
+      if (r.origin != prev.origin) continue;
+      if (r.prevHash != prev.hash && breaks++ < _maxPerKind) {
+        issues.add(
+          IntegrityIssue(
+            IntegritySeverity.danger,
+            'Catatan aktivitas komputer ${r.terminalCode ?? '?'} terputus',
+            'Ada catatan yang hilang/diubah di komputer itu sebelum '
+                '${Fmt.dateTime(r.createdAt)} (sebelum: '
+                '"${prev.summary}"). Periksa komputer tersebut.',
+          ),
+        );
+      }
+    }
+
+    final permissions = await _db.rolePermissionsDao.all();
+    var badPermissions = 0;
+    for (final r in permissions) {
+      if (!sealer.verify(r.seal, RolePermissionsDao.fields(r)) &&
+          badPermissions++ < _maxPerKind) {
+        issues.add(
+          IntegrityIssue(
+            IntegritySeverity.danger,
+            'Hak akses ${r.role.label} diubah di luar aplikasi',
+            'Hak "${Permission.byName(r.permission)?.label ?? r.permission}" '
+                'ditambahkan tanpa lewat Hak Akses Peran, jadi diabaikan '
+                'aplikasi. Atur ulang di Pengaturan › Hak Akses Peran.',
+          ),
+        );
+      }
+    }
+
     return IntegrityReport(
       checkedAt: _clock(),
       issues: issues,
       auditRows: chain.length,
       sales: sales.length,
-      sealedRows: users.length + products.length + storeProducts.length,
+      sealedRows:
+          users.length +
+          products.length +
+          storeProducts.length +
+          units.length +
+          tiers.length +
+          storeUnitPrices.length +
+          permissions.length,
       since: since,
     );
   }

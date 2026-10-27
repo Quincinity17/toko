@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -24,7 +25,9 @@ import '../domain/bulk_entry.dart';
 import '../domain/code_sequence.dart';
 import '../domain/price_markup.dart';
 import '../domain/product_import.dart';
+import '../domain/tag.dart';
 import 'similar_names_dialog.dart';
+import 'tag_picker.dart';
 
 /// Lebar kolom; `null` = mengisi sisa ruang (nama barang).
 const _widths = <BulkColumn, double?>{
@@ -66,6 +69,10 @@ class _Row {
 
   /// Harga jual terakhir dihitung dari Untung % (ikut harga beli).
   bool markupDriven = false;
+
+  /// Barcode yang diisi otomatis; selama belum diubah, ikut dihitung ulang
+  /// saat kategori baris diganti.
+  String? autoCode;
   List<String> errors = const [];
 
   /// Peringatan nama mirip (oranye); tidak menghalangi simpan.
@@ -263,8 +270,8 @@ class _ProductBulkEntryPageState extends ConsumerState<ProductBulkEntryPage> {
     }
   }
 
-  /// Mengisi barcode kosong pada baris yang sudah terisi, melanjutkan
-  /// barcode terakhir (+1), lihat [CodeSequence].
+  /// Mengisi barcode kosong pada baris yang sudah terisi: seri mengikuti
+  /// kategori baris (nomor terlewat diisi dulu), lihat [CodeSequence].
   Future<void> _autoCodes() async {
     final targets = [
       for (final r in _rows)
@@ -280,16 +287,52 @@ class _ProductBulkEntryPageState extends ConsumerState<ProductBulkEntryPage> {
       );
       return;
     }
-    final taken = [
+    await _fillCodes(targets);
+  }
+
+  /// Mengisi barcode [targets] (yang masih kosong) mengikuti seri kategori
+  /// tiap baris. [silent]: tanpa pesan bila belum ada barcode bernomor.
+  Future<void> _fillCodes(List<_Row> targets, {bool silent = false}) async {
+    final repo = ref.read(productRepositoryProvider);
+    List<String> categoriesOf(_Row r) =>
+        TagRules.split(r.text[BulkColumn.category]!.text);
+    // Barcode di tabel (bawah dulu = terbaru) + barang tersimpan.
+    final tableCodes = <(String, List<String>)>[
       for (final r in _rows.reversed)
         if (r.text[BulkColumn.code]!.text.trim() case final c when c.isNotEmpty)
-          c,
-      ...await ref.read(productRepositoryProvider).codesNewestFirst(),
+          (c, [for (final t in categoriesOf(r)) t.toLowerCase()]),
     ];
+    final saved = await repo.codesNewestFirst();
+    final unitCodes = await repo.unitBarcodes();
+    final byCategory = await repo.codesByCategory(targets.expand(categoriesOf));
     if (!mounted) return;
     for (final row in targets) {
-      final next = CodeSequence.next(taken);
+      // Seri mengikuti kategori pertama baris yang sudah punya nomor.
+      CodeSuggestion? next;
+      for (final category in categoriesOf(row)) {
+        final key = category.toLowerCase();
+        next = CodeSequence.next(
+          saved,
+          series: [
+            for (final (c, cats) in tableCodes)
+              if (cats.contains(key)) c,
+            ...?byCategory[key]?.codes,
+          ],
+          fixedPrefix: byCategory[key]?.prefix,
+          minWidth: byCategory[key]?.digits,
+          category: category,
+          alsoTaken: [for (final (c, _) in tableCodes) c, ...unitCodes],
+        );
+        if (next?.category != null) break;
+      }
+      if (next?.category == null) {
+        next = CodeSequence.next([
+          for (final (c, _) in tableCodes) c,
+          ...saved,
+        ], alsoTaken: unitCodes);
+      }
       if (next == null) {
+        if (silent) return;
         await AppDialogs.alert(
           context,
           title: 'Belum ada barcode bernomor',
@@ -300,7 +343,11 @@ class _ProductBulkEntryPageState extends ConsumerState<ProductBulkEntryPage> {
         return;
       }
       row.text[BulkColumn.code]!.text = next.next;
-      taken.insert(0, next.next);
+      row.autoCode = next.next;
+      tableCodes.insert(0, (
+        next.next,
+        [for (final t in categoriesOf(row)) t.toLowerCase()],
+      ));
     }
     setState(() {
       for (final r in targets) {
@@ -709,13 +756,86 @@ class _ProductBulkEntryPageState extends ConsumerState<ProductBulkEntryPage> {
     );
   }
 
+  /// Kolom Kategori = pilihan (seperti dropdown): barcode otomatis
+  /// mengikuti kategori, jadi kategori dipilih dari daftar (atau dibuat
+  /// baru di pemilih), bukan diketik bebas.
+  Future<void> _pickCategory(_Row row) async {
+    final ctl = row.text[BulkColumn.category]!;
+    final picked = await showTagPicker(
+      context,
+      selected: TagRules.split(ctl.text),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      ctl.text = picked.join(', ');
+      row.errors = const [];
+    });
+    // Barcode kosong / masih otomatis: dihitung ulang sesuai kategori baru.
+    final code = row.text[BulkColumn.code]!;
+    if (code.text.trim().isEmpty || code.text == row.autoCode) {
+      code.clear();
+      await _fillCodes([row], silent: true);
+      if (mounted) setState(() {});
+    }
+    row.focus[BulkColumn.category]!.requestFocus();
+  }
+
+  Widget _categoryCell(AppColors c, _Row row) {
+    final text = row.text[BulkColumn.category]!.text;
+    return Focus(
+      focusNode: row.focus[BulkColumn.category],
+      onKeyEvent: (_, event) {
+        if (event is KeyDownEvent &&
+            (event.logicalKey == LogicalKeyboardKey.enter ||
+                event.logicalKey == LogicalKeyboardKey.space)) {
+          _pickCategory(row);
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: ListenableBuilder(
+        listenable: row.focus[BulkColumn.category]!,
+        builder: (context, _) => PressableScale(
+          key: ValueKey('bulk-category-${_rows.indexOf(row)}'),
+          onPressed: () => _pickCategory(row),
+          pressedScale: 1,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+            color: row.focus[BulkColumn.category]!.hasFocus
+                ? c.accentTint
+                : null,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    text.isEmpty ? 'Pilih' : text,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.subheadline.copyWith(
+                      color: text.isEmpty ? c.labelTertiary : c.label,
+                    ),
+                  ),
+                ),
+                Icon(
+                  CupertinoIcons.chevron_down,
+                  size: 12,
+                  color: c.labelTertiary,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _input(AppColors c, _Row row, BulkColumn col) {
+    if (col == BulkColumn.category) return _categoryCell(c, row);
     return CupertinoTextField(
       controller: row.text[col],
       focusNode: row.focus[col],
       placeholder: switch (col) {
         BulkColumn.unit => BulkEntry.defaultUnit,
-        BulkColumn.category => 'A, B',
         _ => null,
       },
       placeholderStyle: AppTypography.subheadline.copyWith(

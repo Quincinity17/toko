@@ -46,6 +46,40 @@ void main() {
     await unmount(tester);
   });
 
+  testWidgets('tombol scan kamera di kasir, form barang, dan pencarian', (
+    tester,
+  ) async {
+    await pumpApp(tester, size: const Size(390, 844));
+    await login(tester, 'admin', 'admin123');
+    await tester.tap(find.byTooltip('Menu'));
+    await settle(tester);
+    await tester.tap(find.text('Kasir'));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await settle(tester);
+    expect(find.byTooltip('Scan dengan kamera'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Menu'));
+    await settle(tester);
+    await tester.tap(find.text('Produk'));
+    await settle(tester);
+    expect(find.byTooltip('Scan dengan kamera'), findsOneWidget); // pencarian
+    await tester.tap(find.text('Tambah'));
+    await settle(tester);
+    // Pencarian (di belakang) + Barcode + Barcode bawaan.
+    expect(find.byTooltip('Scan dengan kamera'), findsNWidgets(3));
+    await unmount(tester);
+  });
+
+  testWidgets('komputer: tanpa tombol kamera', (tester) async {
+    Device.debugAndroidOverride = false;
+    await pumpApp(tester);
+    await login(tester, 'kasir', 'kasir123');
+    expect(find.byTooltip('Scan dengan kamera'), findsNothing);
+    await unmount(tester);
+  });
+
   testWidgets('backup: Simpan Salinan menggantikan Buka Folder', (
     tester,
   ) async {

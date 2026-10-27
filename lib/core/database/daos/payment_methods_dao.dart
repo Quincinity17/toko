@@ -63,6 +63,11 @@ class PaymentMethodsDao extends DatabaseAccessor<AppDatabase>
               ..addColumns([count])
               ..where(sales.paymentMethodId.equals(id)))
             .getSingle();
-    return row.read(count) ?? 0;
+    // Bagian split payment (metode kedua dst. tidak ada di sales).
+    final split = await customSelect(
+      'SELECT COUNT(*) AS n FROM sale_payments WHERE payment_method_id = ?',
+      variables: [Variable.withInt(id)],
+    ).getSingle();
+    return (row.read(count) ?? 0) + split.read<int>('n');
   }
 }

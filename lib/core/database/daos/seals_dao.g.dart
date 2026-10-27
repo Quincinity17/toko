@@ -10,6 +10,10 @@ mixin _$SealsDaoMixin on DatabaseAccessor<AppDatabase> {
   $UnitsTable get units => attachedDatabase.units;
   $ProductsTable get products => attachedDatabase.products;
   $StoreProductsTable get storeProducts => attachedDatabase.storeProducts;
+  $RolePermissionsTable get rolePermissions => attachedDatabase.rolePermissions;
+  $ProductUnitsTable get productUnits => attachedDatabase.productUnits;
+  $PriceTiersTable get priceTiers => attachedDatabase.priceTiers;
+  $StoreUnitPricesTable get storeUnitPrices => attachedDatabase.storeUnitPrices;
   SealsDaoManager get managers => SealsDaoManager(this);
 }
 
@@ -28,4 +32,18 @@ class SealsDaoManager {
       $$ProductsTableTableManager(_db.attachedDatabase, _db.products);
   $$StoreProductsTableTableManager get storeProducts =>
       $$StoreProductsTableTableManager(_db.attachedDatabase, _db.storeProducts);
+  $$RolePermissionsTableTableManager get rolePermissions =>
+      $$RolePermissionsTableTableManager(
+        _db.attachedDatabase,
+        _db.rolePermissions,
+      );
+  $$ProductUnitsTableTableManager get productUnits =>
+      $$ProductUnitsTableTableManager(_db.attachedDatabase, _db.productUnits);
+  $$PriceTiersTableTableManager get priceTiers =>
+      $$PriceTiersTableTableManager(_db.attachedDatabase, _db.priceTiers);
+  $$StoreUnitPricesTableTableManager get storeUnitPrices =>
+      $$StoreUnitPricesTableTableManager(
+        _db.attachedDatabase,
+        _db.storeUnitPrices,
+      );
 }

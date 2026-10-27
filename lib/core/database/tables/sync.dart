@@ -1,5 +1,7 @@
 import 'package:drift/drift.dart';
 
+import '../../../sync_protocol/sync_protocol.dart';
+
 /// Pengaturan key-value milik komputer ini (identitas terminal, status
 /// sinkron, dll.). Tidak ikut disinkron.
 @DataClassName('SettingRow')
@@ -14,7 +16,8 @@ class AppSettings extends Table {
   Set<Column> get primaryKey => {key};
 }
 
-enum OutboxEntity { sale }
+/// Jenis data di antrian kirim = jenis data sinkron.
+typedef OutboxEntity = SyncEntity;
 
 /// Antrian data yang harus dikirim ke server. Diisi di dalam transaksi yang
 /// sama dengan datanya (mis. checkout), lalu dikirim oleh mesin sinkron saat

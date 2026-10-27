@@ -13,6 +13,8 @@ class HeldItem {
     required this.code,
     required this.name,
     required this.qty,
+    this.unitId,
+    this.unitName,
   });
 
   final int productId;
@@ -20,11 +22,17 @@ class HeldItem {
   final String name;
   final double qty;
 
+  /// Satuan lain (multi-satuan); `null` = satuan dasar.
+  final int? unitId;
+  final String? unitName;
+
   Map<String, Object> toJson() => {
     'id': productId,
     'code': code,
     'name': name,
     'qty': qty,
+    'unit': ?unitId,
+    'unitName': ?unitName,
   };
 
   factory HeldItem.fromJson(Map<String, dynamic> json) => HeldItem(
@@ -32,6 +40,8 @@ class HeldItem {
     code: json['code'] as String,
     name: json['name'] as String,
     qty: (json['qty'] as num).toDouble(),
+    unitId: json['unit'] as int?,
+    unitName: json['unitName'] as String?,
   );
 
   static String encodeCart(Cart cart) => jsonEncode([
@@ -41,6 +51,8 @@ class HeldItem {
         code: l.product.code,
         name: l.product.name,
         qty: l.qty,
+        unitId: l.unit?.id,
+        unitName: l.unit?.name,
       ).toJson(),
   ]);
 

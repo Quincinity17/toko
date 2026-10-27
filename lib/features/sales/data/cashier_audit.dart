@@ -69,6 +69,21 @@ class CashierAudit {
     );
   }
 
+  /// Satuan baris diganti ke satuan yang lebih kecil (nilai berkurang).
+  Future<void> unitChanged(CartLine line, String toUnit) => _record(
+    AuditType.cartItemReduced,
+    '${line.product.name}: ${Fmt.number(line.qty)} ${line.unitName ?? ''} → '
+    '${Fmt.number(line.qty)} $toUnit',
+    {
+      'code': line.product.code,
+      'name': line.product.name,
+      'from': line.qty,
+      'to': line.qty,
+      'fromUnit': line.unitName,
+      'toUnit': toUnit,
+    },
+  );
+
   Future<void> heldCartDeleted({
     required String? note,
     required int itemCount,

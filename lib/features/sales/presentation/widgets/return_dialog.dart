@@ -11,15 +11,16 @@ import '../../../../core/widgets/state_views.dart';
 import '../../../auth/presentation/auth_controller.dart';
 import '../../../receipt/data/printer_failure.dart';
 import '../../../receipt/data/receipt_printer.dart';
-import '../../../receipt/data/receipt_settings_repository.dart';
 import '../../data/return_service.dart';
 import '../../domain/sale.dart';
 import '../../domain/sale_return.dart';
+import 'exchange_dialog.dart';
 
 /// Popup retur sebagian / batal seluruh faktur [sale]. Mengembalikan nota
-/// retur yang tersimpan, atau `null` bila dibatalkan.
-Future<ReturnResult?> showReturnDialog(BuildContext context, SaleSummary sale) {
-  return AppDialogs.popup<ReturnResult>(
+/// retur yang tersimpan ([ReturnResult]), permintaan tukar barang
+/// ([ExchangeRequest], belum tersimpan), atau `null` bila dibatalkan.
+Future<Object?> showReturnDialog(BuildContext context, SaleSummary sale) {
+  return AppDialogs.popup<Object>(
     context,
     title: 'Retur ${sale.invoiceNo}',
     maxWidth: 600,
@@ -102,22 +103,55 @@ class _ReturnFormState extends ConsumerState<_ReturnForm> {
             qtys: _qtys,
             reason: _reason.text,
           );
-      // Uang tunai dikembalikan dari laci (bila printer & laci diatur).
-      if (result.isCash) {
-        final config = await ref.read(printerConfigProvider.future);
-        if (config.isReady && config.openDrawer) {
-          try {
-            await ref.read(receiptPrinterProvider).openDrawer();
-          } on PrinterFailure {
-            // Retur tetap tersimpan; laci bisa dibuka manual (F6).
-          }
-        }
+      // Struk nota retur dicetak (bila cetak otomatis) dan laci dibuka untuk
+      // uang tunai yang dikembalikan (bila diatur).
+      try {
+        await ref
+            .read(receiptPrinterProvider)
+            .afterCheckout(result.saleId, isCash: result.isCash);
+      } on PrinterFailure {
+        // Retur tetap tersimpan; struk bisa dicetak dari rincian nota retur,
+        // laci bisa dibuka manual (F6).
       }
       if (mounted) Navigator.pop(context, result);
     } on ReturnFailure catch (e) {
       if (mounted) setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  /// Lanjut ke tukar barang: pilihan & alasan diperiksa dulu, lalu popup
+  /// ini ditutup dengan [ExchangeRequest] (belum ada yang tersimpan).
+  Future<void> _toExchange(ReturnableSale sale) async {
+    setState(() => _error = null);
+    try {
+      final credit = await ref
+          .read(returnServiceProvider)
+          .check(
+            actor: ref.read(authControllerProvider)!,
+            saleId: sale.saleId,
+            qtys: _qtys,
+            reason: _reason.text,
+          );
+      if (sale.storeId == null) {
+        throw const ReturnFailure('Faktur ini tidak punya toko.');
+      }
+      if (!mounted) return;
+      Navigator.pop(
+        context,
+        ExchangeRequest(
+          saleId: sale.saleId,
+          invoiceNo: sale.invoiceNo,
+          storeId: sale.storeId!,
+          qtys: _qtys,
+          reason: _reason.text.trim(),
+          credit: credit,
+          itemCount: _qtys.values.where((q) => q > 0).length,
+        ),
+      );
+    } on ReturnFailure catch (e) {
+      if (mounted) setState(() => _error = e.message);
     }
   }
 
@@ -160,7 +194,7 @@ class _ReturnFormState extends ConsumerState<_ReturnForm> {
       children: [
         Text(
           discounted
-              ? 'Faktur lama dengan potongan hanya bisa dibatalkan seluruhnya.'
+              ? 'Faktur dengan voucher/potongan hanya bisa dibatalkan seluruhnya.'
               : 'Isi jumlah barang yang dikembalikan pelanggan. Stok barang '
                     'kembali, dan uang dikembalikan lewat ${sale.paymentMethod}.',
           style: muted,
@@ -218,6 +252,14 @@ class _ReturnFormState extends ConsumerState<_ReturnForm> {
           ErrorBanner(message: _error!),
         ],
         const SizedBox(height: AppSpacing.lg),
+        AppButton(
+          label: 'Tukar dengan Barang Lain',
+          icon: CupertinoIcons.arrow_2_squarepath,
+          variant: AppButtonVariant.tinted,
+          expand: true,
+          onPressed: anyPicked && !_saving ? () => _toExchange(sale) : null,
+        ),
+        const SizedBox(height: AppSpacing.xs),
         Row(
           children: [
             Expanded(

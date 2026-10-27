@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/presentation/auth_controller.dart';
 import '../../features/auth/presentation/login_page.dart';
 import '../../features/dashboard/presentation/dashboard_page.dart';
+import '../../features/labels/presentation/label_print_page.dart';
 import '../../features/payments/presentation/payment_methods_page.dart';
 import '../../features/products/presentation/product_bulk_entry_page.dart';
 import '../../features/products/presentation/product_import_page.dart';
@@ -14,9 +15,11 @@ import '../../features/receipt/presentation/receipt_settings_page.dart';
 import '../../features/reports/presentation/reports_page.dart';
 import '../../features/sales/presentation/pos_page.dart';
 import '../../features/settings/presentation/accounts/accounts_page.dart';
+import '../../features/settings/presentation/accounts/role_permissions_page.dart';
 import '../../features/settings/presentation/settings_page.dart';
 import '../../features/stock/presentation/stock_page.dart';
 import '../../features/stores/presentation/stores_page.dart';
+import '../../features/vouchers/presentation/vouchers_page.dart';
 import '../theme/app_theme.dart';
 import 'app_shell.dart';
 import 'routes.dart';
@@ -36,7 +39,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final atLogin = path == AppRoutes.login;
 
       if (user == null) return atLogin ? null : AppRoutes.login;
-      if (atLogin || !user.role.canAccess(path)) return user.role.homePath;
+      if (atLogin || !user.canAccess(path)) return user.role.homePath;
       return null;
     },
     routes: [
@@ -57,6 +60,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             routes: [
               _page('import', const ProductImportPage()),
               _page('tabel', const ProductBulkEntryPage()),
+              _page('label', const LabelPrintPage()),
             ],
           ),
           _page(AppRoutes.stok, const StockPage()),
@@ -66,7 +70,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             const SettingsPage(),
             routes: [
               _page('akun', const AccountsPage()),
+              _page('hak-akses', const RolePermissionsPage()),
               _page('pembayaran', const PaymentMethodsPage()),
+              _page('voucher', const VouchersPage()),
               _page('toko', const StoresPage()),
               _page('struk', const ReceiptSettingsPage()),
               _page('kategori', const TagsPage()),

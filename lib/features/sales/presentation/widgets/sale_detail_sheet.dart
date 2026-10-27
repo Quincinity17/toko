@@ -7,6 +7,7 @@ import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_dialogs.dart';
 import '../../../../core/widgets/state_views.dart';
 import '../../../auth/presentation/auth_controller.dart';
+import '../../../auth/domain/permission.dart';
 import '../../../receipt/data/printer_failure.dart';
 import '../../../receipt/data/receipt_printer.dart';
 import '../../../receipt/data/receipt_settings_repository.dart';
@@ -14,6 +15,8 @@ import '../../data/return_service.dart';
 import '../../data/sales_repository.dart';
 import '../../domain/sale.dart';
 import 'return_dialog.dart';
+import 'payment_dialog.dart';
+import 'exchange_dialog.dart';
 
 /// Rincian satu faktur: barang, potongan, pembayaran, retur.
 Future<void> showSaleDetailSheet(BuildContext context, SaleSummary sale) {
@@ -24,6 +27,11 @@ Future<void> showSaleDetailSheet(BuildContext context, SaleSummary sale) {
     builder: (_) => _SaleDetail(sale: sale),
   );
 }
+
+final _exchangeInfoProvider = FutureProvider.autoDispose.family(
+  (ref, int returnId) =>
+      ref.watch(salesRepositoryProvider).exchangeInfo(returnId),
+);
 
 final _saleLinesProvider = FutureProvider.autoDispose
     .family<List<SaleLine>, int>(
@@ -109,7 +117,8 @@ class _SaleDetail extends ConsumerWidget {
                                   ),
                                 ),
                                 Text(
-                                  '${Fmt.number(l.qty)} ${l.unitName ?? ''} × '
+                                  '${Fmt.number(l.qty)} ${l.unitName ?? ''}'
+                                  '${l.unitFactor == 1 ? '' : ' (isi ${Fmt.number(l.unitFactor)})'} × '
                                   '${Fmt.rupiah(l.price)}'
                                   '${l.discountPercent > 0 ? ' · pot. ${Fmt.number(l.discountPercent)}%' : ''}',
                                   style: AppTypography.footnote.copyWith(
@@ -132,7 +141,9 @@ class _SaleDetail extends ConsumerWidget {
           row('Subtotal', Fmt.rupiah(sale.subtotal)),
           if (sale.discount > 0)
             row(
-              sale.discountPercent == null
+              sale.voucherCode != null
+                  ? 'Voucher ${sale.voucherCode}'
+                  : sale.discountPercent == null
                   ? 'Potongan'
                   : 'Potongan (${Fmt.number(sale.discountPercent!)}%)',
               '− ${Fmt.rupiah(sale.discount)}',
@@ -149,9 +160,40 @@ class _SaleDetail extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
             child: Container(height: 0.5, color: c.separator),
           ),
-          if (sale.isReturn)
+          if (sale.isReturn && sale.isSplit)
+            for (final p in sale.payments)
+              row('Dikembalikan (${p.name})', Fmt.rupiah(-p.amount))
+          else if (sale.isReturn)
             row('Dikembalikan (${sale.paymentMethod})', Fmt.rupiah(-sale.total))
-          else ...[
+          else if (sale.isSplit) ...[
+            // Bayar terpisah: tunai = uang diterima, kembalian di bawah.
+            for (final p in sale.payments) ...[
+              // Uang dari pelanggan (tukar barang: tanpa kredit).
+              row('Dibayar (${p.name})', Fmt.rupiah(p.tendered ?? p.amount)),
+              if (p.ref != null) row('No. referensi ${p.name}', p.ref!),
+            ],
+            if (sale.change > 0) row('Kembalian', Fmt.rupiah(sale.change)),
+            if (sale.returnedAmount > 0)
+              row('Sudah diretur', '− ${Fmt.rupiah(sale.returnedAmount)}'),
+          ] else if (sale.exchangeOfId case final retId?) ...[
+            // Tukar barang: kredit dari nota retur + uang dari pelanggan.
+            if (ref.watch(_exchangeInfoProvider(retId)).value
+                case final info?) ...[
+              row(
+                'Kredit tukar ${info.returnNo}'
+                    '${info.originalNo == null ? '' : ' (${info.originalNo})'}',
+                '− ${Fmt.rupiah(info.credit)}',
+              ),
+              row(
+                'Dibayar (${sale.paymentMethod})',
+                Fmt.rupiah(sale.paid - info.credit),
+              ),
+            ],
+            if (sale.paymentRef != null) row('No. referensi', sale.paymentRef!),
+            if (sale.change > 0) row('Kembalian', Fmt.rupiah(sale.change)),
+            if (sale.returnedAmount > 0)
+              row('Sudah diretur', '− ${Fmt.rupiah(sale.returnedAmount)}'),
+          ] else ...[
             row('Dibayar (${sale.paymentMethod})', Fmt.rupiah(sale.paid)),
             if (sale.paymentRef != null) row('No. referensi', sale.paymentRef!),
             if (sale.change > 0) row('Kembalian', Fmt.rupiah(sale.change)),
@@ -174,11 +216,13 @@ class _SaleDetail extends ConsumerWidget {
               onPressed: () => _return(context, sale),
             ),
           ],
-          // Nota retur tidak dicetak ulang sebagai struk penjualan.
-          if (!sale.isReturn &&
+          if ((ref
+                      .watch(authControllerProvider)
+                      ?.can(Permission.reprintReceipt) ??
+                  false) &&
               (ref.watch(printerConfigProvider).value?.isReady ?? false)) ...[
             const SizedBox(height: AppSpacing.sm),
-            _ReprintButton(saleId: sale.id),
+            _ReprintButton(saleId: sale.id, isReturn: sale.isReturn),
           ],
         ],
       ),
@@ -189,13 +233,22 @@ class _SaleDetail extends ConsumerWidget {
 Future<void> _return(BuildContext context, SaleSummary sale) async {
   final result = await showReturnDialog(context, sale);
   if (result == null || !context.mounted) return;
+  if (result is ExchangeRequest) {
+    final exchanged = await showExchangeDialog(context, result);
+    if (exchanged == null || !context.mounted) return;
+    Navigator.pop(context); // tutup rincian (datanya sudah berubah)
+    // Popup sukses: cetak struk faktur tukar + buka laci (tunai).
+    await showCheckoutSuccessDialog(context, exchanged.sale);
+    return;
+  }
+  if (result is! ReturnResult) return;
   Navigator.pop(context); // tutup rincian (datanya sudah berubah)
   await AppDialogs.alert(
     context,
     title: 'Retur tersimpan',
     message:
         '${result.invoiceNo}\nKembalikan ${Fmt.rupiah(result.refund)} ke '
-        'pelanggan (${result.paymentMethod}).',
+        'pelanggan (${result.refundMethods}).',
   );
 }
 
@@ -239,11 +292,13 @@ class _ReturnBanner extends StatelessWidget {
   }
 }
 
-/// Mencetak ulang struk faktur (diberi tanda "CETAK ULANG").
+/// Mencetak ulang struk faktur (diberi tanda "CETAK ULANG"), atau struk
+/// nota retur.
 class _ReprintButton extends ConsumerStatefulWidget {
-  const _ReprintButton({required this.saleId});
+  const _ReprintButton({required this.saleId, required this.isReturn});
 
   final int saleId;
+  final bool isReturn;
 
   @override
   ConsumerState<_ReprintButton> createState() => _ReprintButtonState();
@@ -279,7 +334,7 @@ class _ReprintButtonState extends ConsumerState<_ReprintButton> {
           const SizedBox(height: AppSpacing.sm),
         ],
         AppButton(
-          label: 'Cetak Ulang Struk',
+          label: widget.isReturn ? 'Cetak Struk Retur' : 'Cetak Ulang Struk',
           icon: CupertinoIcons.printer,
           variant: AppButtonVariant.tinted,
           expand: true,
