@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "id.toko" "\0"
-            VALUE "FileDescription", "toko" "\0"
+            VALUE "FileDescription", "Toko - Aplikasi Kasir" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "toko" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 id.toko. All rights reserved." "\0"
             VALUE "OriginalFilename", "toko.exe" "\0"
-            VALUE "ProductName", "toko" "\0"
+            VALUE "ProductName", "Toko" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

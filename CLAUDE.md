@@ -28,7 +28,8 @@ Server sinkron (murni Dart): `fvm dart run bin/toko_server.dart --data <folder>`
 build `fvm dart build cli -t bin/toko_server.dart` (CI: artifact
 `toko-server-windows`). Panduan user: `docs/SINKRON.md`.
 Emulator lokal: AVD `Pixel_9a` (`adb exec-out screencap -p` untuk cek tampilan).
-Ikon Android dibuat kode: `fvm flutter test tool/generate_app_icon.dart`.
+Ikon aplikasi (Android, Windows `.ico`, macOS) dibuat kode:
+`fvm flutter test tool/generate_app_icon.dart`.
 Reset data contoh di aplikasi development macOS (aplikasi ditutup dulu):
 `fvm flutter test tool/reset_demo_data.dart` — backup otomatis ke
 `reset-backup/` di folder database, lalu barang/kategori/transaksi diganti 23
